@@ -1,0 +1,289 @@
+---
+title: "Evaluating FeederWatch data on House Finch"
+author: "July Pilowsky"
+format: pdf
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(vroom)
+library(here)
+library(mapdata)
+library(cowplot)
+library(paletteer)
+map <- purrr::map
+i_am("Scripts/Exploration/feederwatch.qmd")
+ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE){
+  
+  #The first three steps collect information that
+  # will be necessary for taxonomic roll-up and zero-filling. First, we create
+  # a table that contains only the information describing the observation 
+  # periods (and not anything specific to any single birds species). Second,
+  # we need to count the number of bird species for which zero-filling has been
+  # requested, in order to know how many times we will need to loop through the
+  # zero-filling process. Third, we need to check the species codes for which 
+  # zero-filling was requested by comparing these to a list of all species codes 
+  # found in InputData.
+  
+  #Create the table of sampling event information from all observation periods
+  PFW_SED <- InputData %>%
+    select(-OBS_ID, -SPECIES_CODE, -HOW_MANY, -PLUS_CODE, 
+           -VALID, -REVIEWED) %>%
+    distinct()
+  
+  #Count the number of species codes
+  NSpecies <- length(SpeciesCodes)
+  
+  #Identify any species codes that are not found in the data
+  InvalidSppCodes <- InputData %>%
+    select(SPECIES_CODE) %>%
+    distinct() %>%
+    anti_join(y = ., x = tibble(SPECIES_CODE = SpeciesCodes), by = "SPECIES_CODE")
+  #For each non-existing species code, print an error message
+  if (nrow(InvalidSppCodes) >= 1){
+    for (i in 1:nrow(InvalidSppCodes)){
+      cat(paste("THE SPECIES CODE \'", 
+                InvalidSppCodes$SPECIES_CODE[i], 
+                "\' DOES NOT EXIST\n",
+                sep = ""))
+      cat(" IN THE DATA TABLE, AND ZERO-FILLING IS NOT POSSIBLE.\n\n")
+    }
+    #break out of the function by returning a null result
+    cat("THIS FUNCTION IS STOPPING BECAUSE ZERO-FILLING OF ALL\n")
+    cat(" REQUESTED SPECIES CODES IS NOT POSSIBLE.\n\n")
+    return(NULL)
+  }
+  
+  #Loop through the species codes in turn, possibly doing a taxonomic roll-up,
+  # and always zero-filling each species' data.
+  for (i in 1:NSpecies){
+    #
+    #Check if this species code is "nobird" and if so skip over this 
+    # species code.
+    if (SpeciesCodes[i] == "nobird"){
+      cat("THE SPECIES CODE \'nobird\' INDICATES AN ABSENCE OF BIRDS,\n")
+      cat(" AND IS NOT AN ACTUAL BIRD SPECIES. NO ZERO-FILLING WILL\n")
+      cat("BE DONE FOR THE SPECIES_CODE \'nobird\'.\n\n")
+      next
+    }
+    #Place the SPECIES_CODE for the ith species into Spp_to_Zero_Fill.
+    Spp_to_Zero_Fill <- SpeciesCodes[i]
+    #
+    #If a taxonomic roll-up is to be done, then do so for the focal species.
+    if (rollup){
+      InputData <- InputData %>%
+        mutate(SPECIES_CODE = case_when(
+          (is.na(alt_full_spp_code)
+           ~ SPECIES_CODE),
+          ((!is.na(alt_full_spp_code) &
+              alt_full_spp_code == Spp_to_Zero_Fill)
+           ~ alt_full_spp_code),
+          ((!is.na(alt_full_spp_code) &
+              alt_full_spp_code != Spp_to_Zero_Fill)
+           ~ SPECIES_CODE))
+        )
+    }
+    
+    #Create template for zero-count records for the focal species.
+    FakeSppSpecificFields <- as_tibble_row(list(OBS_ID = "OBSnull",
+                                                SPECIES_CODE = Spp_to_Zero_Fill,
+                                                HOW_MANY = 0,
+                                                PLUS_CODE = NA,
+                                                VALID = 1,
+                                                REVIEWED = 0))
+        
+    #Zero-fill the data for the focal species.
+    ZeroFilledFocalSpecies <- InputData %>%
+      filter(SPECIES_CODE == Spp_to_Zero_Fill) %>%
+      bind_rows(., bind_cols(PFW_SED, FakeSppSpecificFields)) %>%
+      group_by(across(c(names(PFW_SED), "SPECIES_CODE"))) %>%
+      summarize(OBS_ID = min(OBS_ID), HOW_MANY = sum(HOW_MANY), 
+                PLUS_CODE = max(PLUS_CODE),
+                VALID = min(VALID), REVIEWED = max(REVIEWED)) %>%
+      ungroup()
+    ZeroFilledFocalSpecies$PLUS_CODE <- as.logical(ZeroFilledFocalSpecies$PLUS_CODE)
+    
+    #Put the zero-filled data into a table that accumulates data from all of
+    # the species named in the vector SpeciesCodes. Either create the tibble
+    # to be returned if it does not already exist, or append rows to an
+    # existing object.
+    if ((exists("OutputData")))
+      OutputData <- bind_rows(OutputData, ZeroFilledFocalSpecies)
+    else
+      OutputData <- ZeroFilledFocalSpecies
+  }
+  #After all species' data are zero-filled, return the zero-filled data to the 
+  # user. Unless the user of the function directs the output into some object,
+  # the output will be printed to the console and not be saved for subsequent use.
+  #Also, if a taxonomic roll-up has been done, print a message to remind users
+  # this was done.
+  if (rollup){
+    cat("\nNOTE: ANY RECORDS OF BIRDS REPORTED TO THE LEVEL OF A SUBSPECIES OR\n")
+    cat(" OTHER RECOGNIZABLE FORM HAVE BEEN TREATED AS MEMBERS OF THE FULL\n")
+    cat(" SPECIES FOR THE PURPOSE OF ZERO-FILLING, AND 'species_code' VALUES\n")
+    cat(" FOR THESE RECOGNIZABLE FORMS HAVE BEEN REPLACE BY THE CODES FOR THE\n")
+    cat(" FULL SPECIES IN THE OUTPUT.\n\n")
+  }
+  return(OutputData)
+}
+```
+
+# Introduction
+
+My goal for this document is to visualize first sightings of House Finch (*Haemorhous mexicanus*) across North America according to FeederWatch. Of course to get proper first arrival times I would need to account for the Signor-Lipps effect, but this is simply a first pass. I will start with the 1996-2000 dataset.
+
+```{r read in 1996 dataset, message = F}
+pfw1996 <- vroom(here("Data/Validation/FeederWatch/PFW_1996_2000_public.csv")) %>% 
+  ZeroFillPFW(SpeciesCodes = "houfin", rollup = F)
+ggplot(pfw1996, aes(x = HOW_MANY)) + geom_histogram() + xlab("Number of Finches")
+
+```
+
+Clearly there are some unrealistic outliers, a problem with the dataset that I have seen pointed out in various papers analyzing this dataset. I am going to remove extreme outliers.
+
+```{r better histogram}
+pfw1996 %>% pull(HOW_MANY) %>% quantile(c(0.01, 0.99))
+pfw1996 %>% filter(HOW_MANY < 42) %>% 
+  mutate(finches_effort = HOW_MANY) %>% 
+  ggplot(aes(x = finches_effort)) + geom_histogram() + 
+  xlab("Number of House Finches")
+```
+
+Now I am going to group by latitude and longitude and sum how many finches were seen per lat-long in 1996, and plot this over the continent.
+
+```{r 1996 finch map}
+usa <- map_data("usa")
+canada <- map_data("worldHires", "Canada")
+pfw1996 %>% group_by(LATITUDE, LONGITUDE) %>% 
+  filter(Year==1996) %>% 
+  summarize(Finches = if_else(sum(HOW_MANY)>0, "Present", "Absent")) %>% 
+  ggplot() +
+  geom_polygon(data = usa, 
+                                 aes(x=long, y = lat, group = group), 
+                                 fill = "gray50", 
+                                 color="black") +
+    geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+                 fill = "gray50", color="black") + 
+    coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55)) +
+  geom_point(aes(x = LONGITUDE, y = LATITUDE, color = Finches), alpha = 0.6) +
+  scale_color_paletteer_d("nbapalettes::huskies") + theme_map() +
+  ggtitle("House Finch Observations in 1996")
+  
+```
+
+I look at this map and I see that I can create a validation metric where I rasterize presence/absence of house finches to the spatial resolution of the model, and I require that the simulation be able to recreate the pattern of presence/absence of house finches in each year.
+
+Now I'm going to create a dataset of house finches from 1988 to 1995, a period when the range of the House Finch was in its final stages of infilling, which is more useful for the validation metric.
+
+```{r 1988 finch map, message = F}
+pfw1988 <- vroom(here("Data/Validation/FeederWatch/PFW_1988_1995_public.csv")) %>% 
+  ZeroFillPFW(SpeciesCodes = "houfin", rollup = F) %>% 
+  filter(HOW_MANY < 70)
+pfw1988 %>% group_by(LATITUDE, LONGITUDE) %>% 
+  filter(Year==1988) %>% 
+  summarize(Finches = if_else(sum(HOW_MANY)>0, "Present", "Absent")) %>% 
+  ggplot() +
+  geom_polygon(data = usa, 
+               aes(x=long, y = lat, group = group), 
+               fill = "gray50", 
+               color="black") +
+  geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+               fill = "gray50", color="black") + 
+  coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55)) +
+  geom_point(aes(x = LONGITUDE, y = LATITUDE, color = Finches), alpha = 0.6) +
+  scale_color_paletteer_d("nbapalettes::huskies") + theme_map() +
+  ggtitle("House Finch Observations in 1988")
+```
+
+The difference between the 1988 and 1996 maps is clear: the range has infilled in the Midwest / Great Plains. This is a useful validation metric.
+
+# Comparison
+
+I want to compare abundance trends in FeederWatch against abundance trends from Breeding Bird Survey to see how well they correspond with each other.
+
+```{r abundance trend comparison}
+routes <- read_csv(here("Data/Input/Routes.csv"), col_types = "iicciddiiii") %>% 
+  mutate(ID = str_c(CountryNum, StateNum, Route))
+weather <- vroom(here("Data/Input/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
+hofi <- here("Data/Input/States") %>% list.files(full.names = T) %>% 
+  map(vroom, col_types = "iiiciiciiiii") %>% 
+  bind_rows() %>% 
+  filter(AOU=="05190") %>% 
+  left_join(routes) %>% 
+  left_join(weather) %>% 
+  filter(QualityCurrentID==1)
+trends1 <- hofi %>% filter(Year>1988, Year<1994) %>% 
+  group_by(CountryNum, StateNum, Route) %>% 
+  mutate(count = n(), sum = sum(SpeciesTotal)) %>% 
+  filter(count==5, sum>0) %>% 
+  nest() %>% 
+  mutate(model = map(data, ~lm(SpeciesTotal ~ Year, data = .))) %>% 
+  mutate(tidy = map(model, broom::tidy)) %>% 
+  unnest(tidy) %>% 
+  filter(term=="Year") %>% 
+  select(-data) %>% 
+  left_join(routes) %>% 
+  filter(estimate>-9.142, estimate<19.942) %>% # remove extreme outliers
+  mutate(Dataset = "BBS", Period = "1989-1993") %>% 
+  ungroup()
+trends2 <- hofi %>% filter(Year>1993, Year<1999) %>% 
+  group_by(CountryNum, StateNum, Route) %>% 
+  mutate(count = n(), sum = sum(SpeciesTotal)) %>% 
+  filter(count==5, sum>0) %>% 
+  nest() %>% 
+  mutate(model = map(data, ~lm(SpeciesTotal ~ Year, data = .))) %>% 
+  mutate(tidy = map(model, broom::tidy)) %>% 
+  unnest(tidy) %>% 
+  filter(term=="Year") %>% 
+  select(-data) %>% 
+  left_join(routes) %>% 
+  filter(estimate>-12.66, estimate<9.45) %>% # remove extreme outliers
+  mutate(Dataset = "BBS", Period = "1994-1998") %>% 
+  ungroup()
+trends3 <- pfw1988 %>% filter(Year>1988, Year<1994) %>% 
+  group_by(LOC_ID) %>% mutate(years = n_distinct(Year), sum = sum(HOW_MANY)) %>% 
+  filter(years==5, sum>0) %>% 
+  nest() %>%
+  mutate(model = map(data, ~lm(HOW_MANY ~ Year, data = .))) %>%
+  mutate(tidy = map(model, broom::tidy)) %>%
+  unnest(tidy) %>%
+  filter(term=="Year") %>%
+  mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
+         Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>%
+  filter(estimate>-5.25, estimate<7.8) %>% # remove extreme outliers
+  mutate(Dataset = "FW", Period = "1989-1993") %>% 
+  ungroup()
+trends4 <- bind_rows(pfw1988, pfw1996) %>% 
+  filter(Year>1993, Year<1999) %>% 
+  group_by(LOC_ID) %>% mutate(years = n_distinct(Year), sum = sum(HOW_MANY)) %>% 
+  filter(years==5, sum>0) %>% 
+  nest() %>%
+  mutate(model = map(data, ~lm(HOW_MANY ~ Year, data = .))) %>%
+  mutate(tidy = map(model, broom::tidy)) %>%
+  unnest(tidy) %>%
+  filter(term=="Year") %>%
+  mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
+         Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>% 
+  filter(estimate>-7.697, estimate<4.040) %>% #remove extreme outliers
+  mutate(Dataset = "FW", Period = "1994-1998") %>% 
+  ungroup()
+list(trends1, trends2, trends3, trends4) %>% 
+  map(~select(., Latitude, Longitude, Trend = estimate, Dataset, Period)) %>% 
+  bind_rows() %>% 
+  ggplot() +
+  geom_polygon(data = usa, 
+               aes(x=long, y = lat, group = group), 
+               fill = "gray50", 
+               color="black") +
+  geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+               fill = "gray50", color="black") + 
+  coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55)) +
+  geom_point(aes(x = Longitude, y = Latitude, col = Trend),
+             size = 2, alpha = 0.8) +
+  theme_map() +
+  scale_color_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid) +
+  facet_grid(Dataset ~ Period)
+```

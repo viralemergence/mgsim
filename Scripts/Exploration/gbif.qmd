@@ -1,0 +1,99 @@
+---
+title: "Exploring GBIF data on House Finch"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = FALSE, message = F}
+# GBIF download key: 0263080-230224095556074
+# Citation: GBIF Occurrence Download https://doi.org/10.15468/dl.vb6fvx Accessed from R via rgbif (https://github.com/ropensci/rgbif) on 2023-05-26
+library(rgbif)
+library(cowplot)
+library(mapdata)
+library(paletteer)
+library(CoordinateCleaner)
+library(tidyverse)
+library(gganimate)
+library(vroom)
+library(here)
+# hofi_sample <- vroom("~/Documents/Very Large Data/0263080-230224095556074.csv") %>% 
+#   setNames(tolower(names(.))) %>% 
+#   filter(!coordinateuncertaintyinmeters %in% c(301,3036,999,9999)) %>%
+#   filter(!decimallatitude == 0 | !decimallongitude == 0) %>%
+#   cc_cen(buffer = 2000) %>% # remove country centroids within 2km 
+#   cc_cap(buffer = 2000) %>% # remove capitals centroids within 2km
+#   cc_inst(buffer = 2000) %>% # remove zoo and herbaria within 2km 
+#   cc_sea() %>% # remove from ocean 
+#   distinct(decimallongitude,decimallatitude,specieskey,datasetkey, .keep_all = TRUE)
+hofi_sample <- vroom("~/Documents/Very Large Data/hofi_gbif_qc.tsv")
+```
+
+## Intro
+
+My aim is to use GBIF occurrence data for a climate envelope model encompassing their niche from 1940 to present.
+
+## Irregularities
+
+All GBIF datasets have their quirks. In this case, the quirk is that there are erroneous records from Alaska, where the bird is not found. Also, there are introduced populations in Europe and Hawaii which must be filtered out for my purposes.Temporal Depth
+
+Here I take a look at the number of occurrences over time from 1940 to present.
+
+## Temporal Depth
+
+Here I look at occurrence records over time from 1940 to present.
+
+```{r time series}
+ggplot(hofi_sample, aes(x = year)) + geom_histogram(bins = 83) +
+  theme_half_open() + scale_y_log10(breaks = c(10, 100, 1000, 10000, 100000))
+```
+
+Happily, there are plenty of observations to work with from earlier years of the dataset.
+
+## Spatial Outliers
+
+I want to check for any spatial outliers in the dataset, though I have done some due diligence already in my retrieval from GBIF.
+
+```{r spatial outliers}
+usa <- map_data("usa")
+canada <- map_data("worldHires", "Canada")
+mexico <- map_data("worldHires", "mexico")
+NA_map <- ggplot() +
+  geom_polygon(
+    data = usa,
+    aes(x = long, y = lat, group = group),
+    fill = "white",
+    color = "gray60"
+  ) +
+  geom_polygon(
+    data = canada,
+    aes(x = long, y = lat, group = group),
+    fill = "white",
+    color = "gray60"
+  ) +
+  geom_polygon(
+    data = mexico,
+    aes(x = long, y = lat, group = group),
+    fill = "white",
+    color = "gray60"
+  )
+NA_map + geom_hex(data = hofi_sample, aes(x = decimallongitude, y = decimallatitude)) + scale_fill_viridis_c()
+```
+
+I do not intend to consider the occurrence points in Alaska and Hawaii, so from now on I will filter these out.
+
+## Species Range Dynamics
+
+Here I will look at the changes in the range of the House Finch from 1940 to 1994.
+
+```{r animated map}
+hofi_subset <- hofi_sample %>% filter(year < 1996, decimallatitude < 60, decimallongitude > -130)
+ani <- NA_map + 
+  geom_point(data = hofi_subset, aes(x = decimallongitude, y = decimallatitude)) +
+  coord_quickmap(xlim = c(-130, -50), ylim = c(NA, 60)) + 
+  theme_map() +
+  labs(title = 'Year: {frame_time}') +
+  transition_time(year) +
+  ease_aes('linear')
+animate(ani, nframes = 56, fps = 2, renderer = gifski_renderer())
+```

@@ -1,0 +1,141 @@
+---
+title: "Cross-checking Native and Invasive Niches"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup}
+library(SDMtune)
+library(tidyverse)
+library(vroom)
+library(here)
+library(sf)
+i_am("Scripts/sdm_native_invasive.qmd")
+data.dir <- "~/Documents/Very Large Data"
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
+hofi_sample <- vroom(file.path(data.dir, "gbif_hofi_predictors.csv"))
+bg_points <- vroom(file.path(data.dir, "hofi_background_points.csv")) %>% 
+  filter(!is.na(urban))
+```
+
+# Goal
+
+I want to check whether species distribution models trained on invasive range occurrences vs. native range occurrences are functionally identical, or if the finch's niche is different in each range. I will do this by first training on the native range and projecting into the invasive range, then training on the invasive range and projecting into the native range.
+
+# Train on Native / Project on Invasive
+
+It's really important to check whether the data from the native range alone can predict the invasive range.
+
+## Prepare Data
+
+I need to partition my data into 4 parts:
+
+1.  Native range (training)
+
+2.  Native range (validation)
+
+3.  Native range (test)
+
+4.  Invasive range
+
+Then I need to convert all of these into the `SWD` format used by `SDMtune`.
+
+```{r prepare data}
+invasive_range <- SWD(
+  species = "Haemorhous mexicanus",
+  coords = hofi_sample %>% filter(Range == "Invasive") %>% 
+    select(decimallongitude, decimallatitude) %>% 
+    sf_project(wgs84, proj_crs, .) %>% 
+    rbind(as.matrix(select(filter(bg_points, Range == "Invasive"), x, y))) %>% 
+    as.data.frame() %>% 
+    set_names(c("X", "Y")),
+  data = hofi_sample %>% filter(Range == "Invasive") %>% select(mat:urban) %>% 
+    rbind(select(filter(bg_points, Range == "Invasive"), mat:urban)),
+  pa = c(rep(1, 135052), rep(0, 170631))
+)
+native_range <- SWD(
+  species = "Haemorhous mexicanus",
+  coords = hofi_sample %>% filter(Range == "Native") %>%
+    select(decimallongitude, decimallatitude) %>%
+    sf_project(wgs84, proj_crs, .) %>%
+    rbind(as.matrix(select(filter(bg_points, Range == "Native"), x, y))) %>%
+    as.data.frame() %>%
+    set_names(c("X", "Y")),
+  data = hofi_sample %>% filter(Range == "Native") %>% select(mat:urban) %>%
+    rbind(select(filter(bg_points, Range == "Native"), mat:urban)),
+  pa = c(rep(1, nrow(filter(hofi_sample, Range == "Native"))), rep(0, 183102))
+) %>%
+  trainValTest(test = 0.15, val = 0.15, only_presence = TRUE)
+training <- native_range[[1]]
+testing <- native_range[[3]]
+validation <- native_range[[2]]
+```
+
+## Starting Model
+
+I will start off by training a boosted regression tree model on the training dataset, with all hyperparameters set to defaults and no selection of variables. I will refine this later.
+
+```{r starting model}
+starter <- train(
+  method = "BRT",
+  data = training,
+  progress = TRUE
+)
+jk <- doJk(starter, metric = "tss")
+jk
+plotResponse(starter, var = "urban") + xlab("Urbanization Index")
+plotResponse(starter, var = "temp_diurnal_range") + 
+  xlab("Diurnal Temperature Range")
+```
+
+Urbanization index and diurnal temperature range appear to be the most important variables, which is quite interesting. But there is a problem. I want to perform variable reduction on this dataset because there are 20 predictors, some of which are highly correlated, and variable importance can be very computationally intensive to calculate. So I have to shift this over to the `xgboost` machine learning method, which can handle very large datasets efficiently.
+
+```{r xgboost first fit}
+library(xgboost)
+library(caret)
+library(doParallel)
+library(tictoc)
+
+training <- training@data %>% 
+  mutate(pa = as.factor(training@pa) %>% fct_recode(absent = "0", present = "1"))
+
+mytrControl <- trainControl(
+  method = "cv",
+  number = 5,
+  # 5 fold cross-validation
+  summaryFunction = twoClassSummary,
+  classProbs = TRUE,
+  allowParallel = TRUE
+)
+
+mytuneGrid <- expand.grid(
+  nrounds = seq(from = 500, to = 15000, by = 2000),
+  eta = seq(0, 0.3, 0.05),
+  max_depth = seq(3, 10, 1),
+  subsample = seq(0.5, 1, 0.1),
+  gamma = seq(0, 0.1, 0.02),
+  colsample_bytree = seq(0, 1, 0.2),
+  min_child_weight = seq(0, 5, 1)
+)
+
+tic()
+
+cluster <- makeCluster(6)
+registerDoParallel(cluster)
+
+xgb_fit <- train(
+  form = pa ~ .,
+  data = training,
+  method = "xgbTree",
+  metric = "ROC",
+  trControl = mytrControl,
+  # tuneGrid = mytuneGrid,
+  verbose = TRUE
+)
+
+stopCluster(cluster)
+registerDoSEQ()
+toc()
+```

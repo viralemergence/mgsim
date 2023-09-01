@@ -1,0 +1,554 @@
+---
+title: "An Aspatial Mycoplasma Simulator"
+author: "July Pilowsky"
+format: pdf
+editor: visual
+---
+
+```{r setup, include = FALSE}
+library(future.apply)
+library(furrr)
+library(progressr)
+library(here)
+i_am("Scripts/Exploration/aspatial_siri_model.qmd")
+source("aspatial_siri.R")
+```
+
+# About This Simulator
+
+I use a SIRI model (partial immunity conferred by infection, manifesting in lower susceptibility, lower death rates, and higher recovery rates) with juvenile/adult age structure, density dependence (birth rates shrink to zero and death rates double at carrying capacity), and demographic stochasticity. There is also seasonality, with different transmission and mortality between summer and winter, and no reproduction in winter.
+
+Data for the 24 parameters involved came almost entirely from the literature, except the transmission parameter, which is very hard to estimate from the wild. For that parameter I simply tweaked it until I got results that seemed to match time series of disease prevalence I'd seen in the literature.
+
+```{r starting parameters}
+summer_init <- c(
+  Sa = 2000,
+  Sj = 0,
+  I1j = 0,
+  I1a = 1,
+  Rj = 0,
+  Ra = 0,
+  I2j = 0,
+  I2a = 0
+)
+
+summer_params <- c(
+  birth = 0.04,
+  beta_Sj = 0.00005,
+  beta_Sa = 0.00003,
+  mortality_Sj = 0.003285,
+  mortality_Sa = 0,
+  mortality_I1j = 0.00438,
+  mortality_I1a = 0.00054757,
+  mortality_I2j = 0.003833,
+  mortality_I2a = 0.0002738,
+  carrying_capacity = 5000,
+  recovery_I1 = 0.029,
+  recovery_I2 = 0.1,
+  beta_Rj = 0.00005*0.4711,
+  beta_Ra = 0.4711*0.00003
+)
+
+winter_params <- c(
+  beta_Sj = 0.00007,
+  beta_Sa = 0.00004,
+  mortality_Sj = 0.002198,
+  mortality_Sa = 0.002198,
+  mortality_I1j = 0.002198*(4/3),
+  mortality_I1a = 0.002198+0.00054757,
+  mortality_I2j = 0.002198 + 0.0006,
+  mortality_I2a = 0.002198 + 0.0002738,
+  carrying_capacity = 5000,
+  recovery_I1 = 0.029,
+  recovery_I2 = 0.1,
+  beta_Rj = 0.00007*0.4711,
+  beta_Ra = 0.00004*0.4711
+)
+```
+
+# Baseline
+
+I will call this simulation run "baseline" because I used middle of the road values from the distributions for all the parameters. Because this simulator has demographic stochasticity, I am going to run the baseline 5000 times and explore the average of these, as well as the variance among them.
+
+```{r baseline simulation}
+plan(multisession)
+baseline_sims <- future_replicate(5000, siri_model_year(182, summer_init, summer_params,
+                                                 winter_params), simplify = F)
+baseline_mean <- Reduce(`+`, baseline_sims) / length(baseline_sims)
+baseline_mean %>% pivot_longer(Sa:I2a, names_to = "State", values_to = "Count") %>%
+  ggplot(aes(x = Day, y = Count, group = State)) +
+  geom_line(aes(col = State), linewidth = 1.2) +
+  scale_color_paletteer_d(`"dichromat::Categorical_12"`, direction = -1) +
+  ggtitle("Mean of 5000 simulations")
+baseline_mean %>% 
+  rowwise() %>% 
+  mutate(I = I1a + I1j + I2a + I2j, 
+         Prevalence = I / sum(Sa + Sj + I + Rj + Ra)) %>% 
+  ggplot(aes(x = Day, y = Prevalence)) + geom_line()
+```
+
+In the mean across all simulations, the big wave of infection hits too early (in June when in reality it should hit in September.) However, given that the September wave is likely driven by dispersal of juveniles that time of year, I'm not sure that an aspatial model *can* replicate it properly.
+
+Let's look at variance among the simulations.
+
+```{r variance}
+baseline_sims %>% 
+  map(~mutate(., I = I1a + I1j + I2a + I2j)) %>% 
+  map(~pull(., I)) %>% map_dbl(sum) %>% 
+  ggplot(data = NULL, mapping = aes(x = .)) + geom_histogram(bins = 100) +
+  ggtitle("Distribution of Total Daily Case Count")
+```
+
+There was a substantial number of simulations in which the outbreak fizzled out very quickly. This seems realistic.
+
+# Best Case Scenario
+
+When I'm testing out a simulator, I like to run a "best case" and "worst case" scenario where I try to set everything so that everything is as favorable/unfavorable for the organism as possible. This is the best case, so I will set all the parameters to high birth rate, low mortality, etc.
+
+```{r best case params}
+total_eggs <- 15
+beta_Sj_summer <- 0.00002
+beta_Sa_summer <- 0.00001
+mortality_Sj_summer <- 0.4/182
+mortality_I_modifier <- 0.105/182
+mortality_I2_modifier <- mortality_I_modifier*0.4770876
+beta_R_modifier <- 0.392
+
+best_summer_params <- c(
+  birth = total_eggs/183,
+  beta_Sj = beta_Sj_summer,
+  beta_Sa = beta_Sa_summer,
+  mortality_Sj = mortality_Sj_summer,
+  mortality_Sa = 0,
+  mortality_I1j = mortality_Sj_summer + mortality_I_modifier,
+  mortality_I1a = mortality_I_modifier,
+  mortality_I2j = mortality_Sj_summer + mortality_I2_modifier,
+  mortality_I2a = mortality_I2_modifier,
+  carrying_capacity = 5000,
+  recovery_I1 = 0.05714286,
+  recovery_I2 = 0.1,
+  beta_Rj = beta_Sj_summer*beta_R_modifier,
+  beta_Ra = beta_Sa_summer*beta_R_modifier
+)
+
+mortality_Sa_winter <- 0.3/182
+
+best_winter_params <- c(
+  beta_Sj = beta_Sj_summer*2,
+  beta_Sa = beta_Sa_summer*2,
+  mortality_Sj = mortality_Sa_winter,
+  mortality_Sa = mortality_Sa_winter,
+  mortality_I1j = mortality_Sa_winter + mortality_I_modifier,
+  mortality_I1a = mortality_Sa_winter + mortality_I_modifier,
+  mortality_I2j = mortality_Sa_winter + mortality_I2_modifier,
+  mortality_I2a = mortality_Sa_winter + mortality_I2_modifier,
+  carrying_capacity = 5000,
+  recovery_I1 = 0.05714286,
+  recovery_I2 = 0.1,
+  beta_Rj = beta_Sj_summer*2*beta_R_modifier,
+  beta_Ra = beta_Sa_summer*2*beta_R_modifier
+)
+```
+
+Once more I will run 5000 simulations and explore the mean result first.
+
+```{r best case simulations}
+plan(multisession)
+best_case_sims <- future_replicate(5000, siri_model_year(182, summer_init, 
+                                                         best_summer_params,
+                                                 best_winter_params), simplify = F)
+best_case_mean <- Reduce(`+`, best_case_sims) / length(best_case_sims)
+best_case_mean %>% pivot_longer(Sa:I2a, names_to = "State", values_to = "Count") %>%
+  ggplot(aes(x = Day, y = Count, group = State)) +
+  geom_line(aes(col = State), linewidth = 1.2) +
+  scale_color_paletteer_d(`"dichromat::Categorical_12"`, direction = -1) +
+  ggtitle("Mean of 5000 simulations")
+best_case_mean %>% 
+  rowwise() %>% 
+  mutate(I = I1a + I1j + I2a + I2j, 
+         Prevalence = I / sum(Sa + Sj + I + Rj + Ra)) %>% 
+  ggplot(aes(x = Day, y = Prevalence)) + geom_line()
+```
+
+Interestingly, the peak of prevalence is much more accurate in the best case scenario than in the baseline. I suspect what's going on is that in the few simulations here where the outbreak does take off, it does so at the correct time of year (even without dispersal).
+
+```{r best case variance}
+best_case_sims %>% 
+  map(~mutate(., I = I1a + I1j + I2a + I2j)) %>% 
+  map(~pull(., I)) %>% map_dbl(sum) %>% 
+  ggplot(data = NULL, mapping = aes(x = .)) + geom_histogram(bins = 100) +
+  ggtitle("Distribution of Total Daily Case Count")
+indices <- best_case_sims %>% 
+  map(~mutate(., I = I1a + I1j + I2a + I2j)) %>% 
+  map(~pull(., I)) %>% map_dbl(sum) %>% 
+  map_lgl(~.>500) %>% 
+  which()
+best_case_sims %>% 
+  .[indices] %>% 
+  Reduce(f = `+`) %>% 
+  `/`(length(indices)) %>% 
+  pivot_longer(Sa:I2a, names_to = "State", values_to = "Count") %>%
+  ggplot(aes(x = Day, y = Count, group = State)) +
+  geom_line(aes(col = State), linewidth = 1.2) +
+  scale_color_paletteer_d(`"dichromat::Categorical_12"`, direction = -1) +
+  ggtitle("Mean of best case simulations with outbreak")
+```
+
+So far, the "best case scenario" looks by far the most accurate to time series of the disease I've seen. However, adding in spatial dynamics may well change that completely.
+
+# Worst Case Scenario
+
+Here I set all the parameters to be as unfavorable for the house finches as possible.
+
+```{r worst case parameters}
+total_eggs <- 3
+beta_Sj_summer <- 0.00007
+beta_Sa_summer <- 0.00004
+mortality_Sj_summer <- 0.75/182
+mortality_I_modifier <- 0.231/182
+mortality_I2_modifier <- mortality_I_modifier*0.4770876
+beta_R_modifier <- 0.4711
+
+worst_summer_params <- c(
+  birth = total_eggs/183,
+  beta_Sj = beta_Sj_summer,
+  beta_Sa = beta_Sa_summer,
+  mortality_Sj = mortality_Sj_summer,
+  mortality_Sa = 0,
+  mortality_I1j = mortality_Sj_summer + mortality_I_modifier,
+  mortality_I1a = mortality_I_modifier,
+  mortality_I2j = mortality_Sj_summer + mortality_I2_modifier,
+  mortality_I2a = mortality_I2_modifier,
+  carrying_capacity = 5000,
+  recovery_I1 = 0.029,
+  recovery_I2 = 0.1,
+  beta_Rj = beta_Sj_summer*beta_R_modifier,
+  beta_Ra = beta_Sa_summer*beta_R_modifier
+)
+
+mortality_Sa_winter <- 0.62/182
+mortality_Sj_winter <- 0.75/182
+
+worst_winter_params <- c(
+  beta_Sj = beta_Sj_summer*2,
+  beta_Sa = beta_Sa_summer*2,
+  mortality_Sj = mortality_Sj_winter,
+  mortality_Sa = mortality_Sa_winter,
+  mortality_I1j = mortality_Sj_winter + mortality_I_modifier,
+  mortality_I1a = mortality_Sa_winter + mortality_I_modifier,
+  mortality_I2j = mortality_Sj_winter + mortality_I2_modifier,
+  mortality_I2a = mortality_Sa_winter + mortality_I2_modifier,
+  carrying_capacity = 5000,
+  recovery_I1 = 0.029,
+  recovery_I2 = 0.1,
+  beta_Rj = beta_Sj_summer*2*beta_R_modifier,
+  beta_Ra = beta_Sa_summer*2*beta_R_modifier
+)
+```
+
+Here is what happens in 5000 simulations.
+
+```{r worst case simulations}
+plan(multisession)
+worst_case_sims <- future_replicate(5000, siri_model_year(182, summer_init, 
+                                                         worst_summer_params,
+                                                 worst_winter_params), simplify = F)
+worst_case_mean <- Reduce(`+`, worst_case_sims) / length(worst_case_sims)
+worst_case_mean %>% 
+  pivot_longer(Sa:I2a, names_to = "State", values_to = "Count") %>%
+  ggplot(aes(x = Day, y = Count, group = State)) +
+  geom_line(aes(col = State), linewidth = 1.2) +
+  scale_color_paletteer_d(`"dichromat::Categorical_12"`, direction = -1) +
+  ggtitle("Mean of 5000 simulations")
+worst_case_mean %>% 
+  rowwise() %>% 
+  mutate(I = I1a + I1j + I2a + I2j, 
+         Prevalence = I / sum(Sa + Sj + I + Rj + Ra)) %>% 
+  ggplot(aes(x = Day, y = Prevalence)) + geom_line()
+```
+
+Interesting result: the result is not very different from the baseline, even though the parameters I put in were rather different. I think it's possible that the increased transmission parameter and increased disease mortality was counterbalanced by a higher natural death rate and birth rate, keeping down the supply of susceptibles and removing potential infectious agents.
+
+I am interested to see if there were any runs here where the disease fizzled out.
+
+```{r}
+worst_case_sims %>% 
+  map(~mutate(., I = I1a + I1j + I2a + I2j)) %>% 
+  map(~pull(., I)) %>% map_dbl(sum) %>% 
+  ggplot(data = NULL, mapping = aes(x = .)) + geom_histogram(bins = 100) +
+  ggtitle("Distribution of Total Daily Case Count")
+```
+
+This distribution also looks very similar to that of the baseline.
+
+Another interesting result is that in all three scenarios, the outbreak has on average run its course by the end of the year.
+
+# Sensitivity Analysis (Round 1)
+
+It is very interesting that the worst case and baseline scenarios are very similar while the best case scenario is quite different. In the interest of understanding which parameters are most important, I will do Latin hypercube sampling along prior distributions from the literature, run 100 simulations per parameter combination, extract key metrics from the simulations, and then run a random forest analysis on those metrics.
+
+For the purposes of this analysis, I am going to use day of maximum maximum prevalence as my metric. The prevalence peak varies regionally, but the two windows in which peak prevalence is noted are Sep 1 - Oct 15 and Feb 1 - Mar 15.
+
+## Latin Hypercube Sampling
+
+First I will set up Latin hypercube sampling along prior distributions for all the parameters based on the literature.
+
+```{r lhs}
+library(poems)
+nsims <- 1000
+lhs_generator <- LatinHypercubeSampler$new()
+lhs_generator$set_uniform_parameter("summer_length", lower = 100, upper = 200, 
+                                    decimals = 0)
+lhs_generator$set_poisson_parameter("birth", lambda = 8.509018)
+lhs_generator$set_beta_parameter("beta_Sa_winter", mean = 0.01738269, 
+                                 sd = 0.028475)
+lhs_generator$set_beta_parameter("beta_Sa_summer", mean = 0.00384689, 
+                                 sd = 0.001905543)
+lhs_generator$set_triangular_parameter("Sj_multiplier", lower = 0, upper = 8.5,
+                                       mode = 3)
+lhs_generator$set_beta_parameter("beta_I2_modifier", alpha = 1.547023,
+                                 beta = 0.4239236)
+lhs_generator$set_beta_parameter("mortality_Sj_winter", alpha = 3.962104,
+                                 beta = 2.228683)
+lhs_generator$set_beta_parameter("mortality_Sa_winter", alpha = 21.89136,
+                                 beta = 19.59278)
+lhs_generator$set_beta_parameter("mortality_Sj_summer", alpha = 14.51403,
+                                 beta = 21.53632)
+lhs_generator$set_beta_parameter("mortality_I1j", alpha = 2.756404,
+                                 beta = 62.47181)
+lhs_generator$set_beta_parameter("mortality_I1a", alpha = 1.663026,
+                                 beta = 37.73538)
+lhs_generator$set_beta_parameter("mortality_I2_modifier", alpha = 1.033367,
+                                 beta = 3.505319)
+lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,
+                                 beta = 620.1732)
+lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,
+                                 beta = 29.18489)
+sample_data <- lhs_generator$generate_samples(number = nsims)
+sample_data$sample <- c(1:nsims)
+head(sample_data)
+```
+
+## Simulation
+
+Here is the code to run the simulations based on these combinations of parameters. It takes an hour and change to run.
+
+```{r simulate}
+aspatial_siri_prep <- function(df, init) {
+  summer_length <- df$summer_length
+  summer_params <- c(
+    birth = df$birth,
+    beta_Sj = df$beta_Sa_summer * df$Sj_multiplier,
+    beta_Sa = df$beta_Sa_summer,
+    mortality_Sj = df$mortality_Sj_summer,
+    mortality_Sa = 0,
+    mortality_I1j = df$mortality_I1j,
+    mortality_I1a = df$mortality_I1a,
+    mortality_I2j = df$mortality_I1j * df$mortality_I2_modifier,
+    mortality_I2a = df$mortality_I1a * df$mortality_I2_modifier,
+    carrying_capacity = 5000,
+    recovery_I1 = df$recovery_I1,
+    recovery_I2 = df$recovery_I2,
+    beta_Rj = df$beta_Sa_summer * df$Sj_multiplier * df$beta_I2_modifier,
+    beta_Ra = df$beta_Sa_summer * df$beta_I2_modifier
+  )
+  winter_params <- c(
+    beta_Sj = df$beta_Sa_winter*df$Sj_multiplier,
+    beta_Sa = df$beta_Sa_winter,
+    mortality_Sj = df$mortality_Sj_winter,
+    mortality_Sa = df$mortality_Sa_winter,
+    mortality_I1j = df$mortality_I1j,
+    mortality_I1a = df$mortality_I1a,
+    mortality_I2j = df$mortality_I1j * df$mortality_I2_modifier,
+    mortality_I2a = df$mortality_I1a * df$mortality_I2_modifier,
+    carrying_capacity = 5000,
+    recovery_I1 = df$recovery_I1,
+    recovery_I2 = df$recovery_I2,
+    beta_Rj = df$beta_Sa_winter * df$Sj_multiplier * df$beta_I2_modifier,
+    beta_Ra = df$beta_Sa_winter * df$beta_I2_modifier
+  )
+  return(
+    list(
+      summer_length = summer_length,
+      init = init,
+      summer_params = summer_params,
+      winter_params = winter_params
+    )
+  )
+}
+inputs_list <- sample_data %>% rowwise() %>% group_split() %>% 
+  map(aspatial_siri_prep, init = summer_init)
+plan(multisession)
+sens_sims <- future_replicate(100, map(inputs_list, lift(siri_model_year)))
+```
+
+## Peak Prevalence Metric
+
+Here I will extract a metric from each simulation of the day of peak prevalence and explore the distribution of the outcome. For reference, the windows of true peak prevalence in nature are Aug 15 - Oct 15 and Jan 15 - Mar 1.
+
+```{r peak prevalence metric}
+plan(multisession)
+peak_prevalence <- sens_sims %>% array_branch(1) %>%
+  future_map(., ~ map(., function(x) {
+    which.max((x$I1a + x$I1j + x$I2a + x$I2j)/(x$I1a + x$I1j + x$I2a + x$I2j + x$Sa + x$Sj + x$Rj + x$Ra))
+  }))
+peak_prevalence %>% flatten() %>% flatten_int() %>% 
+  ggplot(data = NULL, mapping = aes(x = .)) + geom_density() + 
+  xlab("Day of Peak Prevalence") + 
+  geom_vline(xintercept = 167, linetype = "dashed", col = "blue") +
+  geom_vline(xintercept = 214, linetype = "dashed", col = "blue") +
+  geom_vline(xintercept = 320, linetype = "dashed", col = "blue") +
+  geom_vline(xintercept = 365, linetype = "dashed", col = "blue")
+```
+
+## Sensitivity Analysis
+
+I will perform a sensitivity analysis using a random forest to rank variable importance.
+
+```{r sensitivity analysis}
+library(tidymodels)
+library(randomForest)
+
+sim_results <- peak_prevalence %>% 
+  map2_dfr(1:1000, function(d, i) {
+  map(d, function(d) {
+    cbind.data.frame(d, i) %>% set_names(c("peak_day", "sample"))
+  })
+}) %>% left_join(sample_data, by = "sample")
+
+tree_rec <- sim_results %>% 
+  recipe(formula = peak_day ~ .) %>%
+  update_role(sample, new_role = "ID") %>%
+  prep()
+
+tune_spec <- rand_forest(
+  mtry = tune(),
+  trees = 1000,
+  min_n = tune()
+) %>%
+  set_mode("regression") %>%
+  set_engine("ranger")
+
+tune_wf <- workflow() %>%
+  add_recipe(tree_rec) %>%
+  add_model(tune_spec)
+
+my.cluster <- parallel::makeCluster(
+  8, 
+  type = "PSOCK"
+  )
+
+doParallel::registerDoParallel(my.cluster)
+
+tune_res <- tune_grid(
+  tune_wf,
+  resamples = vfold_cv(sim_results),
+  grid = 20
+)
+
+tune_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "RMSE")
+
+rf_grid <- grid_regular(
+  mtry(range = c(3, 7)),
+  min_n(range = c(2, 8)),
+  levels = 5
+)
+
+regular_res <- tune_grid(
+  tune_wf,
+  resamples = vfold_cv(sim_results),
+  grid = rf_grid
+)
+
+regular_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  mutate(min_n = factor(min_n)) %>%
+  ggplot(aes(mtry, mean, color = min_n)) +
+  geom_line(alpha = 0.5, size = 1.5) +
+  geom_point() +
+  labs(y = "RMSE")
+
+sim_res <- select(sim_results, -sample)
+aspatial_sens <- randomForest(peak_day  ~ ., data = sim_res,
+                     mtry = 5,
+                     nodesize = 2,
+                     ntree = 1000,
+                     nperm = 999,
+                     do.trace = 0.66*nrow(sim_results),
+                     replace = FALSE,
+                     sampsize = 0.66*nrow(sim_results),
+                     importance = TRUE)
+print(aspatial_sens)
+importance(aspatial_sens, type = 1, scale = FALSE)
+varImpPlot(aspatial_sens, type = 1, scale = FALSE)
+```
+
+## Approximate Bayesian Computation
+
+I want to do some pattern-oriented modeling toward a validation target, which is the known peaks of prevalence. I will assign a score to each day of peak prevalence. If it falls within one of the windows of peak prevalence, it gets a score of 0. Otherwise, it gets one penalty point per day apart from one of the windows.
+
+```{r validation metric}
+peak_prevalence_penalty <- function(x) {
+    if (x %in% 167:214) {
+      y <- 0
+    } else
+    if (x %in% 320:365) {
+      y <- 0
+    } else {
+      y <- min(c(abs(x - 167), abs(x - 214), abs(x - 320)))
+    }
+    return(y)
+  }
+validation_metric <- sim_results %>% pull(peak_day) %>% 
+  map_int(peak_prevalence_penalty)
+ggplot(data = NULL, mapping = aes(x = validation_metric)) + geom_density()
+```
+
+This validation metric is what I would call a poor filter. 29% of simulations are able to hit the target bang on, which means that we're not learning much about what makes a good model. So I'm going to add a second validation metric.
+
+In addition to peak prevalence being known, minimum prevalence is also known. During the breeding season, May to July, the prevalence of MG is always found to be 10% or less. During midwinter, December and January, MG prevalence is always 15% or less. I will add a second validation metric that gives penalty for every percentage point above the ceiling for prevalence in midsummer and midwinter.
+
+```{r validation metric 2}
+plan(multisession)
+min_prevalence <- sens_sims %>% array_branch(1) %>%
+  future_map(., ~ map(., function(x) {
+    p <- (x$I1a + x$I1j + x$I2a + x$I2j)/(x$I1a + x$I1j + x$I2a + x$I2j + x$Sa + x$Sj + x$Rj + x$Ra)
+    p[c(45:122)] <- p[c(45:122)] - 0.1
+    p[c(45:122)] <- replace(p[c(45:122)], which(p[c(45:122)]<=0), 0)
+    p[c(259:320)] <- p[c(259:320)] - 0.15
+    p[c(259:320)] <- replace(p[c(259:320)], which(p[c(259:320)]<=0), 0)
+    return(sum(p[c(45:122, 259:320)]))
+  }))
+sim_results <- list(peak_prevalence, min_prevalence) %>% 
+  map2_dfc(c("peak_day", "min_prevalence"), function(l, n) {
+    future_map2_dfr(l, 1:1000, function(d, i) {
+      map2_dfr(d, c(1:100), function(d, r) {
+        df <- cbind.data.frame(d, i, r) 
+        names(df) <- c(n, "sample", "index")
+        return(df)
+      })
+    })}) %>% 
+  mutate(sample = (`sample...2`+`sample...5`)/2,
+         index = (`index...3`+`index...6`)/2) %>% 
+  select(sample, index, peak_day, min_prevalence) %>% 
+  left_join(sample_data, by = "sample") %>% 
+  mutate(peak_prevalence = peak_day %>% map_int(peak_prevalence_penalty)) %>% 
+  identity()
+write_csv(sim_results, here("Data/Output/aspatial_sens.csv"))
+ggplot(sim_results, aes(x = peak_prevalence, y = min_prevalence)) +
+  geom_point()
+```
+
+Something becomes apparent here, which is that all of the models are very bad at hitting troughs of prevalence at the correct times. The minimum prevalence scores are nowhere close to the target of 0, and are in fact much closer to the maximum score of 154. To me this suggests that the transmissions parameter distributions need a lower minimum to capture the dynamics of the system. I will repeat the exercise with different priors for beta.

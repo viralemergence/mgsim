@@ -1,0 +1,121 @@
+---
+title: "Dispersal Generator Test"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = FALSE}
+library(poems)
+library(raster)
+library(sf)
+library(tidyverse)
+library(paletteer)
+library(cowplot)
+library(landscapemetrics)
+library(here)
+bbox <- extent(-128, -61, 15, 54)
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+bioclim1940 <- raster("/Users/caryinstitute/Documents/Very_Large_Data/predictors/predictors_1940.grd")
+template_raster <- raster("/Users/caryinstitute/Documents/Very_Large_Data/baseline/zip/1940AD_pop/uopp_1940AD.asc") %>% 
+  projectRaster(bioclim1940) %>% 
+  crop(bioclim1940)
+```
+
+# Overview
+
+In the package `poems`, a dispersal generator can be used to calculate dispersal rates between all grid cells in a region based on a) dispersal capabilities of the organism, b) a *friction landscape*, and c) population density of the organism across cells. In this test of the dispersal generator for the house finch, I will simply test aspect a).
+
+# Create Region Object
+
+To do anything spatial in `poems`, you need a `Region` object. Regions define the study region: its extent, spatial resolution, and map projection. It helps to have a template raster (in this case, my raster of mean annual temperature for 1940.)
+
+```{r template raster}
+plot(template_raster)
+```
+
+My template raster looks great, except that it has islands, where I know there aren't any house finches. I'm going to remove these islands using the helpful package `landscapemetrics`.
+
+```{r create region object}
+template_raster[!is.na(template_raster)] <- 1
+template_raster[is.na(template_raster)] <- 0
+patch_raster <- template_raster %>% terra::rast() %>% get_patches(class = 1) %>% 
+  .[[1]] %>% .[[1]]
+patch_raster[patch_raster != 21] <- NA
+finch_region <- Region$new(template_raster = patch_raster)
+plot(finch_region$region_raster)
+```
+
+# Create Dispersal Generator (and associated data)
+
+The dispersal generator object needs three datasets to go with it.
+
+1.  A lookup table to convert maximum dispersal distance to "dispersal b" (the value that actually goes into the dispersal function)
+2.  A distance matrix that divides all possible dispersal distances into classes
+3.  A table of distances from each grid cell to every other grid cell
+
+It significantly speeds up operations if we have all of these three datasets ready to go along with the dispersal generator itself.
+
+Here is the lookup table, based on a maximum dispersal distance of 1500 km according to the prior distributions I've calculated from the literature:
+
+```{r b lookup}
+b_lookup <- data.frame(d_max = -Inf, b = 0:904)
+for (i in 2:904) {
+  b_lookup$d_max[i] <- which.max(exp(-1*(1:1501)/b_lookup$b[i]) <= 0.19)
+}
+b_lookup$d_max[905] <- 1501
+ggplot(b_lookup, aes(x = b, y = d_max)) + geom_line()
+```
+
+Here is the dispersal generator object:
+
+```{r dispersal generator}
+dispersal_gen <- DispersalGenerator$new(
+  region = finch_region,
+  dispersal_max_distance = 1500, # km
+  distance_classes = seq(10, 1500, 10),
+  distance_scale = 1000, # km
+  dispersal_function_data = b_lookup,
+  # dispersal_friction = DispersalFriction$new(conductance = friction),
+  inputs = c("dispersal_p",
+             "dispersal_r"),
+  decimals = 3
+)
+```
+
+I have commented out the friction landscape for now.
+
+Now I will generate the distance matrix and the distance cell data and save them for later use.
+
+```{r generate distance data}
+distance_matrix <- dispersal_gen$calculate_distance_matrix()
+dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
+qs::qsave(distance_matrix, here("Data/Input/distance_matrix.qs"))
+qs::qsave(dispersal_gen$distance_data, here("Data/Input", "dispersal_distance_data.qs"))
+```
+
+# Generate Dispersal Rates
+
+Here I will generate dispersals using some realistic values from my prior distributions.
+
+```{r generate dispersals}
+test_dispersal <- dispersal_gen$generate(input_values =
+                                           list(dispersal_p = 0.5,
+                                                dispersal_r = 500))$dispersal_data
+dispersal_out <- test_dispersal[[1]] %>% group_by(source_pop) %>% 
+  summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
+  right_join(rowid_to_column(finch_region$coordinates, "source_pop"))
+dispersal_in <- test_dispersal[[1]] %>% group_by(target_pop) %>% 
+  summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
+  right_join(rowid_to_column(finch_region$coordinates, "target_pop"))
+ggplot(dispersal_out, aes(x, y, fill = avg_dispersal_rate)) +
+  geom_tile() + 
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, name = "Average\nOutward\nDispersal",
+                         limits = c(0, 0.012)) +
+  theme_map()
+ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
+  geom_tile() + 
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, name = "Average\nInward\nDispersal",
+                         limits = c(0, 0.012)) +
+  theme_map()
+```

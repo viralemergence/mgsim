@@ -1,0 +1,649 @@
+---
+it---
+title: "Informative Prior Distributions"
+author: "July Pilowsky"
+format: html
+editor: visual
+bibliography: references.bib
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(mapdata)
+library(cowplot)
+library(paletteer)
+library(Hmisc)
+map <- purrr::map
+i_am("Scripts/priors.qmd")
+# data import
+transmission <- tribble(~Date, ~Weekly_Transmission,
+                        "2002/08/18", 0.032362459546925626,
+                        "2002/08/25", 0.03559870550161803,
+                        "2002/09/02", 0.032362459546925626,
+                        "2002/09/09", 0.032362459546925626,
+                        "2002/09/15", 0.03559870550161803,
+                        "2002/09/22", 0.04207119741100329,
+                        "2002/09/29", 0.03883495145631066,
+                        "2002/10/07", 0.05177993527508096,
+                        "2002/10/13", 0.06472491909385103,
+                        "2002/10/21", 0.06796116504854388,
+                        "2002/10/27", 0.07766990291262155,
+                        "2000/11/07", 0.85043,
+                        "2000/11/14", 0.79035,
+                        "2000/11/21", 0.79743,
+                        "2000/11/28", 0.39035,
+                        "2000/12/05", 0.36013,
+                        "2000/12/13", 0.52020,
+                        "2000/12/20", 0.32953,
+                        "2000/12/27", 0.09781,
+                        "2001/01/03", 0.23548,
+                        "2001/01/10", 0.63810,
+                        "2001/01/17", 0.32430,
+                        "2002/01/31", 0.06835,
+                        "2002/02/07", 0.05755,
+                        "2002/02/15", 0.02158,
+                        "2002/02/21", 0.01799,
+                        "2002/02/28", 0.03597,
+                        "2002/03/07", 0.01439,
+                        "2002/03/14", 0.01799,
+                        "2002/03/21", 0.03237,
+                        "2002/03/28",  0.0036,
+                        "2002/04/04", 0.01079,
+                        "2002/04/11",  0.0036,
+                        "2002/11/09", 0.02878,
+                        "2002/11/16", 0.03597,
+                        "2002/11/23", 0.03957,
+                        "2002/11/30", 0.04317,
+                        "2002/12/07", 0.04317,
+                        "2002/12/14", 0.03597,
+                        "2002/12/21", 0.03957,
+                        "2002/12/28", 0.03597,
+                        "2003/01/04", 0.04317,
+                        "2003/01/11", 0.05755,
+                        "2003/01/18", 0.06475,
+                        "2003/02/01", 0.02586,
+                        "2003/02/07", 0.02155,
+                        "2003/02/15", 0.03017,
+                        "2003/02/21", 0.02586,
+                        "2003/03/01", 0.02155,
+                        "2003/03/07", 0.02586, 
+                        "2001/02/01",  0.0431,
+                        "2001/02/07",  0.0431,
+                        "2001/02/14",  0.0431,
+                        "2001/02/21",  0.0431,
+                        "2001/02/28",  0.0431,
+                        "2001/03/07",  0.0431,
+                        "2001/03/14",  0.0431,
+                        "2001/03/22", 0.03879,
+                        "2001/03/28", 0.03879,
+                        "2001/04/05", 0.03448,
+                        "2001/04/12", 0.03448,
+                        "2001/11/07", 0.03448,
+                        "2001/11/14", 0.03448,
+                        "2001/11/21", 0.03448,
+                        "2001/11/29", 0.03017,
+                        "2001/12/06", 0.03017,
+                        "2001/12/13", 0.03017,
+                        "2001/12/20", 0.02586,
+                        "2001/12/27", 0.02586,
+                        "2002/01/03", 0.03017,
+                        "2002/01/10", 0.03017,
+                        "2002/01/17", 0.02586
+) %>% 
+  mutate(Date = as.Date(Date), Daily_Transmission = Weekly_Transmission/7,
+         Month = month(Date)) %>% arrange(Date)
+recovery <- tibble::tribble(
+  ~Age,     ~Weekly_Recovery,
+  "Juvenile", 0.14286,
+  "Juvenile", 0.09714,
+  "Adult", 0.11714,
+  "Adult", 0.04857,
+  "Unknown", 0.14286,
+  "Unknown", 0.08286) %>% 
+  mutate(Daily_Recovery = Weekly_Recovery / 7)
+transmission2 <- tribble(~Age, ~Weekly_Transmission,
+                         "Unknown", 0.08000,
+                         "Unknown", 0.04286,
+                         "Juvenile", 0.11364,
+                         "Adult", 0.15341,
+                         "Juvenile", 0.28693,
+                         "Adult", 0.05966,
+                         "Juvenile",  0.2358,
+                         "Adult", 0.06818,
+                         "Juvenile",  0.1733,
+                         "Adult", 0.04261
+) %>% mutate(Daily_Transmission = Weekly_Transmission/7)
+transmissionI2 <- tibble::tribble(
+                      ~Label,     ~Susceptibility,
+                    "I1a", 0.62755,
+                    "I1b", 0.81122,
+                    "I1c", 0.94388,
+                    "I1d", 0.98469,
+                    "I1e", 0.97959,
+                    "I2a",     0.5,
+                    "I2b", 0.70918,
+                    "I2b", 0.90306,
+                    "I2d", 0.97704,
+                    "I2a", 0.36735,
+                    "I2b", 0.55612,
+                    "I2c", 0.84184,
+                    "I2d", 0.92857,
+                    "I2e", 0.96429,
+                    "I2a", 0.21939,
+                    "I2b", 0.36735,
+                    "I2c", 0.72449,
+                    "I2d", 0.86735,
+                    "I2e", 0.92857
+                    ) %>% 
+  separate_wider_position(Label, c(Infection = 2, Strain = 1)) %>% 
+  pivot_wider(names_from = Strain, values_from = Susceptibility,
+              values_fn = list) %>% 
+  select(a:e) %>% map(~.[[2]]/.[[1]]) %>% flatten_dbl()
+mortality1 <- tibble::tribble(
+               ~Label,      ~Mortality,
+                "I1a",  0.01736,
+                "I1b",  0.02708,
+                "I1c",  0.04028,
+                "I1d",   0.0625,
+                "I1e",  0.08611,
+                "I2a",  0.00694,
+                "I2b",  0.01111,
+                "I2c",  0.01736,
+                "I2d",  0.02847,
+                "I2e",  0.04167,
+                "I2a",  0.00347,
+                "I2b",  0.00486,
+                "I2c",  0.00764,
+                "I2d",   0.0125,
+                "I2e",  0.01806,
+                "I2a",        0,
+                "I2b",  0.00139,
+                "I2c",  0.00208,
+                "I2d",  0.00417,
+                "I2e",  0.00556
+                ) %>% 
+  separate_wider_position(Label, c(Infection = 2, Strain = 1))
+mortality2 <- tibble::tribble(
+           ~Date,     ~Survival,
+  "2002/08/19", 0.75438,
+  "2002/08/26", 0.84729,
+  "2002/09/02", 0.80976,
+  "2002/09/09", 0.91509,
+  "2002/09/16",  0.8434,
+  "2002/09/23", 0.66302,
+  "2002/09/30", 0.89568,
+  "2002/10/07", 0.84262,
+  "2002/10/14", 0.32994,
+  "2002/10/20", 0.49119,
+  "2002/10/27", 0.76732,
+  "1999/11/09", 0.96218,
+  "2000/11/09", 0.66162,
+  "2001/02/08", 0.95397,
+  "2001/02/16", 0.48954,
+  "2001/02/22", 0.72803,
+  "2001/03/01", 0.89121,
+  "2001/03/08", 0.84519,
+  "2001/03/16", 0.32218,
+  "2001/03/22", 0.79498,
+  "2001/03/30", 0.26778,
+  "2001/04/05",  0.5272,
+  "2001/04/13",   0.159,
+  "2003/02/02", 0.84919,
+  "2003/02/09", 0.50928,
+  "2003/02/16", 0.85004,
+  "2003/02/23", 0.84625,
+  "2003/03/02", 0.82986,
+  "2003/03/09", 0.78408
+  ) %>% 
+  mutate(Daily_Mortality = (1 - Survival)/7,
+         Date = as.Date(Date))
+
+```
+
+# Goal
+
+To generate prior distributions for all the parameters in the house finch + *Mycoplasma* model, informative ones based on the literature when possible, vague/uninformative when impossible.
+
+# Demographic Parameters
+
+These are all the parameters that relate to the demography of the house finch in the absence of *Mycoplasma* infection.
+
+## Allee effect
+
+There is a widely accepted argument that house finches are subject to an Allee effect, as it explains some of their invasion dynamics [@veit1996], but no one really knows how strong that Allee effect is. I will just have to use a vague prior here.
+
+## Mortality (juvenile, winter)
+
+I have only one good data source on the survivorship of juveniles over their first winter [@milby1976]. I will generate a beta distribution based on this estimate and its uncertainty.
+
+```{r mortality juvenile winter}
+phi <- seq(0, 1, by = 0.001)
+(alpha3 <- 0.640^2 * ((1-0.640)/0.179^2 - (1/0.640)))
+(beta3 <- alpha3 * (1/0.640 - 1))
+
+beta_df2 <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha3, beta3))
+
+ggplot(beta_df2, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+I am a little concerned that this is overconfident given that this estimate is based on mark-recapture of 10 juveniles, but it is the only data source I have, and I feel like pretending I know *nothing* about juvenile overwinter survival would be dishonest.
+
+## Mortality (adult, winter)
+
+I have a few sources for adult survivorship:
+
+```{r mortality adult winter}
+adult_phi <- tribble(~phi, ~N, ~source,
+        0.719, 34, "Milby and Wright 1976",
+        0.405, 535, "Birds of the World",
+        0.468, 263, "Birds of the World",
+        0.574, 291, "Birds of the World",
+        0.577, 1245, "Birds of the World")
+adult_phi
+```
+
+I will calculate the mean and variance of survivorship from these studies, weighted by the sample size, to make a beta distribution.
+
+```{r mortality adult winter distribution, warning = F}
+mu <- weighted.mean(adult_phi$phi, adult_phi$N)
+var <- wtd.var(adult_phi$phi, adult_phi$N)
+
+## Beta parameters
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi), limits = c(0.25, 0.8)) + theme_minimal_grid()
+```
+
+## Mortality (adult, summer)
+
+It seems to be taken as a given in the literature on house finches that mortality for adults is negligible in the summer. I may just assume for simplicity's sake that mortality is zero for adults in this season.
+
+## Mortality (juvenile, summer)
+
+By contrast, lots of juveniles die before they can join the fall dispersal. Here I give survivorship as proportion of eggs that produce fledglings that survive to the end of the breeding season.
+
+```{r mortality juvenile summer}
+juvenile_phi <- tribble(~phi, ~N, ~source,
+                        0.371, 1509, "Reeves and Hammon 1962",
+                        0.553, 39,   "Hooge 1990",
+                        0.616, 196,  "Birds of the World")
+mu <- weighted.mean(juvenile_phi$phi, juvenile_phi$N)
+var <- wtd.var(juvenile_phi$phi, juvenile_phi$N)
+
+## Beta parameters
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Reproductive rate
+
+I am defining reproductive rate here as the number of eggs produced in a breeding season. i have a bunch of sources of information on this.
+
+```{r reproductive rate}
+broods <- tribble(~Broods, ~se,   ~N, ~Source,
+                  2.5,      0.42,  16, "Hooge 1990",
+                  1.7,      0.59,  23, "Hooge 1990") %>% 
+  mutate(sd = se*sqrt(N))
+eggs <- tribble(~Eggs, ~se,  ~N,   ~Source,
+                 4.55,  0.03, 539, "Birds of the World",
+                 4.36,  0.1,  289, "Birds of the World",
+                 3.5,   0.4,  70,  "Birds of the World",
+                 3.88,  0.8,  211, "Birds of the World",
+                 3.64,  0.9,  81,  "Birds of the World",
+                 3.33,  0.6,  21,  "Birds of the World",
+                 2.83,  0.4,  6,   "Birds of the World",
+                 4.11,  1.14, 117, "Birds of the World",
+                 4.52,  0.63, 44,  "Birds of the World",
+                 4.40,  0.58, 25,  "Birds of the World",
+                 3.9,   0.7,  14,  "Birds of the World",
+                 4.21,  0.87, 128, "Birds of the World",
+                 4.35,  0.84, 195, "Birds of the World",
+                 4.53,  0.86, 108, "Birds of the World",
+                 ) %>% 
+  mutate(sd = se*sqrt(N))
+```
+
+Since I have separate numbers on number of broods and number of eggs per brood, I'm going to generate distributions and then multiply them to get a total number of eggs per breeding season.
+
+```{r reproductive rate distribution}
+nSims <- 5000
+sim_broods <- matrix(NA, nrow = nSims, ncol = 2)
+for (j in 1:2) {
+  sim_broods[,j] <- rnorm(n = nSims, mean = broods$Broods[j], 
+                          sd = broods$sd[j])
+}
+sim_eggs <- matrix(NA, nrow = nSims, ncol = 14)
+for (j in 1:14) {
+  sim_eggs[,j] <- rnorm(n = nSims, mean = eggs$Eggs[j], 
+                          sd = eggs$sd[j])
+}
+mu_broods <- mean(sim_broods)
+mu_eggs <- mean(sim_eggs)
+fecundity_df <- tibble(eggs = seq(0, 16),
+                           density = dpois(eggs, mu_broods*mu_eggs))
+ggplot(fecundity_df, aes(x = eggs, y = density)) + geom_path() +
+  scale_x_continuous(expression(eggs)) + theme_minimal_grid()
+```
+
+# Dispersal Parameters
+
+There are two important dispersal parameters here: proportion of birds that disperse, and maximum dispersal distance, each broken down by age class.
+
+## Proportion dispersing (juvenile)
+
+An important parameter in the model is what proportion of juveniles exhibit natal philopatry, that is, remain in the population they were born. There are plenty of data on this.
+
+```{r proportion dispersing juvenile}
+juv_dispersal <- tribble(~prop, ~Source,
+                         0.85,   "Birds of the World",
+                         0.964,  "Birds of the World",
+                         0.9,    "Birds of the World",
+                         0.85,   "Birds of the World",
+                         0.73,   "Birds of the World",
+                         0.684,   "Able and Belthoff 1998")
+(mu2 <- mean(juv_dispersal$prop))
+(var2 <- sd(juv_dispersal$prop) ^ 2)
+
+## Beta parameters
+alpha2 <- mu2^2 * ((1-mu2)/var2 - (1/mu2))
+beta2 <- alpha2 * (1/mu2 - 1)
+
+beta_df2 <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df2, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(limits = c(0.4, 1)) +
+  xlab("Proportion dispersing") +
+  theme_minimal_grid()
+```
+
+## Proportion dispersing (adult)
+
+Dispersal also appears to be frequent in adult house finches.
+
+```{r proportion dispersing adult}
+adult_dispersal <- tribble(~remain,   ~N, ~Source,
+                            0.2435,  1368, "Belthoff and Gauthreaux 1991b",
+                            0.2225,  445,  "Stewart 1989",
+                            0.46,     NA,  "Able and Belthoff 1998",
+                            0.72,     NA,  "Able and Belthoff 1998",
+                            0.65,     NA,  "Able and Belthoff 1998",
+                            0.988,    NA,  "Able and Belthoff 1998",
+                            0.68,     NA,  "Able and Belthoff 1998",
+                            0.6,     NA,  "Able and Belthoff 1998",
+                            0.72,     NA,  "Able and Belthoff 1998",
+                            0.67,     NA,  "Able and Belthoff 1998",
+                            0.66,     NA,  "Able and Belthoff 1998") %>% 
+  mutate(prop = 1-remain)
+mu <- mean(adult_dispersal$prop)
+var <- sd(adult_dispersal$prop)^2
+
+## Beta parameters
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  xlab("Proportion dispersing") + theme_minimal_grid()
+```
+
+## Maximum dispersal distance (juvenile)
+
+```{r maximum dispersal juvenile}
+juv_distance <- tribble(~Distance, ~N, ~Source,
+                         760,       33, "Veit and Lewis 1996",
+                         1200,      98, "Able and Belthoff 1998",
+                         225,       95, "Able and Belthoff 1998")
+mu <- weighted.mean(juv_distance$Distance, juv_distance$N)
+var <- wtd.var(juv_distance$Distance, juv_distance$N)
+
+norm_df <- data.frame(distance = 0:1500) %>% 
+            mutate(density = dnorm(distance, mu, sqrt(var)))
+ggplot(norm_df, aes(x = distance, y = density)) + geom_path() +
+  xlab("Maximum dispersal distance") + theme_minimal_grid()
+```
+
+## Maximum dispersal distance (adult)
+
+```{r maximum dispersal adult}
+adult_distance <- tribble(~Distance, ~N, ~Source,
+                          600,       21, "Veit and Lewis 1996",
+                          900,       135, "Able and Belthoff 1998",
+                          595,       333, "Belthoff and Gethraux 1991")
+mu <- weighted.mean(adult_distance$Distance, adult_distance$N)
+var <- wtd.var(adult_distance$Distance, adult_distance$N)
+
+norm_df <- data.frame(distance = 0:1500) %>% 
+            mutate(density = dnorm(distance, mu, sqrt(var)))
+ggplot(norm_df, aes(x = distance, y = density)) + geom_path() +
+  xlab("Maximum dispersal distance") + theme_minimal_grid()
+```
+
+# Disease Parameters
+
+These are parameters specific to the disease phase of the model, governing transmission rates, disease mortality, recovery rate, and the effects of season and partial immunity.
+
+## Transmission rate (adult, winter)
+
+I have a significant amount of data out of the Cornell Lab of Ornithology on winter transmission rates that I can use to build a prior.
+
+sion))
+
+(var2 \<- sd(beta_Sa_winter\$Daily_Transmission) \^ 2)
+
+```{r transmission rate adult winter}
+beta_Sa_winter <- bind_rows(
+  filter(transmission, Month %in% c(9:12, 1:2)),
+  filter(transmission2, Age != "Juvenile")
+)
+(mu2 <- mean(beta_Sa_winter$Daily_Transmission))
+(var2 <- sd(beta_Sa_winter$Daily_Transmission) ^ 2)
+
+## Beta parameters
+alpha2 <- mu2^2 * ((1-mu2)/var2 - (1/mu2))
+beta2 <- alpha2 * (1/mu2 - 1)
+
+beta_df3 <- data.frame(beta = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df3, aes(x = beta, y = density)) + geom_path() +
+  scale_x_continuous(expression(beta), limits = c(0, 0.15)) +
+  theme_minimal_grid()
+```
+
+## Transmission rate (adult, summer)
+
+I have less data on transmission rates in summer but I still have some.
+
+```{r transmission rate adult summer}
+beta_Sa_summer <- filter(transmission, Month %in% c(3:8))
+(mu2 <- mean(beta_Sa_summer$Daily_Transmission))
+(var2 <- sd(beta_Sa_summer$Daily_Transmission) ^ 2)
+
+## Beta parameters
+alpha2 <- mu2^2 * ((1-mu2)/var2 - (1/mu2))
+beta2 <- alpha2 * (1/mu2 - 1)
+
+beta_df4 <- data.frame(beta = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df4, aes(x = beta, y = density)) + geom_path() +
+  scale_x_continuous(expression(beta), limits = c(0, 0.15)) +
+  theme_minimal_grid()
+```
+
+## Transmission rate juvenile modifier
+
+A capture-mark-recapture study at the Cornell Lab of Ornithology looked at differences in weekly infection probabilities between juveniles and adults. For five field seasons, there were estimates of the odds ratio of beta between adults and juveniles. I can use these to work out a modifier of how much higher juvenile transmission rates should be than adult.
+
+```{r transmission juvenile modifier}
+library(truncnorm)
+transmission_Sj <- c(2.89, 1.45, 2.6, 1.92, 6.31)
+(mu2 <- mean(transmission_Sj))
+(var2 <- sd(transmission_Sj) ^ 2)
+
+transmission_Sj_df <- data.frame(multiplier = seq(0.01, 8.5, 0.01)) %>% 
+  mutate(density = dtruncnorm(multiplier, 0, Inf, mu2, var2))
+
+ggplot(transmission_Sj_df, aes(x = multiplier, y = density)) + geom_path() +
+  xlab("Juvenile transmission rate multiplier") + 
+  theme_minimal_grid()
+```
+
+## Transmission rate partial immunity modifier
+
+Finches that have had the disease before can get it again, but they are less susceptible. There have been studies on how much less susceptible they are.
+
+```{r transmission partial immunity}
+beta_I2_modifier <- c(1, 0.4711, 0.3920, 1) %>% append(transmissionI2)
+mu <- mean(beta_I2_modifier)
+var <- var(beta_I2_modifier)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Mortality rate (adult, first infection, summer)
+
+I have data from a wild population under observation for 3 years about adult mortality from the disease.
+
+```{r mortality_I1_adult summer}
+mortality_I1_adult <- mortality2 %>% filter(month(Date) %in% c(4:8)) %>% pull(Daily_Mortality)
+mu <- mean(mortality_I1_adult)
+var <- var(mortality_I1_adult)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+phi <- seq(0, 0.2, 0.001)
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Mortality rate (juvenile, first infection, winter)
+
+The mortality rate for juveniles at first infection is rather high.
+
+```{r mortality_I1_juv}
+mortality_I1_juv <- mortality1 %>% filter(Infection=="I1") %>% 
+  pull(Mortality) %>% 
+  append(c(0.05892, 1/58, 1/35))
+mu <- mean(mortality_I1_juv)
+var <- var(mortality_I1_juv)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+phi <- seq(0, 0.15, 0.001)
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Mortality (juvenile, first infection, summer)
+
+I have no data on this, so I'm going to use the same prior distribution as above.
+
+## Mortality rate (adult, first infection, winter)
+
+```{r mortality_I1_adult winter}
+mortality_I1_adult <- mortality2 %>% filter(!month(Date) %in% c(4:8)) %>% pull(Daily_Mortality)
+mu <- mean(mortality_I1_adult)
+var <- var(mortality_I1_adult)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+phi <- seq(0, 0.2, 0.001)
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Mortality modifier (second infection)
+
+Mortality is lower after the first infection. Granted, there are many factors that influence the reduction in mortality, including which strains the bird had first or second, and how long it has been since the first, but I will just have one term in the model for this.
+
+```{r mortality I2 modifier}
+mortality_I2 <- mortality1 %>% 
+  pivot_wider(names_from = Strain, values_from = Mortality,
+              values_fn = list) %>% 
+  select(a:e) %>% map(~.[[2]]/.[[1]]) %>% flatten_dbl() %>% 
+  append(c(0.02811/0.05892, 2.727e-17/0.05892))
+mu <- mean(mortality_I2)
+var <- var(mortality_I2)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+phi <- seq(0, 1, 0.001)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Recovery rate (first infection)
+
+Recovery from MG takes weeks the first time a bird is infected.
+
+```{r recovery rate I1}
+recovery_I1 <- recovery$Daily_Recovery %>% append(1/72.8)
+mu <- mean(recovery_I1)
+var <- var(recovery_I1)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+phi <- seq(0, 0.05, 0.001)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```
+
+## Recovery rate (second infection)
+
+Recovery appears to be faster the second time around. Here are my data on this from the literature.
+
+```{r recovery rate I2}
+recovery_I2 <- c(1/35, 1/10, 1/37, 1/64, 1/43)
+
+mu <- mean(recovery_I2)
+var <- var(recovery_I2)
+alpha2 <- mu^2 * ((1-mu)/var - (1/mu))
+beta2 <- alpha2 * (1/mu - 1)
+
+phi <- seq(0, 0.2, 0.001)
+
+beta_df <- data.frame(phi = phi,
+                      density = dbeta(phi, alpha2, beta2))
+
+ggplot(beta_df, aes(x = phi, y = density)) + geom_path() +
+  scale_x_continuous(expression(phi)) + theme_minimal_grid()
+```

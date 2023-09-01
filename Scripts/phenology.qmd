@@ -1,0 +1,555 @@
+---
+title: "Estimating House Finch Breeding Season Length"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = FALSE, message = F}
+library(tidyverse)
+library(readxl)
+library(here)
+library(sf)
+library(terra)
+library(furrr)
+library(tidymodels)
+devtools::install_github("stevenpawley/colino")
+library(colino)
+library(gganimate)
+large_studies <- read_excel(here("Data", "Input", "hofi_phenology.xlsx"))
+nest_watch <- read_csv("~/Documents/Very_Large_Data/attempts_locs-20230518.csv") %>%
+  filter(`Species Name`%in%c("House Finch", "House Finch (Common"),
+         Year < 2018,
+         !is.na(`First Lay Date`),
+         !is.na(`Fledge Date`))
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
+columns <- tribble(~bioclim, ~name,
+        "bio1 "," mat"," bio2  "," temp_diurnal_range"," bio3 "," isothermality"," 
+         bio4 "," temp_seasonality","
+         bio5 "," max_hottest_month"," bio6"," min_coldest_month"," 
+         bio7 "," temp_ann_range"," bio8 "," mtwq"," bio9 "," mtdq"," bio10 "," mthq","
+         bio11 "," mtcq"," bio12 "," ann_prec"," bio13 "," pwm"," bio14 "," pdm","
+         bio15 "," prec_seasonality"," bio16 "," pwq"," bio17 "," pdq"," bio18 "," phq","
+         bio19 "," pcq") %>% 
+  mutate(across(everything(), trimws))
+```
+
+# My Goal
+
+To predict the breeding season length of the house finch throughout my study region and time period using a machine learning model trained on known breeding season length at particular times and places. The predictors in this model will be historical climate data.
+
+# 1. Harmonize Data
+
+## Data Challenges
+
+I found four studies where breeding season length was explicitly estimated from nesting data at a site. These are very robust estimates based on, at least, dozens of nests. However, these are only four data points, which is not enough. Most of my data will come from nest records. I can estimate breeding season length based on the spread of nests at a particular time and place, but these estimates will be less reliable. What I will do to address this is a) require a minimum of three nests at a site in a year, and b) weight breeding season length estimates in the model based on how many nests were used to estimate it.
+
+## Large Studies
+
+Here are my data from the studies that actually used a large number of nests to estimate breeding season length. I want to get my data from more problematic sources into this format.
+
+```{r good data}
+large_studies
+```
+
+## Nest Watch
+
+Nest Watch is a citizen science project run by the Cornell Lab of Ornithology. I downloaded a database of nest attempts and filtered it down to house finch nests only, and only nests with a lay date and a fledge date. What I will do is filter this down to sites where more than one nest was recorded, and use the earliest lay date and the latest fledge date to define the breeding season at each site.
+
+```{r nest watch}
+nw_processed <- nest_watch %>% group_by(`Location ID`, Year) %>% 
+  mutate(count = n()) %>% 
+  filter(count>1) %>% 
+  summarize(Nests = mean(count),
+            Begin_Date = min(`First Lay Date`),
+            End_Date = max(`Fledge Date`)) %>% 
+  mutate(Season_Length = as.numeric(End_Date - Begin_Date))
+nw_processed
+```
+
+Most of these estimates are much too short, which shows the peril of using only a couple of nests to try to estimate season length.
+
+## Watts et al. 2019
+
+These data come from an interesting paper on the change in laying date over time for house finches in California. As such, these data have great temporal depth but are concentrated in California.
+
+One limitation of these data is that they only are geolocated down to county. I think this is okay given the coarseness of my spatial resolution in the model; I'll just rasterize a county shapefile to the right resolution.
+
+The other limitation is that only laying date is given. I know from the literature that house finches take on average 28 days from lay date to fledge date, so I will proceed on that assumption.
+
+```{r watts et al 2019}
+watts <- read_csv(here("Data", "Input", "Watts_et_al_2019_IBIS_HOFI_NestRecords_Dataset.csv"))
+watts_processed <- watts %>% group_by(County, Year) %>% 
+  filter(Year>1939) %>% 
+  mutate(count = n()) %>% 
+  filter(count>1) %>% 
+  summarize(Nests = mean(count),
+            Begin = min(AdjLayDate),
+            End = max(AdjLayDate)+28) %>% 
+  mutate(Season_Length = End - Begin)
+watts_processed
+```
+
+## Saturation Curve
+
+There is an issue with the saturation curve here, which is to say that a certain number of nests seem to be needed in order to get the right season length. I demonstrate this here.
+
+```{r saturation curve}
+large_studies %>% rename(Season_Length = `Season Length (days)`) %>% 
+  bind_rows(nw_processed, watts_processed) %>% 
+  select(Nests, Season_Length) %>% 
+  ggplot(aes(x = Nests, y = Season_Length)) + geom_point() +
+  scale_x_log10() +
+  geom_smooth(method = "gam")
+```
+
+## Eastern Bluebirds
+
+There are a lot more data on eastern bluebirds than on house finches. I read a paper that estimated house finch breeding season by the first 1% and last 1% of nest dates from eastern bluebird. I am going to try this technique using NestWatch data.
+
+```{r bluebird}
+bluebird <- read_csv("~/Documents/Very_Large_Data/attempts_locs-20230518.csv") %>%
+  mutate(qc = year(`First Lay Date`)==year(`Fledge Date`)) %>% 
+  filter(`Species Name`=="Eastern Bluebird",
+         year(`First Lay Date`) < 2018,
+         !is.na(`First Lay Date`),
+         !is.na(`Fledge Date`),
+         qc) %>% 
+  mutate(Year = year(`First Lay Date`)) %>% 
+  group_by(`Location ID`, Year) %>% 
+  mutate(count = n()) %>% 
+  filter(count>1) %>% 
+  summarize(Nests = mean(count),
+            Begin_Date = min(`First Lay Date`),
+            End_Date = max(`Fledge Date`),
+            Site = first(`Location ID`),
+            Year = first(Year),
+            Latitude = first(Latitude),
+            Longitude = first(Longitude),
+            Elevation = first(`Elevation m`)) %>% 
+  mutate(Season_Length = as.numeric(End_Date - Begin_Date),
+         Country = rep("USA"))
+bluebird_canada <- read_tsv("~/Documents/Very_Large_Data/nestwatch_naturecounts_data.txt") %>% 
+  filter(!is.na(DecimalLatitude), !is.na(ObservationDate), 
+         YearCollected > 1939) %>% 
+  group_by(DecimalLatitude, DecimalLongitude, YearCollected) %>% 
+  mutate(count = n()) %>% 
+  filter(count>1) %>% 
+  summarize(Nests = mean(count),
+            Begin_Date = min(ObservationDate),
+            End_Date = max(ObservationDate),
+            Site = first(Locality),
+            Year = first(YearCollected),
+            Latitude = first(DecimalLatitude),
+            Longitude = first(DecimalLongitude)) %>% 
+  mutate(Season_Length = as.numeric(End_Date - Begin_Date),
+         Country = rep("Canada"))
+bluebird_canada %>% 
+  ggplot(aes(x = Nests, y = Season_Length)) + 
+  geom_point() +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs", k = 5)) +
+  scale_x_log10()
+bluebird %>% 
+  ggplot(aes(x = Nests, y = Season_Length)) + 
+  geom_point() +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs", k = 5))
+```
+
+This saturation curve hits its stride at 4 nests per site. If I throw out all sites with fewer than 4 nests, I'm left with 205 sites with breeding season length estimates, as shown below.
+
+```{r map bluebird}
+backdrop <- rworldmap::coastsCoarse %>% sf::st_as_sf() %>% 
+  sf::st_crop(terra::ext(-128, -61, 15, 54))
+bluebird %>% filter(Nests > 3) %>% 
+  bind_rows(filter(bluebird_canada, Nests > 17)) %>% 
+  ggplot() +
+  geom_sf(data = backdrop) +
+  geom_point(aes(x = Longitude, y = Latitude, col = Season_Length)) +
+  scale_color_viridis_c()
+bind_rows(bluebird, bluebird_canada) %>% 
+  filter(Nests > 3, Season_Length > 0) %>% 
+  ggplot() +
+  geom_sf(data = backdrop) +
+  geom_point(aes(x = Longitude, y = Latitude, col = Season_Length)) +
+  scale_color_viridis_c()
+```
+
+# 2. Pair with Climate Data
+
+My goal here is to pair the sites where I have estimates of breeding season length with climate data.
+
+```{r extract climate data}
+season_est <- bind_rows(bluebird, bluebird_canada) %>% 
+  filter(Nests > 3, Season_Length > 0) %>% 
+  group_by(Year) %>% 
+  arrange(Year)
+points <- season_est %>% group_split() %>% 
+  map(~select(., Longitude, Latitude)) %>% 
+  map(sf_project, from = wgs84, to = proj_crs) %>% 
+  set_names(deframe(group_keys(season_est)))
+files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
+  keep(str_detect, pattern = "\\.grd$") %>% 
+  keep(~any(map_lgl(., function(x) {
+    any(map_lgl(names(points), ~str_detect(x, .)))
+    }))) %>% 
+  set_names(deframe(group_keys(season_est)))
+col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
+  append("urban") %>% flatten_chr()
+plan(multisession)
+season_extract <- future_map2(files2, points, function(f, p) {
+  r <- rast(f); terra::extract(r, p)
+}, .progress = T) %>% 
+  map(~set_names(., col_names)) %>% 
+  list_rbind(names_to = "Year")
+season_extract %>% 
+  set_names(c("Year", columns$name, "urban")) %>% 
+  pivot_longer(mat:urban, names_to = "Variable", values_to = "Value") %>% 
+  ggplot(aes(x = Value)) + geom_density() + facet_wrap(~Variable, scales = "free_x")
+```
+
+# 3. Build Predictive Model
+
+## 3a. Random forest model using climate data
+
+Here I use bioclim variables as predictors of breeding season length.
+
+```{r build model}
+season_split <- season_extract %>% 
+  bind_cols(select(season_est, Season_Length, Nests)) %>% 
+  select(bio1:bio19, Season_Length, Nests) %>% 
+  mutate(Nests = importance_weights(Nests)) %>% 
+  initial_split(prop = 0.8)
+
+tune_spec <- rand_forest(
+  mtry = tune(),
+  trees = 1000,
+  min_n = tune()
+) %>%
+  set_mode("regression") %>%
+  set_engine("ranger", importance = "permutation")
+
+tree_rec <- season_split %>% 
+  training() %>% 
+  recipe(Season_Length ~ .) %>%
+  # step_select_vip(all_predictors(), outcome = "Season_Length", 
+  #                 model = tune_spec, threshold = 0.5) %>%
+  prep()
+
+tune_wf <- workflow() %>%
+  add_recipe(tree_rec) %>%
+  add_model(tune_spec)
+
+my.cluster <- parallel::makeCluster(
+  8, 
+  type = "PSOCK"
+  )
+
+doParallel::registerDoParallel(my.cluster)
+
+tune_res <- tune_grid(
+  tune_wf,
+  resamples = vfold_cv(training(season_split)),
+  grid = 20
+)
+
+tune_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "RMSE")
+
+rf_grid <- grid_regular(
+  mtry(range = c(2, 5)),
+  min_n(range = c(15, 25)),
+  levels = 5
+)
+
+regular_res <- tune_grid(
+  tune_wf,
+  resamples = vfold_cv(training(season_split)),
+  grid = rf_grid
+)
+
+regular_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  mutate(min_n = factor(min_n)) %>%
+  ggplot(aes(mtry, mean, color = min_n)) +
+  geom_line(alpha = 0.5, linewidth = 1.5) +
+  geom_point() +
+  labs(y = "RMSE")
+
+model_spec <- rand_forest(
+  mtry = 2,
+  trees = 1000,
+  min_n = 25
+) %>%
+  set_mode("regression") %>%
+  set_engine("ranger", importance = "permutation")
+
+# Low importance variables
+exclude <- c("bio5", "bio3", "bio2", "bio8", "bio9", "bio7", "bio14", "bio15",
+             "bio16")
+
+tree_rec <- season_split %>% 
+  training() %>% 
+  recipe(Season_Length ~ .) %>%
+  # step_select_vip(all_predictors(), outcome = "Season_Length",
+  #                 model = model_spec, threshold = 0.95, cutoff = 20) %>%
+  step_rm(all_of(exclude)) %>% 
+  prep(training = training(season_split)) %>% 
+  identity()
+
+rf_workflow <- workflow() %>% 
+  add_case_weights(Nests) %>% 
+  add_model(model_spec) %>% 
+  add_recipe(tree_rec)
+
+rf_fit <- fit(rf_workflow, data = training(season_split))
+
+last_fit(rf_workflow, season_split, metrics = metric_set(rsq, mpe)) %>% 
+  collect_metrics()
+```
+
+As we can see here, the fit of the random forest model based on climate predictors is not bad. But it also makes me wonder whether this is in fact a better fit than a GAM with Latitude and Year as predictors (a much simpler model).
+
+## 3b. Latitude + year model
+
+```{r latitude year model}
+ggplot(season_est, aes(x = Latitude, y = Season_Length)) + geom_point() +
+  geom_smooth()
+ggplot(season_est, aes(x = Year, y = Season_Length)) + geom_point() + geom_smooth()
+
+ly_split <- season_est %>%  
+  select(Year, Nests, Latitude, Longitude, Season_Length) %>% 
+  mutate(Nests = importance_weights(Nests)) %>% 
+  initial_split(prop = 0.8)
+
+gam_spec <- gen_additive_mod(select_features = TRUE) %>%
+  set_engine("mgcv", family = gaussian(link = "log")) %>% 
+  set_mode("regression")
+
+gam_workflow <- workflow() %>% 
+  add_case_weights(Nests) %>% 
+  add_variables(outcome = Season_Length, 
+                predictors = c(Latitude, Longitude, Year)) %>% 
+  add_model(gam_spec, 
+            formula = Season_Length ~ 
+                ti(Latitude, bs = "tp") +
+                ti(Year, bs = "tp") +
+                te(Latitude, Year, bs = "tp"))
+
+ly_fit <- fit(gam_workflow, data = training(ly_split))
+
+last_fit(gam_workflow, ly_split, metrics = metric_set(rsq, mpe)) %>% 
+  collect_metrics()
+```
+
+It seems that the bioclim variables do better than just latitude/longitude + year.
+
+# 4. Make predictions
+
+There are a lot of predictions to make, because I have 6986 region cells over 78 years.
+
+```{r predict}
+finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
+files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
+  keep(str_detect, pattern = "\\.grd$") %>% 
+  set_names(as.character(1940:2017))
+points <- rep(list(finch_region$coordinates), 78) %>% 
+  set_names(as.character(1940:2017))
+col_names <- col_names <- 1:19 %>% as.character() %>% 
+  map_chr(~paste0("bio", .)) %>% 
+  c("ID", ., "urban")
+
+plan(multisession)
+predict_extract <- future_map2(files2, points, function(f, p) {
+  r <- rast(f); terra::extract(r, p)
+}, .progress = T) %>% 
+  map(~set_names(., col_names)) %>% 
+  list_rbind(names_to = "Year") %>% 
+  mutate(Year = as.numeric(Year))
+
+season_predict <- predict(rf_fit, new_data = predict_extract %>% 
+                            select(bio1:bio19) %>% filter(complete.cases(.)))
+ly_data <- finch_region$coordinates %>% as.matrix() %>% project(proj_crs, wgs84) %>% 
+  as.data.frame() %>% list() %>% rep(78) %>% set_names(as.character(1940:2017)) %>% 
+  list_rbind(names_to = "Year") %>% mutate(Year = as.numeric(Year)) %>% 
+  rename(Longitude = V1, Latitude = V2)
+ly_predict <- predict(ly_fit, new_data = ly_data) %>% bind_cols(ly_data) %>% 
+  rename(Season_Length = .pred) %>% 
+  mutate(x = rep(finch_region$coordinates$x, 78),
+         y = rep(finch_region$coordinates$y, 78))
+season_predict <- predict_extract %>% bind_cols(season_predict) %>% 
+  left_join(rowid_to_column(finch_region$coordinates, "ID")) %>% 
+  select(Year, x, y, Season_Length = .pred)
+
+namerica <- rworldmap::coastsCoarse %>% st_as_sf() %>% st_transform(proj_crs) %>% 
+  st_crop(finch_region$region_raster)
+NA_map <- ggplot() +
+  geom_sf(
+    data = namerica,
+    fill = "white",
+    color = "gray60"
+  )
+ani <- NA_map + 
+  geom_tile(data = season_predict, aes(x, y, fill = Season_Length)) +
+  scale_fill_viridis_c() +
+  coord_sf() + 
+  theme_map() +
+  labs(title = 'Bioclim\nYear: {frame_time}') +
+  transition_time(Year) +
+  ease_aes('linear')
+animate(ani, nframes = 78, fps = 2, renderer = gifski_renderer())
+ani2 <- NA_map + 
+  geom_tile(data = ly_predict, aes(x, y, fill = Season_Length)) +
+  scale_fill_viridis_c() +
+  coord_sf() + 
+  theme_map() +
+  labs(title = 'Latitude + Year\nYear: {frame_time}') +
+  transition_time(Year) +
+  ease_aes('linear')
+animate(ani2, nframes = 78, fps = 2, renderer = gifski_renderer())
+```
+
+In accordance with the R squared, overall the bioclim model predictions look better than the Latitude + Year predictions. But as a final check, I want to try a random forest model with all of these predictors to see if that is any better.
+
+```{r latitude + year + bioclim}
+full_split <- season_extract %>% 
+  bind_cols(select(season_est, Season_Length, Nests, Latitude, Year)) %>% 
+  select(bio1:bio19, Season_Length, Nests, Latitude, Year = Year...25) %>% 
+  mutate(Nests = importance_weights(Nests)) %>% 
+  initial_split(prop = 0.8)
+
+tune_spec <- rand_forest(
+  mtry = tune(),
+  trees = 1000,
+  min_n = tune()
+) %>%
+  set_mode("regression") %>%
+  set_engine("ranger", importance = "permutation")
+
+tree_rec <- full_split %>% 
+  training() %>% 
+  recipe(Season_Length ~ .) %>%
+  # step_select_vip(all_predictors(), outcome = "Season_Length", 
+  #                 model = tune_spec, threshold = 0.5) %>%
+  prep()
+
+tune_wf <- workflow() %>%
+  add_recipe(tree_rec) %>%
+  add_model(tune_spec)
+
+my.cluster <- parallel::makeCluster(
+  8, 
+  type = "PSOCK"
+  )
+
+doParallel::registerDoParallel(my.cluster)
+
+tune_res <- tune_grid(
+  tune_wf,
+  resamples = vfold_cv(training(full_split)),
+  grid = 20
+)
+
+tune_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "RMSE")
+
+rf_grid <- grid_regular(
+  mtry(range = c(2, 5)),
+  min_n(range = c(10, 20)),
+  levels = 5
+)
+
+regular_res <- tune_grid(
+  tune_wf,
+  resamples = vfold_cv(training(full_split)),
+  grid = rf_grid
+)
+
+regular_res %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  mutate(min_n = factor(min_n)) %>%
+  ggplot(aes(mtry, mean, color = min_n)) +
+  geom_line(alpha = 0.5, linewidth = 1.5) +
+  geom_point() +
+  labs(y = "RMSE")
+
+model_spec <- rand_forest(
+  mtry = 4,
+  trees = 1000,
+  min_n = 20
+) %>%
+  set_mode("regression") %>%
+  set_engine("ranger", importance = "permutation")
+
+tree_rec <- full_split %>% 
+  training() %>% 
+  recipe(Season_Length ~ .) %>%
+  step_select_vip(all_predictors(), outcome = "Season_Length",
+                  model = model_spec, threshold = 0.95, cutoff = 20) %>%
+  # step_rm(all_of(exclude)) %>% 
+  prep(training = training(full_split)) %>% 
+  identity()
+
+exclude <- tree_rec$steps[[1]]$exclude
+
+tree_rec <- full_split %>% 
+  training() %>% 
+  recipe(Season_Length ~ .) %>%
+  step_rm(all_of(exclude)) %>% 
+  prep(training = training(full_split)) %>% 
+  identity()
+
+rf_workflow <- workflow() %>% 
+  add_case_weights(Nests) %>% 
+  add_model(model_spec) %>% 
+  add_recipe(tree_rec)
+
+rf_fit <- fit(rf_workflow, data = training(full_split))
+
+last_fit(rf_workflow, full_split, metrics = metric_set(rsq, mpe)) %>% 
+  collect_metrics()
+
+full_predict <- predict(rf_fit, new_data = predict_extract %>% 
+                            mutate(Latitude = ly_data$Latitude) %>% 
+                            select(Year, Latitude, bio1:bio19) %>% 
+                          filter(complete.cases(.)))
+full_predict <- predict_extract %>% 
+  mutate(Latitude = ly_data$Latitude) %>% 
+                            select(Year, Latitude, bio1:bio19, ID) %>% 
+                          filter(complete.cases(.)) %>% 
+  bind_cols(full_predict) %>% 
+  left_join(rowid_to_column(finch_region$coordinates, "ID")) %>% 
+  select(Year, x, y, Season_Length = .pred)
+
+ani3 <- NA_map + 
+  geom_tile(data = full_predict, aes(x, y, fill = Season_Length)) +
+  scale_fill_viridis_c() +
+  coord_sf() + 
+  theme_map() +
+  labs(title = 'Bioclim\nYear: {frame_time}') +
+  transition_time(Year) +
+  ease_aes('linear')
+animate(ani3, nframes = 78, fps = 2, renderer = gifski_renderer())
+```

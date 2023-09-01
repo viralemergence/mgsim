@@ -1,0 +1,309 @@
+---
+title: "Exploring Predictors for a House Finch SDM"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+# About This Dataset
+
+What I set out to do here is to calculate bioclimatic variables from ERA5 data going back to 1940, and to create a metric of urbanization from the Hyde 3.2 dataset, using all of these as possible predictors of house finch distribution. I include urbanization because there is a lot of evidence that habitat suitability for house finches increases with urbanization. I will use the package `KrigR` to access and process the ERA5 data, then work with the Hyde 3.2 data to harmonize it with the spatial resolution of the climate data. All must end up in an equal area map projection.
+
+```{r setup, include=F}
+library(KrigR)
+library(ncdf4)
+library(terra)
+library(furrr)
+library(here)
+i_am("Scripts/Exploration/SDM predictors.qmd")
+bbox <- ext(-128, -61, 15, 54)
+user <- '202546'
+key <- '8fb50c26-c4e5-475d-ad30-de46919bc158'
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+years <- 1940:2021 %>% as.character()
+# plan(multisession)
+# future_walk(years, function(x) {
+#   if (!file.exists(paste0('~/Documents/Very Large Data/', "BioClim_", x, ".nc"))) {
+#     BioClim(
+#       Y_start = x,
+#       Y_end = x,
+#       T_res = 'day',
+#       Extent = bbox,
+#       DataSet = 'era5',
+#       Dir = '~/Documents/Very Large Data/',
+#       Keep_Monthly = TRUE,
+#       API_User = user,
+#       API_Key = key,
+#       verbose = TRUE,
+#       FileName = paste0("BioClim_", x, ".nc")
+#     )
+#   }
+# })
+library(tidyverse)
+extract <- terra::extract
+project <- terra::project
+urban_rasters <- "~/Documents/Very_Large_Data/baseline/zip/" %>%
+  list.files(full.names = TRUE, include.dirs = TRUE) %>%
+  discard(str_detect, pattern = "\\.zip") %>%
+  keep(str_detect, pattern = "pop") %>%
+  map(list.files, full.names = TRUE) %>%
+  map(~keep(., str_detect, pattern = "uopp")) %>%
+  flatten_chr() %>%
+  map(rast) %>%
+  map(crop, bbox)
+urban_raster <- rast(urban_rasters)
+```
+
+# Harmonizing Data
+
+I have raster data from two sources, ERA5 and Hyde 3.2, and I need to get them into the same format and spatiotemporal resolution.
+
+One matter that needs to be resolved is the temporal resolution of the Hyde 3.2 land use data on urbanization. It is on a ten year time step from 1940 - 2000 and needs to be interpolated to harmonize with ERA5.
+
+```{r interpolate land use raster}
+# set desired timestep
+genLength <- 1
+## goal time sequence
+ts <- seq(1940, 2017, genLength)
+# The 'names' correspond to the timesteps you already have
+names <- c(1940, 1950, 1960, 1970, 1980, 1990, 2000, 2001:2017)
+# set res, extent, as approp.
+urbanStack <- brick(nl = length(ts), nrows = 468, ncols = 804,
+                  xmn = -128, xmx = -61.00005, ymn = 14.99996,
+                  ymx = 53.99994)
+urbanStack[] <- NA
+names(urbanStack) <- ts %>% map_chr(~paste0("AD", .))
+# The timeseries here corresponds to the timesteps you already have
+urban_ts <- names
+pb <- txtProgressBar(max = length(urban_ts), style = 3)
+# loop through each of the time steps for which we have ice, and place it in the
+# correct position in the raster stack
+for (i in seq_along(urban_ts)) {
+  j <- which(ts == urban_ts[i])
+  time <- ts[j]
+  inSeq <- which(names == time)
+  if (length(inSeq) != 0) {
+    r <- urban_raster[[inSeq]]
+    values(urbanStack[[j]]) <- r[]
+  }
+  setTxtProgressBar(pb, i)
+}
+close(pb)
+urbanStack <- setZ(urbanStack, z = ts, name = "Years BP")
+urbanStack
+idx <- seq(1, nlayers(urbanStack), length = 6)
+plot(urbanStack[[idx]])
+interpolated_urban <- approxNA(urbanStack, method = "linear", z = getZ(urbanStack))
+plot(interpolated_urban[[idx]])
+writeRaster(interpolated_urban, 
+            here("Data/Input/urban_raster_latlong.grd"),
+            overwrite = T)
+```
+
+Now let's have a look at an example of a bioclim raster stack. There is one raster stack per year, and each layer corresponds to a bioclim variable.
+
+```{r plot bioclim stack}
+bioclim1940 <- rast("~/Documents/Very_Large_Data/ERA5/BioClim_1940.nc")
+plot(bioclim1940)
+```
+
+I will try adding a variable to this stack for urbanization and converting everything to an equal area raster.
+
+```{r test one stack}
+bioclim1940_proj <- project(bioclim1940, proj_crs)
+# project and change to a fraction urbanized metric
+urban1940_proj <- project(urban_raster[[1]], bioclim1940_proj, "sum")/2151
+plot(urban1940_proj)  
+```
+
+You can see here that now everything is represented as the portion of the grid cell that has been converted to urban land use type.
+
+Now I will write a script to go through all the bioclim stacks and add a layer for each year giving the urbanization index.
+
+```{r script}
+files <- "~/Documents/Very Large Data/ERA5" %>% 
+  list.files(full.names = T) %>%
+  .[1:78]
+plan(multisession)
+future_walk(1:length(files), function(i) {
+  if (!file.exists(paste0(
+    "~/Documents/Very Large Data/predictors/predictors_",
+    ts[i],
+    ".grd"
+  ))) {
+    urban_raster <- here("Data/Input/urban_raster_latlong.grd") %>% 
+      rast() %>% .[[i]]
+    bioclim_proj <- rast(files[i]) %>% project(proj_crs)
+    urban_proj <- project(urban_raster, bioclim_proj, "sum") / 2151
+    writeRaster(
+      rast(list(bioclim_proj, urban_proj)),
+      paste0(
+        "~/Documents/Very Large Data/predictors/predictors_",
+        ts[i],
+        ".grd"
+      )
+    )
+  }
+})
+```
+
+# Extract Data for GBIF Points
+
+Now I want to extract data from these twenty predictors for the GBIF points I have over time. I need to match each occurrence with its year as well as its latlong. This will involve projecting the latlong into the equal area projection I'm using, and splitting the dataset by year.
+
+```{r extract data, message = F}
+library(vroom)
+hofi_sample <- vroom("~/Documents/Very Large Data/hofi_gbif_qc.tsv") %>% 
+  filter(decimallongitude>-128, decimallongitude<(-61), 
+         decimallatitude>15, decimallatitude<54, year<2018) %>% 
+  group_by(year) %>% group_split()
+points <- hofi_sample %>% map(~select(., decimallongitude, decimallatitude)) %>% 
+  map(sf_project, from = crs(urban_raster[[1]]), to = proj_crs) %>% 
+  set_names(ts)
+files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
+  keep(str_detect, pattern = "\\.grd$") %>% set_names(ts)
+col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
+  append("urban") %>% flatten_chr()
+plan(multisession)
+gbif_extract <- future_map2(files2, points, function(f, p) {
+  r <- rast(f); terra::extract(r, p)
+}, .progress = T) %>% 
+  map(~set_names(., col_names)) %>% 
+  list_rbind(names_to = "Year")
+```
+
+# Visualize Climate Niche
+
+In order to visualize the climate niche, I need to reduce the dimensionality of these 20 variables. I start with a PCA.
+
+```{r pca}
+library(ade4)
+library(ecospat)
+extract_cor <- gbif_extract[,2:21] %>% filter(complete.cases(.)) %>% scale()
+env.pca <- dudi.pca(extract_cor, scannf = F, nf = 7, center = F, scale = F)
+ecospat.plot.contrib(contrib = env.pca$co, eigen = env.pca$eig)
+```
+
+This is all well and good, but I am curious about whether the native and invasive ranges score differently on these PCs.
+
+```{r pc scores}
+pcs <- hofi_sample %>% list_rbind() %>% bind_cols(gbif_extract[,2:21]) %>% 
+  filter(if_all(bio1:urban, ~!is.na(.))) %>% cbind(env.pca$li) %>% 
+  mutate(Range = if_else(decimallongitude<(-100), "Native", "Invasive"))
+pcs %>% select(Axis1:Range) %>% 
+  pivot_longer(Axis1:Axis7, values_to = "Score", names_to = "PC") %>% 
+  ggplot(aes(x = PC, y = Score)) +
+  geom_violin(aes(fill = Range))
+```
+
+It seems to me that the invasive and native niches are not very different, only that there is higher variability in the invasive range. I can test this formally with a niche overlap test.
+
+```{r niche overlap test}
+# generate background points
+library(dismo)
+mask <- raster(urban_rasters[[1]])
+bg_points_nat <- map(1:78, ~ randomPoints(
+  mask = mask,
+  n = 2500,
+  ext = extent(-128, -100, 15, 54)
+)) %>%
+  map(sf_project, from = crs(urban_rasters[[1]]), to = proj_crs) %>%
+  set_names(years[1:78])
+bg_points_inv <- map(1:78, ~ randomPoints(
+  mask = mask,
+  n = 2500,
+  ext = extent(-100, -61, 15, 54)
+)) %>%
+  map(sf_project, from = crs(urban_rasters[[1]]), to = proj_crs) %>%
+  set_names(years[1:78])
+bg_extract_nat <- future_map2(files2, bg_points_nat, function(f, p) {
+  r <- rast(f); terra::extract(r, p)
+}, .progress = T) %>% 
+  map(~set_names(., col_names)) %>% 
+  list_rbind(names_to = "Year")
+bg_extract_inv <- future_map2(files2, bg_points_inv, function(f, p) {
+  r <- rast(f); terra::extract(r, p)
+}, .progress = T) %>% 
+  map(~set_names(., col_names)) %>% 
+  list_rbind(names_to = "Year")
+all_points <- bind_rows(gbif_extract[,2:21], bg_extract_inv[,2:21],
+                        bg_extract_nat[,2:21]) %>% 
+  filter(complete.cases(.)) %>% 
+  scale()
+pca.env <- dudi.pca(all_points, scannf = F, nf = 2, center = F, scale = F)
+ecospat.plot.contrib(contrib=pca.env$co, eigen=pca.env$eig)
+# PCA scores for the whole study area
+scores.globclim <- suprow(pca.env, 
+                          all_points)$li
+# PCA scores for the species native distribution
+scores.sp.nat <- suprow(pca.env, 
+                        all_points[1:sum(complete.cases(gbif_extract)),] %>% 
+                          as.data.frame() %>% 
+                          mutate(Range = pcs$Range) %>% 
+                          filter(Range == "Native") %>% 
+                          select(bio1:urban))$li
+# PCA scores for the species invasive distribution
+scores.sp.inv <- suprow(pca.env, 
+                        all_points[1:sum(complete.cases(gbif_extract)),] %>% 
+                          as.data.frame() %>% 
+                          mutate(Range = pcs$Range) %>% 
+                          filter(Range == "Invasive") %>% 
+                          select(bio1:urban))$li
+# PCA scores for the whole invaded study area
+scores.clim.inv <- suprow(pca.env, 
+                          all_points[236360:404357,])$li
+# PCA scores for the whole native study area
+scores.clim.nat <- suprow(pca.env, 
+                          all_points[(sum(complete.cases(gbif_extract))+sum(complete.cases(bg_extract_inv))):nrow(all_points),])$li
+# gridding the native niche
+grid.clim.nat <- ecospat.grid.clim.dyn(
+  glob = scores.globclim,
+  glob1 = scores.clim.nat,
+  sp = scores.sp.nat,
+  R = 100
+)
+grid.clim.inv <- ecospat.grid.clim.dyn(
+  glob = scores.globclim,
+  glob1 = scores.clim.inv,
+  sp = scores.sp.inv,
+  R = 100
+)
+ecospat.plot.niche.dyn(grid.clim.nat, grid.clim.inv, interest = 2)
+ecospat.niche.overlap(grid.clim.nat, grid.clim.inv, cor = T)
+addition <- values(grid.clim.nat$w + grid.clim.inv$w) %>% 
+  map_lgl(~if_else(.>0, T, F)) %>% sum()
+overlap <- values(grid.clim.nat$w + grid.clim.inv$w) %>% 
+  map_lgl(~if_else(.>1, T, F)) %>% sum()
+overlap/addition
+```
+
+82.5% overlap in the niche space of the native and invasive, which means I can probably safely pool the data across the range for the SDM.
+
+Now I will export my data on the background points as well as on the occurrences/niches.
+
+```{r data export, message = F}
+columns <- tribble(~bioclim, ~name,
+        "bio1 "," mat"," bio2  "," temp_diurnal_range"," bio3 "," isothermality"," 
+         bio4 "," temp_seasonality","
+         bio5 "," max_hottest_month"," bio6"," min_coldest_month"," 
+         bio7 "," temp_ann_range"," bio8 "," mtwq"," bio9 "," mtdq"," bio10 "," mthq","
+         bio11 "," mtcq"," bio12 "," ann_prec"," bio13 "," pwm"," bio14 "," pdm","
+         bio15 "," prec_seasonality"," bio16 "," pwq"," bio17 "," pdq"," bio18 "," phq","
+         bio19 "," pcq") %>% 
+  mutate(across(everything(), trimws))
+partition <- pcs %>% select(gbifid, countrycode, locality, stateprovince, decimallatitude, 
+               decimallongitude, coordinateuncertaintyinmeters, month, year, bio1:urban,
+               Range)
+names(partition)[10:28] <- columns$name
+vroom_write(partition, "~/Documents/Very Large Data/gbif_hofi_predictors.csv")
+background_inv <- bg_points_inv %>% map(as.data.frame) %>% list_rbind() %>% 
+  bind_cols(bg_extract_inv) %>% 
+  set_names(c("x", "y", "Year", columns$name, "urban")) %>% 
+  mutate(Range = "Invasive")
+background_nat <- bg_points_nat %>% map(as.data.frame) %>% list_rbind() %>% 
+  bind_cols(bg_extract_nat) %>% 
+  set_names(c("x", "y", "Year", columns$name, "urban")) %>% 
+  mutate(Range = "Native")
+bind_rows(background_inv, background_nat) %>% 
+  vroom_write("~/Documents/Very Large Data/hofi_background_points.csv")
+```

@@ -1,0 +1,61 @@
+---
+title: "Exploring Christmas Bird Count Data on the House Finch"
+author: "July Pilowsky"
+format: pdf
+editor: visual
+---
+
+## About CBC data
+
+Christmas Bird Count data is yearly citizen science data, though it is somewhat messier than the Breeding Bird Survey because the routes are not consistent: counting circles come and go as birdwatchers please. Helpfully, Audubon provides weighted abundance indices and trends aggregated to different regions.
+
+```{r setup, include=F, message=F}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(vroom)
+library(here)
+library(mapdata)
+library(cowplot)
+library(paletteer)
+library(sf)
+map <- purrr::map
+i_am("Scripts/Exploration/cbc.qmd")
+bcr <- st_read("~/Documents/Very Large Data/cbc_v4_download/BCR_Terrestrial/BCR_Terrestrial_master_International.shp")
+cbc <- vroom("~/Documents/Very Large Data/cbc_v4_download/cbc_trends_abundance_indices_and_scaling_factors_v4.0_web_download_12Apr2022.csv",
+             col_types = "ccccidddddddd") %>% 
+  filter(ebird_com_name=="House Finch")
+```
+
+# Region-Wide Abundance Trend
+
+The region of Christmas Bird Counts encompasses the US and Canada. My study region also encompasses Mexico, but it could still be useful as a metric to have a validation target over a large spatiotemporal extent.
+
+```{r region wide abundance trend}
+cbc %>% filter(stratum=="USACAN", parameter=="AbundanceIndex") %>% 
+  ggplot(aes(x = count_year, y = estimate_median)) + geom_line() + 
+  ylab("Abundance Index") + xlab("Year") + theme_minimal_vgrid() +
+  geom_vline(xintercept = 1994, col = "red")
+```
+
+I have added a red line for when *Mycoplasma* first emerged in the house finch. I think the best course would be to fit a trend on either side of this line and use those as validation targets.
+
+# Bird Conservation Region Trends
+
+CBC data are aggregated to different regional scales. For my purposes, I don't think it makes a lot of sense to use political regions. Audubon has bird conservation regions, which are a sort of ecoregion, and I think that's more sensible here as a unit for more local trends.
+
+```{r BCR trends}
+cbc %>% 
+  filter(parameter=="RegressionTrend1993On", str_detect(stratum, "BCR")) %>% 
+  mutate(BCR = str_sub(stratum, 4, 5) %>% as.numeric()) %>% 
+  filter(BCR!=31) %>% 
+  right_join(bcr) %>% 
+  ggplot() +
+  geom_sf(aes(geometry = geometry, fill = estimate_mean)) +
+  coord_sf(xlim = c(-128, -61), ylim = c(15, 54)) +
+  scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid,
+                         name = "Trend") +
+  theme_map()
+```
+
+The impact of the disease in the Northeast is very clear.

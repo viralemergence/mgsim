@@ -1,0 +1,16 @@
+---
+title: "Evaluating USGS Bird Banding Survey data on House Finch"
+author: "July Pilowsky"
+format: pdf
+editor: visual
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(here)
+library(vroom)
+i_am("Scripts/Exploration/birdbanding.qmd")
+nabbp <- "Data/Input/NABBP_2022_grp_37.csv" %>% here() %>% vroom()
+```
+
+Here is where I am going to betray my personal ignorance of CMR analysis. The Bird Banding Survey has a record of bandings and recaptures, and the lat-long of each event. I am concerned it will be impossible to distinguish between death and dispersal in this dataset, but perhaps there is an open population CMR analysis that can do the job.

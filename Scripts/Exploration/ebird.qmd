@@ -1,0 +1,75 @@
+---
+title: "Exploring Ebird Data on the House Finch"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = F}
+library(ebirdst)
+library(terra)
+library(sf)
+library(tidyverse)
+library(rnaturalearth)
+library(here)
+library(rasterVis)
+library(paletteer)
+library(cowplot)
+i_am("Scripts/Exploration/ebird.qmd")
+path <- ebirdst_download(species = "houfin", 
+                         path = "~/Documents/Very_Large_Data/ebird",
+                         tifs_only = FALSE)
+# load the mapping parameters
+fac_parameters <- load_fac_map_parameters(path)
+crs <- fac_parameters$custom_projection
+hofi_ext <- load_ranges(path, resolution = "lr") %>% ext()
+```
+
+# Range data
+
+```{r}
+# seasonal, low res, smoothed ranges
+ranges <- load_ranges(path, resolution = "lr") %>% st_transform(crs)
+countries <- ne_countries(returnclass = "sf") %>% 
+  st_transform(crs) %>% 
+  st_crop(ranges)
+ggplot() +
+  geom_sf(data = countries, aes(geometry = geometry)) +
+  geom_sf(data = ranges, aes(geometry = geom), fill = "gray50")
+```
+
+This range polygon is incredibly useful as a validation pattern for the end of the simulation (since the data are from 2021). The finch should be found within this polygon and not outside of it. The negatives, where it should not be, are very important because there will be a lot of factors pushing the model toward excessive finch abundance.
+
+# Occurrence probability
+
+```{r weekly data}
+# weekly,  median occurrence
+occ_lr <- load_raster(path, product = "occurrence", period = "seasonal",
+                      resolution = "lr") %>% 
+  project(crs) %>% crop(ranges)
+plot(occ_lr, axes = FALSE)
+```
+
+This I can use as a test dataset for occurrence probability from the house finch SDM in the last timestep.
+
+# Relative abundance
+
+```{r abundance}
+# weekly, low res, abundance confidence intervals
+abd_mean <- load_raster(path, product = "abundance", metric = "median", 
+                         resolution = "lr") %>% 
+  project(crs) %>% crop(ranges)
+pal <- c("#000000FF", paletteer_d("RColorBrewer::YlOrRd"))
+abd_mean %>% mean() %>% gplot() +
+  geom_tile(aes(fill = value)) +
+  coord_quickmap() +
+  scale_fill_stepsn(
+    breaks = seq(0, 9, 1),
+    colors = pal,
+    na.value = "transparent",
+    name = "Relative\nAbundance"
+  ) +
+  xlim(-5e06, 1e06) + ylim(-2e06, 3e06) + theme_minimal()
+```
+
+This pattern doesn't look as useful to me, because the abundances in the invasive range look spurious.

@@ -1,0 +1,133 @@
+---
+title: "Exploring the Breeding Bird Survey data on the House Finch"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = FALSE, message = FALSE}
+library(mapdata)
+library(tidyverse)
+library(cowplot)
+library(paletteer)
+library(vroom)
+library(here)
+library(gganimate)
+map <- purrr::map
+i_am("Scripts/Exploration/bbs.qmd")
+routes <- read_csv(here("Data/Input/Routes.csv"), col_types = "iicciddiiii") %>% 
+  mutate(ID = str_c(CountryNum, StateNum, Route))
+weather <- vroom(here("Data/Input/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
+hofi <- here("Data/Input/States") %>% list.files(full.names = T) %>% 
+  map(vroom, col_types = "iiiciiciiiii") %>% 
+  bind_rows() %>% 
+  filter(AOU=="05190") %>% 
+  left_join(routes) %>% 
+  left_join(weather) %>% 
+  filter(QualityCurrentID==1)
+presabs <- here("Data/Input/States") %>% list.files(full.names = T) %>% 
+  map(vroom, col_types = "iiiciiciiiii") %>% 
+  bind_rows() %>% 
+  filter(Year<2020) %>% 
+  left_join(routes) %>% 
+  left_join(weather) %>% 
+  filter(QualityCurrentID==1) %>% 
+  mutate(ID = str_c(CountryNum, StateNum, Route)) %>% 
+  complete(ID, AOU, Year, fill = list(SpeciesTotal = 0)) %>% 
+  select(ID, Year, AOU, SpeciesTotal) %>% 
+  group_by(ID, Year) %>% 
+  mutate(sum = sum(SpeciesTotal)) %>% 
+  filter(sum>0) %>% 
+  filter(AOU=="05190") %>% 
+  left_join(routes) %>% 
+  mutate(Present = SpeciesTotal>0)
+usa <- map_data("usa")
+canada <- map_data("worldHires", "Canada")
+NA_map <- ggplot() +
+  geom_polygon(data = usa, 
+               aes(x=long, y = lat, group = group), 
+               fill = "gray50", 
+               color="black") +
+  geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+               fill = "gray50", color="black") + 
+  coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55))
+gc()
+```
+
+# About This Dataset
+
+The Breeding Bird Survey is done in June, along randomized routes throughout the continental US and Alaska, with fairly consistent protocols since the 1960s. It cannot be used as an index of absolute abundance, but it can be used for presence/absence and for abundance trends.
+
+# Abundance Trends
+
+I am particularly interested in abundance trends from 1994 to 1998, when it seems from the literature that there were declines in house finches in the northeast due to disease mortality.
+
+```{r abundance trend}
+hofi %>% filter(Year>1993, Year<1999, Longitude>-95) %>% 
+  group_by(CountryNum, StateNum, Route) %>% 
+  mutate(count = n(), sum = sum(SpeciesTotal)) %>% 
+  filter(count>3, sum>0) %>% 
+  ggplot(aes(x = Year, y = SpeciesTotal, group = Route)) +
+  geom_smooth(method = "glm", alpha = 0.1, linewidth = 0.3, se = F) +
+  # scale_y_log10() +
+  theme_minimal_grid()
+```
+
+It does seem that in the East (east of 95W) there is an overall downward abundance trend. I will visualize this spatially by fitting abundance trends throughout the US from 1994 to 1998, for those routes that have data for all 5 of those years, and at least one House Finch in one of those years. For comparison I will have a trend from the previous 5 years.
+
+```{r abundance trend map}
+trends1 <- hofi %>% filter(Year>1988, Year<1994) %>% 
+  group_by(CountryNum, StateNum, Route) %>% 
+  mutate(count = n(), sum = sum(SpeciesTotal)) %>% 
+  filter(count==5, sum>0) %>% 
+  nest() %>% 
+  mutate(model = map(data, ~lm(SpeciesTotal ~ Year, data = .))) %>% 
+  mutate(tidy = map(model, broom::tidy)) %>% 
+  unnest(tidy) %>% 
+  filter(term=="Year") %>% 
+  select(-data) %>% 
+  left_join(routes) %>% 
+  filter(estimate>-9.142, estimate<19.942) # remove extreme outliers
+trends2 <- hofi %>% filter(Year>1993, Year<1999) %>% 
+  group_by(CountryNum, StateNum, Route) %>% 
+  mutate(count = n(), sum = sum(SpeciesTotal)) %>% 
+  filter(count==5, sum>0) %>% 
+  nest() %>% 
+  mutate(model = map(data, ~lm(SpeciesTotal ~ Year, data = .))) %>% 
+  mutate(tidy = map(model, broom::tidy)) %>% 
+  unnest(tidy) %>% 
+  filter(term=="Year") %>% 
+  select(-data) %>% 
+  left_join(routes) %>% 
+  filter(estimate>-12.66, estimate<9.45) # remove extreme outliers
+NA_map +
+  geom_point(data = trends1, aes(x = Longitude, y = Latitude, col = estimate),
+             size = 2, alpha = 0.8) +
+  theme_map() +
+  scale_color_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          name = "Trend", rescaler = scales::rescale_mid,
+                          limits = c(-12.66, 19.942)) +
+  ggtitle("Abundance Trends from 1989 to 1993")
+NA_map + 
+  geom_point(data = trends2, aes(x = Longitude, y = Latitude, col = estimate),
+             size = 2, alpha = 0.8) +
+  theme_map() +
+  scale_color_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          name = "Trend", rescaler = scales::rescale_mid,
+                          limits = c(-12.66, 19.942)) +
+  ggtitle("Abundance Trends from 1994 to 1998")
+```
+
+# Presence/Absence
+
+Another use for the Breeding Bird Survey is for presences and absences over time, reflecting the range expansion of the House Finch since 1966.
+
+```{r presence absence animation}
+ani <- NA_map + 
+  geom_point(data = presabs, aes(x = Longitude, y = Latitude, col = Present)) +
+  scale_color_paletteer_d("nbapalettes::huskies") + theme_map() +
+  labs(title = 'Year: {frame_time}') +
+  transition_time(Year) +
+  ease_aes('linear')
+animate(ani, nframes = 56, fps = 2, renderer = gifski_renderer())
+```

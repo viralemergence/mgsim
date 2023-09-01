@@ -56,3 +56,10 @@ rsconnect/
 
 # Ignore simulation outputs
 Data/Output/
+*.gdoc
+*.pdf
+*.html
+*.js
+*.woff
+*.css
+*.gif

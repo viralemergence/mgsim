@@ -1,0 +1,39 @@
+---
+title: "Exploring a Test Run of Outbreak"
+author: "July Pilowsky"
+format: pdf
+editor: visual
+---
+
+# About Outbreak
+
+Outbreak is an individual-based, aspatial model of demography and disease. It is proprietary software that can be run through a clunky GUI or a command line on Windows. It has been linked up to population-level models in past studies, so I wanted to investigate its viability for use in the house finch conjunctivitis case.
+
+In my view, there are two major challenges to using Outbreak for this. One is how to interface it with R. I believe through enquiries I can get ahold of R scripts that were used in 2014 to do this. The other is the fact that there are two biological simplifications in Outbreak that don't suit my needs very well. First, density dependence is modeled in a very simplistic way, simply killing off population that exceeds the carrying capacity. Second, the resistant state can only be modeled as fully immune, not as partial immunity like in the case of the house finch and MG.
+
+# About this test
+
+I tested out Outbreak with a population of 100 birds, starting with 4 exposed birds. I did a deep dive on the literature and came up with plausible values for all the parameters in the IBM.
+
+# Results
+
+```{r setup, echo = F, message = F}
+library(tidyverse)
+library(cowplot)
+library(paletteer)
+library(here)
+i_am("Scripts/Exploration/outbreak_test.qmd")
+day_stats <- "Data/Output/MG_test_Results/Scenario1_day_stats.txt" %>% here() %>% 
+  read_delim(delim = ";", skip = 1, show_col_types = F, trim_ws = T) %>% 
+  mutate(across(everything(), as.numeric)) %>% 
+  mutate(Simulation_Day = row_number())
+day_stats %>% select(Simulation_Day, S, E, I, R) %>% 
+  pivot_longer(S:R, values_to = "Count", names_to = "State") %>% 
+  ggplot(aes(x = Simulation_Day, y = Count, group = State)) +
+  geom_line(aes(col = State)) +
+  scale_color_paletteer_d("calecopal::sierra2") +
+  theme_minimal_grid()
+day_stats %>% 
+  ggplot(aes(x = Simulation_Day, y = cumR0)) + geom_line() +
+  geom_hline(yintercept = 1, linetype = "dotted") + theme_minimal_hgrid()
+```

@@ -1,0 +1,105 @@
+---
+title: "House Finch Disease Survey"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, message=F, include=F}
+library(cowplot)
+library(mapdata)
+library(paletteer)
+library(tidyverse)
+library(gganimate)
+library(vroom)
+library(here)
+library(broom)
+i_am("Scripts/Exploration/hfds.qmd")
+hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
+```
+
+# About the Dataset
+
+I have been provided with data from the northeastern part of the House Finch Disease Survey, which was done by citizen scientists in their backyards and includes absences of the disease as well as presences. There is whole-continent data but I haven't received it yet. All the data are from the winter (beginning of November to end of March.)
+
+Notable is that there is a column called `OffsetValue` which quantifies observer effort and can be used as an offset in models.
+
+# Mapping Prevalence
+
+I will start by creating a binomial model of prevalence, with a year covariate and an observer effort offset.
+
+```{r prevalence model}
+year <- hfds %>% filter(NBirdsTot>0) %>% pull(FW_Year)
+offset <- hfds %>% filter(NBirdsTot>0) %>% pull(OffsetValue)
+response <- hfds %>% filter(NBirdsTot>0) %>% 
+  mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>% 
+  select(NBirdsSick, NBirdsHealthy) %>% as.matrix()
+prev <- glm(response ~ year, family = binomial)
+prev
+```
+
+I will now use the fitted values to make an animation of prevalence over time in the Northeast.
+
+```{r animation}
+hfds_fit <- hfds %>% filter(NBirdsTot>0) %>% 
+  augment(prev, ., se_fit = TRUE, type.predict = "response") %>% 
+  rename(Prevalence = .fitted)
+usa <- map_data("usa")
+basemap <- ggplot() +
+  geom_polygon(
+    data = usa,
+    aes(x = long, y = lat, group = group),
+    fill = "white",
+    color = "gray60"
+  ) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45, xlim = c(-83, -69.5),
+            ylim = c(37, 45))
+ani <- basemap + 
+  geom_point(data = hfds, size = 4, alpha = 0.7,
+             aes(x = LONGITUDE, y = LATITUDE, col = NBirdsSick/NBirdsTot)) +
+  scale_color_paletteer_c("pals::cubicyf", trans = "log1p", name = "Prevalence") +
+  theme_map() +
+  labs(title = 'Year: {frame_time}') +
+  transition_time(FW_Year) +
+  ease_aes('linear')
+animate(ani, nframes = 19, fps = 1, renderer = gifski_renderer())
+```
+
+Here I add a time series of prevalence over time:
+
+```{r prevalence over time}
+hfds %>% 
+  mutate(Prevalence = NBirdsSick/NBirdsTot, Time = as.factor(FW_Year)) %>% 
+  ggplot(aes(x = Time, y = Prevalence)) +
+  geom_hex() +
+  scale_fill_paletteer_c("pals::linearl", trans = "log10") +
+  theme_minimal_grid()
+```
+
+# Prevalence Trends
+
+The prevalences found by citizen scientists in the House Finch Disease Survey are not entirely reliable. However, trends in prevalence at each location may be more reliable.
+
+```{r prevalence trends map}
+trends <- hfds %>% filter(Year < 2007, Year > 2001) %>%
+  group_by(ID) %>% 
+  mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>%
+  filter(sumyears==5, sumbirds > 0) %>% arrange(ID) %>%
+  mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>%
+  nest() %>%
+  mutate(model = map(data, ~ glm(
+    cbind(NBirdsSick, NBirdsHealthy) ~ Year, family = binomial, data = .
+  ))) %>%
+  mutate(tidy = map(model, broom::tidy)) %>%
+  unnest(tidy) %>%
+  filter(term == "Year", p.value<0.05) %>%
+  mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
+         Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>% 
+  identity()
+basemap + theme_map() +
+  scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid,
+                          name = "5 Year Trend") +
+  geom_point(data = trends, aes(x = Longitude, y = Latitude, fill = estimate),
+             size = 3, shape = 21)
+```
