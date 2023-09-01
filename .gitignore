@@ -57,11 +57,7 @@ rsconnect/
 # Ignore memory-heavy data inputs and outputs
 Data/
 
-# Ignore generated visualizations
-*.gdoc
+# Ignore writing and references
+Writing/
+References/
 *.pdf
-*.html
-*.js
-*.woff
-*.css
-*.gif
