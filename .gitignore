@@ -50,4 +50,9 @@ rsconnect/
 
 # DS_Store from the Mac
 *.DS_Store
+
+# Ignore images
 *.png
+
+# Ignore simulation outputs
+Data/Output/
