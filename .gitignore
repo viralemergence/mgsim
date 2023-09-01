@@ -54,8 +54,10 @@ rsconnect/
 # Ignore images
 *.png
 
-# Ignore simulation outputs
-Data/Output/
+# Ignore memory-heavy data inputs and outputs
+Data/
+
+# Ignore generated visualizations
 *.gdoc
 *.pdf
 *.html
