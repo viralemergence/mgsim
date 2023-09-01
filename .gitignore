@@ -61,6 +61,7 @@ Data/
 Writing/
 References/
 *.pdf
+*.html
 *.js
 *.woff
 *.css
