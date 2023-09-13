@@ -16,6 +16,7 @@ library(tidymodels)
 devtools::install_github("stevenpawley/colino")
 library(colino)
 library(gganimate)
+library(cowplot)
 large_studies <- read_excel(here("Data", "Input", "hofi_phenology.xlsx"))
 nest_watch <- read_csv("~/Documents/Very_Large_Data/attempts_locs-20230518.csv") %>%
   filter(`Species Name`%in%c("House Finch", "House Finch (Common"),
@@ -357,9 +358,9 @@ It seems that the bioclim variables do better than just latitude/longitude + yea
 
 # 4. Make predictions
 
-There are a lot of predictions to make, because I have 6986 region cells over 78 years.
+There are a lot of predictions to make, because I have 6986 region cells over 78 years. Here is the predicted outcome from the bioclim variables.
 
-```{r predict}
+```{r bioclim predict}
 finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
 files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
   keep(str_detect, pattern = "\\.grd$") %>% 
@@ -388,7 +389,9 @@ ly_predict <- predict(ly_fit, new_data = ly_data) %>% bind_cols(ly_data) %>%
   rename(Season_Length = .pred) %>% 
   mutate(x = rep(finch_region$coordinates$x, 78),
          y = rep(finch_region$coordinates$y, 78))
-season_predict <- predict_extract %>% bind_cols(season_predict) %>% 
+season_predict <- predict_extract %>% 
+  filter(complete.cases(select(predict_extract, bio1:bio19))) %>% 
+  bind_cols(season_predict) %>% 
   left_join(rowid_to_column(finch_region$coordinates, "ID")) %>% 
   select(Year, x, y, Season_Length = .pred)
 
@@ -409,6 +412,11 @@ ani <- NA_map +
   transition_time(Year) +
   ease_aes('linear')
 animate(ani, nframes = 78, fps = 2, renderer = gifski_renderer())
+```
+
+And here's the latitude + year model:
+
+```{r latitude year predict}
 ani2 <- NA_map + 
   geom_tile(data = ly_predict, aes(x, y, fill = Season_Length)) +
   scale_fill_viridis_c() +
@@ -420,7 +428,7 @@ ani2 <- NA_map +
 animate(ani2, nframes = 78, fps = 2, renderer = gifski_renderer())
 ```
 
-In accordance with the R squared, overall the bioclim model predictions look better than the Latitude + Year predictions. But as a final check, I want to try a random forest model with all of these predictors to see if that is any better.
+As a final check, I want to try a random forest model with all of these predictors (latitude, year, bioclim) to see if that is any better.
 
 ```{r latitude + year + bioclim}
 full_split <- season_extract %>% 
