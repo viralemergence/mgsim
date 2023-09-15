@@ -1,0 +1,137 @@
+---
+title: "Friction Landscapes"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup}
+library(elevatr)
+library(tidyverse)
+library(cowplot)
+library(paletteer)
+library(furrr)
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+```
+
+# Goal
+
+My goal is to develop several hypothesized friction landscapes for the dispersal of house finches. These will arise from some combination of elevation and urbanization data, based on findings in the literature that elevation impedes disease spread and urbanization facilitates it.
+
+# Elevation Data
+
+I have a quality-controlled selection of GBIF occurrences for the house finch. I want to investigate the elevation of these occurrences.
+
+```{r elevation, message = F}
+hofi <- read_tsv("~/Documents/Very_Large_Data/gbif_hofi_predictors.csv")
+elev <- hofi %>% select(x = decimallongitude, y = decimallatitude) %>% 
+  get_elev_point(prj = "+proj=longlat +ellps=WGS84", src = "aws")
+ggplot(elev@data, aes(x = elevation)) + geom_density() + theme_minimal_vgrid() +
+  xlab("Elevation (m)")
+```
+
+Clearly most house finches are found at sea level. It might be helpful to compare this against background points in the house finch range.
+
+```{r elevation comparison, message = FALSE}
+hofi_bg <- read_tsv("~/Documents/Very_Large_Data/hofi_background_points.csv")
+elev_bg <- hofi_bg %>% select(x, y) %>% 
+  get_elev_point(prj = proj_crs, src = "aws")
+elev@data %>% mutate(Range = "House Finch") %>% 
+  bind_rows(elev_bg@data %>% mutate(Range = "Background")) %>% 
+  ggplot(aes(x = elevation, fill = Range)) +
+  geom_density(alpha = 0.4) +
+  theme_minimal_vgrid() +
+  scale_fill_paletteer_d("suffrager::classic") +
+  xlab("Elevation (m)")
+```
+
+So clearly the house finch prefers low elevation more so than we would expect by chance.
+
+# Urbanization Data
+
+Thankfully, I have already extracted urbanization data for the house finch occurrence points and the background points.
+
+```{r urban, warning = F}
+hofi %>% mutate(Source = "House Finch") %>% 
+  bind_rows(hofi_bg %>% mutate(Source = "Background")) %>% 
+  ggplot(aes(x = urban, fill = Source)) + geom_density(alpha = 0.4) +
+  xlab("Urbanization Index") +
+  scale_fill_paletteer_d("suffrager::classic") +
+  theme_minimal_vgrid() +
+  scale_x_log10()
+```
+
+The house finch also clearly prefers urban environments more than would be expected by chance.
+
+I'm also curious about how these two interact. Does urbanization allow the house finch to invade altitudes it normally couldn't?
+
+```{r elevation + urbanization}
+hofi %>% mutate(Source = "House Finch") %>% 
+  bind_rows(hofi_bg %>% mutate(Source = "Background")) %>% 
+  bind_cols(bind_rows(elev@data, elev_bg@data)) %>% 
+  group_by(Source) %>% 
+  slice_sample(n = 200000) %>% 
+  ggplot(aes(x = elevation, y = urban)) + geom_hex() +
+  scale_fill_paletteer_c("pals::ocean.amp", trans = "log10") +
+  theme_minimal_grid() +
+  facet_grid(~Source)
+```
+
+# Friction Landscapes
+
+I am going to create three friction landscapes: one with only urbanization, one with only elevation, and one that incorporates both.
+
+The most straightforward is urbanization. It's an index that goes from 0 to 1, and I expect the highest conductance with the highest urbanization.
+
+```{r urban friction}
+finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
+gap_filler <- finch_region$region_raster
+gap_filler[!is.na(gap_filler)] <- 0
+urban_raster <- "~/Documents/Very_Large_Data/predictors" %>% 
+  list.files(pattern = "*.grd$", full.names = TRUE) %>% 
+  map(rast, lyrs = 20) %>% 
+  rast() %>% 
+  mask(rast(finch_region$region_raster))
+indices <- which(is.na(urban_raster[[1]])[] & !is.na(gap_filler[[1]])[])
+urban_matrix <- as.matrix(urban_raster) %>% 
+  # scales::rescale() %>% 
+  identity()
+urban_matrix[indices, ] <- 0
+urban_friction <- map(1:78, function(i) {
+  finch_region$raster_from_values(urban_matrix[, i] %>% discard(is.na(.)))
+}) %>% stack()
+plot(urban_friction[[1]])
+```
+
+Next I want to make an elevation friction landscape. This is a little more complex because elevation does not go from 0 to 1, as shown:
+
+```{r elevation raster}
+elev_raster <- get_elev_raster(finch_region$region_raster, z = 4) %>% 
+  crop(finch_region$region_raster) %>% 
+  resample(finch_region$region_raster) %>% 
+  mask(finch_region$region_raster)
+plot(elev_raster)
+```
+
+What I am going to do is truncate everything to a 0 m to 3000 m range (rounding things slightly below sea level up to 0, rounding things above 3 km down to 3 km) and I will scale this interval to 1 conductance at sea level and 0 conductance at 3 km.
+
+```{r elevation friction}
+elev_matrix <- elev_raster[] %>% 
+  scales::rescale(to = c(1, 0), from = c(0, 3000))
+indices <- which(is.na(elev_raster)[] & !is.na(gap_filler)[])
+elev_matrix[elev_matrix<0] <- 0
+elev_matrix[elev_matrix>1] <- 1
+elev_matrix[indices] <- 1
+elev_friction <- finch_region$raster_from_values(elev_matrix %>% discard(is.na(.)))
+plot(elev_friction)
+```
+
+Finally, I want to make a friction landscape that includes both factors, multiplied together.
+
+```{r urban + elevation}
+full_friction <- map(1:78, function(i) {
+  mat <- urban_matrix * elev_matrix
+  finch_region$raster_from_values(mat[, i] %>% discard(is.na(.)))
+}) %>% stack()
+plot(full_friction[[1]])
+```

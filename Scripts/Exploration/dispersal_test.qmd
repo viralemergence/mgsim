@@ -14,12 +14,14 @@ library(paletteer)
 library(cowplot)
 library(landscapemetrics)
 library(here)
+library(qs)
 bbox <- extent(-128, -61, 15, 54)
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 bioclim1940 <- raster("/Users/caryinstitute/Documents/Very_Large_Data/predictors/predictors_1940.grd")
 template_raster <- raster("/Users/caryinstitute/Documents/Very_Large_Data/baseline/zip/1940AD_pop/uopp_1940AD.asc") %>% 
   projectRaster(bioclim1940) %>% 
   crop(bioclim1940)
+template_raster[c(6006,11863, 1966, 2451, 3150, 3501, 6876)] <- 0
 ```
 
 # Overview
@@ -41,7 +43,7 @@ template_raster[!is.na(template_raster)] <- 1
 template_raster[is.na(template_raster)] <- 0
 patch_raster <- template_raster %>% terra::rast() %>% get_patches(class = 1) %>% 
   .[[1]] %>% .[[1]]
-patch_raster[patch_raster != 21] <- NA
+patch_raster[patch_raster != 14] <- NA
 finch_region <- Region$new(template_raster = patch_raster)
 plot(finch_region$region_raster)
 ```
@@ -88,10 +90,13 @@ I have commented out the friction landscape for now.
 Now I will generate the distance matrix and the distance cell data and save them for later use.
 
 ```{r generate distance data}
-distance_matrix <- dispersal_gen$calculate_distance_matrix()
-dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
-qs::qsave(distance_matrix, here("Data/Input/distance_matrix.qs"))
-qs::qsave(dispersal_gen$distance_data, here("Data/Input", "dispersal_distance_data.qs"))
+# distance_matrix <- dispersal_gen$calculate_distance_matrix()
+# dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
+# qs::qsave(distance_matrix, here("Data/Input/distance_matrix.qs"))
+# qs::qsave(dispersal_gen$distance_data, here("Data/Input", "dispersal_distance_data.qs"))
+distance_matrix <- qread(here("Data/Input", "distance_matrix.qs"))
+distance_data <- qread(here("Data/Input", "dispersal_distance_data.qs"))
+dispersal_gen$distance_data <- distance_data
 ```
 
 # Generate Dispersal Rates
@@ -110,12 +115,89 @@ dispersal_in <- test_dispersal[[1]] %>% group_by(target_pop) %>%
   right_join(rowid_to_column(finch_region$coordinates, "target_pop"))
 ggplot(dispersal_out, aes(x, y, fill = avg_dispersal_rate)) +
   geom_tile() + 
-  scale_fill_paletteer_c(`"pals::ocean.speed"`, name = "Average\nOutward\nDispersal",
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, 
+                         name = "Average\nOutward\nDispersal",
                          limits = c(0, 0.012)) +
   theme_map()
 ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
   geom_tile() + 
-  scale_fill_paletteer_c(`"pals::ocean.speed"`, name = "Average\nInward\nDispersal",
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, 
+                         name = "Average\nInward\nDispersal",
+                         limits = c(0, 0.012)) +
+  theme_map()
+```
+
+# Incorporate Friction Landscapes
+
+I have created 3 friction landscapes: one with an effect of urbanization, one with an effect of elevation, and one with both multiplied. I want to see the effects these have on dispersal.
+
+```{r urban friction dispersal}
+urban_friction <- stack(here("Data/Input/urban_friction_landscape.grd"))
+urban_friction_dispersal <- dispersal_gen$clone()
+urban_friction_dispersal$dispersal_friction <- DispersalFriction$new(conductance = urban_friction)
+# urban_friction_dispersal$calculate_distance_data(distance_matrix = distance_matrix)
+urban_friction_dispersal$distance_data <- qread(here("Data/Input/urban_friction_distance.qs"))
+test_dispersal <- urban_friction_dispersal$generate(input_values =
+                                           list(dispersal_p = 0.5,
+                                                dispersal_r = 500))$dispersal_data
+dispersal_out <- test_dispersal[[1]] %>% group_by(source_pop) %>% 
+  summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
+  right_join(rowid_to_column(finch_region$coordinates, "source_pop"))
+dispersal_in <- test_dispersal[[1]] %>% group_by(target_pop) %>% 
+  summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
+  right_join(rowid_to_column(finch_region$coordinates, "target_pop"))
+ggplot(dispersal_out, aes(x, y, fill = avg_dispersal_rate)) +
+  geom_tile() + 
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, 
+                         name = "Average\nOutward\nDispersal",
+                         limits = c(0, 0.012)) +
+  theme_map()
+ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
+  geom_tile() + 
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, 
+                         name = "Average\nInward\nDispersal",
+                         limits = c(0, 0.012)) +
+  theme_map()
+```
+
+This friction landscape could clearly use some work because it has killed the dispersal dead.
+
+Let's see if the elevation friction landscape does any better.
+
+```{r elevation friction dispersal}
+elevation_friction <- stack(here("Data/Input/elevation_friction_landscape.grd"))
+elevation_friction_dispersal <- DispersalGenerator$new(
+  region = finch_region,
+  dispersal_max_distance = 1500, # km
+  distance_classes = seq(10, 1500, 10),
+  distance_scale = 1000, # km
+  dispersal_function_data = b_lookup,
+  dispersal_friction = DispersalFriction$new(conductance = elevation_friction),
+  inputs = c("dispersal_p",
+             "dispersal_r"),
+  decimals = 3
+)
+# elevation_friction_dispersal$calculate_distance_data(distance_matrix = distance_matrix)
+elevation_friction_dispersal$distance_data <- qread(here("Data/Input/elevation_friction_distance.qs"))
+test_dispersal <- elevation_friction_dispersal$generate(input_values =
+                                           list(dispersal_p = 0.5,
+                                                dispersal_r = 500))$dispersal_data
+dispersal_out <- test_dispersal[[1]] %>% group_by(source_pop) %>% 
+  summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
+  right_join(rowid_to_column(finch_region$coordinates, "source_pop"))
+dispersal_in <- test_dispersal[[1]] %>% group_by(target_pop) %>% 
+  summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
+  right_join(rowid_to_column(finch_region$coordinates, "target_pop"))
+ggplot(dispersal_out, aes(x, y, fill = avg_dispersal_rate)) +
+  geom_tile() + 
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, 
+                         name = "Average\nOutward\nDispersal",
+                         limits = c(0, 0.012)) +
+  theme_map()
+ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
+  geom_tile() + 
+  scale_fill_paletteer_c(`"pals::ocean.speed"`, 
+                         name = "Average\nInward\nDispersal",
                          limits = c(0, 0.012)) +
   theme_map()
 ```
