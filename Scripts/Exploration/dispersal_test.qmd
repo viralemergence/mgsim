@@ -8,6 +8,7 @@ editor: visual
 ```{r setup, include = FALSE}
 library(poems)
 library(raster)
+library(terra)
 library(sf)
 library(tidyverse)
 library(paletteer)
@@ -17,11 +18,11 @@ library(here)
 library(qs)
 bbox <- extent(-128, -61, 15, 54)
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
-bioclim1940 <- raster("/Users/caryinstitute/Documents/Very_Large_Data/predictors/predictors_1940.grd")
-template_raster <- raster("/Users/caryinstitute/Documents/Very_Large_Data/baseline/zip/1940AD_pop/uopp_1940AD.asc") %>% 
-  projectRaster(bioclim1940) %>% 
-  crop(bioclim1940)
-template_raster[c(6006,11863, 1966, 2451, 3150, 3501, 6876)] <- 0
+bioclim1940 <- rast("~/Documents/Very_Large_Data/ERA5/BioClim_1940.nc")
+bioclim1940_proj <- project(bioclim1940, proj_crs)
+template_raster <- rast("/Users/caryinstitute/Documents/Very_Large_Data/baseline/zip/1940AD_pop/uopp_1940AD.asc") %>% 
+  project(bioclim1940_proj) %>% 
+  crop(bioclim1940_proj)
 ```
 
 # Overview
@@ -41,9 +42,10 @@ My template raster looks great, except that it has islands, where I know there a
 ```{r create region object}
 template_raster[!is.na(template_raster)] <- 1
 template_raster[is.na(template_raster)] <- 0
-patch_raster <- template_raster %>% terra::rast() %>% get_patches(class = 1) %>% 
-  .[[1]] %>% .[[1]]
-patch_raster[patch_raster != 14] <- NA
+patch_raster <- template_raster %>% get_patches(class = 1) %>% 
+  .[[1]] %>% .[[1]] %>% 
+  raster::mask(raster(bioclim1940_proj[[13]]))
+patch_raster[patch_raster != 23] <- NA
 finch_region <- Region$new(template_raster = patch_raster)
 plot(finch_region$region_raster)
 ```

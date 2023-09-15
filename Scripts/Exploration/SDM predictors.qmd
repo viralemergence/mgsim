@@ -118,27 +118,32 @@ plot(urban1940_proj)
 
 You can see here that now everything is represented as the portion of the grid cell that has been converted to urban land use type.
 
-Now I will write a script to go through all the bioclim stacks and add a layer for each year giving the urbanization index.
+Now I will write a script to go through all the bioclim stacks and add a layer for each year giving the urbanization index, while making sure that everything is consistent with the `Region` object I defined for the study region in `dispersal_test.qmd`.
 
 ```{r script}
-files <- "~/Documents/Very Large Data/ERA5" %>% 
+finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
+gap_filler <- finch_region$region_raster
+gap_filler[!is.na(gap_filler)] <- 0
+files <- "~/Documents/Very_Large_Data/ERA5" %>% 
   list.files(full.names = T) %>%
   .[1:78]
 plan(multisession)
 future_walk(1:length(files), function(i) {
   if (!file.exists(paste0(
-    "~/Documents/Very Large Data/predictors/predictors_",
+    "~/Documents/Very_Large_Data/predictors/predictors_",
     ts[i],
     ".grd"
   ))) {
     urban_raster <- here("Data/Input/urban_raster_latlong.grd") %>% 
       rast() %>% .[[i]]
     bioclim_proj <- rast(files[i]) %>% project(proj_crs)
-    urban_proj <- project(urban_raster, bioclim_proj, "sum") / 2151
+    urban_proj <- project(urban_raster, bioclim_proj, "sum", threads = T) / 2151
+    indices <- which(is.na(urban_proj)[] & !is.na(gap_filler)[])
+    urban_proj[indices] <- 0
     writeRaster(
       rast(list(bioclim_proj, urban_proj)),
       paste0(
-        "~/Documents/Very Large Data/predictors/predictors_",
+        "~/Documents/Very_Large_Data/predictors/predictors_",
         ts[i],
         ".grd"
       )

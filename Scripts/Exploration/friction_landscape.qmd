@@ -6,11 +6,13 @@ editor: visual
 ---
 
 ```{r setup}
+library(raster)
 library(elevatr)
 library(tidyverse)
 library(cowplot)
 library(paletteer)
 library(furrr)
+library(terra)
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 ```
 
@@ -25,8 +27,11 @@ I have a quality-controlled selection of GBIF occurrences for the house finch. I
 ```{r elevation, message = F}
 hofi <- read_tsv("~/Documents/Very_Large_Data/gbif_hofi_predictors.csv")
 elev <- hofi %>% select(x = decimallongitude, y = decimallatitude) %>% 
-  get_elev_point(prj = "+proj=longlat +ellps=WGS84", src = "aws")
-ggplot(elev@data, aes(x = elevation)) + geom_density() + theme_minimal_vgrid() +
+  as.data.frame() %>% 
+  get_elev_point(prj = "+proj=longlat +ellps=WGS84", src = "aws") %>% 
+  as.data.frame() %>% 
+  select(-geometry)
+ggplot(elev, aes(x = elevation)) + geom_density() + theme_minimal_vgrid() +
   xlab("Elevation (m)")
 ```
 
@@ -35,9 +40,12 @@ Clearly most house finches are found at sea level. It might be helpful to compar
 ```{r elevation comparison, message = FALSE}
 hofi_bg <- read_tsv("~/Documents/Very_Large_Data/hofi_background_points.csv")
 elev_bg <- hofi_bg %>% select(x, y) %>% 
-  get_elev_point(prj = proj_crs, src = "aws")
-elev@data %>% mutate(Range = "House Finch") %>% 
-  bind_rows(elev_bg@data %>% mutate(Range = "Background")) %>% 
+  as.data.frame() %>% 
+  get_elev_point(prj = proj_crs, src = "aws") %>% 
+  as.data.frame() %>% 
+  select(-geometry)
+elev %>% mutate(Range = "House Finch") %>% 
+  bind_rows(elev_bg %>% mutate(Range = "Background")) %>% 
   ggplot(aes(x = elevation, fill = Range)) +
   geom_density(alpha = 0.4) +
   theme_minimal_vgrid() +
@@ -68,7 +76,7 @@ I'm also curious about how these two interact. Does urbanization allow the house
 ```{r elevation + urbanization}
 hofi %>% mutate(Source = "House Finch") %>% 
   bind_rows(hofi_bg %>% mutate(Source = "Background")) %>% 
-  bind_cols(bind_rows(elev@data, elev_bg@data)) %>% 
+  bind_cols(bind_rows(elev, elev_bg)) %>% 
   group_by(Source) %>% 
   slice_sample(n = 200000) %>% 
   ggplot(aes(x = elevation, y = urban)) + geom_hex() +
@@ -84,23 +92,18 @@ I am going to create three friction landscapes: one with only urbanization, one 
 The most straightforward is urbanization. It's an index that goes from 0 to 1, and I expect the highest conductance with the highest urbanization.
 
 ```{r urban friction}
-finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
-gap_filler <- finch_region$region_raster
-gap_filler[!is.na(gap_filler)] <- 0
 urban_raster <- "~/Documents/Very_Large_Data/predictors" %>% 
   list.files(pattern = "*.grd$", full.names = TRUE) %>% 
   map(rast, lyrs = 20) %>% 
   rast() %>% 
   mask(rast(finch_region$region_raster))
-indices <- which(is.na(urban_raster[[1]])[] & !is.na(gap_filler[[1]])[])
 urban_matrix <- as.matrix(urban_raster) %>% 
-  # scales::rescale() %>% 
+  scales::rescale() %>% 
   identity()
-urban_matrix[indices, ] <- 0
 urban_friction <- map(1:78, function(i) {
   finch_region$raster_from_values(urban_matrix[, i] %>% discard(is.na(.)))
 }) %>% stack()
-plot(urban_friction[[1]])
+plot(urban_friction[[78]])
 ```
 
 Next I want to make an elevation friction landscape. This is a little more complex because elevation does not go from 0 to 1, as shown:
