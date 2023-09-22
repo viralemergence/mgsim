@@ -6,136 +6,372 @@ editor: visual
 ---
 
 ```{r setup}
-library(SDMtune)
-library(tidyverse)
+library(tidysdm)
+library(terra)
+library(tidyterra)
 library(vroom)
 library(here)
 library(sf)
+library(tidyverse)
+library(paletteer)
+library(furrr)
 i_am("Scripts/sdm_native_invasive.qmd")
-data.dir <- "~/Documents/Very Large Data"
+data.dir <- "~/Documents/Very_Large_Data"
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
-hofi_sample <- vroom(file.path(data.dir, "gbif_hofi_predictors.csv"))
-bg_points <- vroom(file.path(data.dir, "hofi_background_points.csv")) %>% 
-  filter(!is.na(urban))
+finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
+ts <- 1940:2017
+hofi_sample <- vroom(file.path(data.dir, "hofi_gbif_qc.tsv")) %>% 
+  filter(year < 2018) %>% 
+  # filter(decimallongitude>-128, decimallongitude<(-61), 
+  #        decimallatitude>15, decimallatitude<54, year<2018) %>% 
+  group_by(year) %>% group_split()
+points <- hofi_sample %>% map(~select(., decimallongitude, decimallatitude)) %>% 
+  map(sf_project, from = wgs84, to = proj_crs) %>% 
+  map(as.data.frame) %>% 
+  map(set_names, nm = c("x", "y")) %>% 
+  map(~mutate(., Range = if_else(x<(-373881), "Native", "Invasive"))) %>% 
+  set_names(ts) %>% 
+  identity()
+template <- rast(finch_region$region_raster)
 ```
 
 # Goal
 
 I want to check whether species distribution models trained on invasive range occurrences vs. native range occurrences are functionally identical, or if the finch's niche is different in each range. I will do this by first training on the native range and projecting into the invasive range, then training on the invasive range and projecting into the native range.
 
-# Train on Native / Project on Invasive
+# Prepare Data
 
-It's really important to check whether the data from the native range alone can predict the invasive range.
+To prepare my data for modeling, I will need to complete the following steps:
 
-## Prepare Data
+1.  divide the data into the native and invasive range
+2.  spatiotemporally thin them
+3.  generate pseudo-absences
+4.  pair everything with environmental data
 
-I need to partition my data into 4 parts:
-
-1.  Native range (training)
-
-2.  Native range (validation)
-
-3.  Native range (test)
-
-4.  Invasive range
-
-Then I need to convert all of these into the `SWD` format used by `SDMtune`.
-
-```{r prepare data}
-invasive_range <- SWD(
-  species = "Haemorhous mexicanus",
-  coords = hofi_sample %>% filter(Range == "Invasive") %>% 
-    select(decimallongitude, decimallatitude) %>% 
-    sf_project(wgs84, proj_crs, .) %>% 
-    rbind(as.matrix(select(filter(bg_points, Range == "Invasive"), x, y))) %>% 
-    as.data.frame() %>% 
-    set_names(c("X", "Y")),
-  data = hofi_sample %>% filter(Range == "Invasive") %>% select(mat:urban) %>% 
-    rbind(select(filter(bg_points, Range == "Invasive"), mat:urban)),
-  pa = c(rep(1, 135052), rep(0, 170631))
-)
-native_range <- SWD(
-  species = "Haemorhous mexicanus",
-  coords = hofi_sample %>% filter(Range == "Native") %>%
-    select(decimallongitude, decimallatitude) %>%
-    sf_project(wgs84, proj_crs, .) %>%
-    rbind(as.matrix(select(filter(bg_points, Range == "Native"), x, y))) %>%
-    as.data.frame() %>%
-    set_names(c("X", "Y")),
-  data = hofi_sample %>% filter(Range == "Native") %>% select(mat:urban) %>%
-    rbind(select(filter(bg_points, Range == "Native"), mat:urban)),
-  pa = c(rep(1, nrow(filter(hofi_sample, Range == "Native"))), rep(0, 183102))
-) %>%
-  trainValTest(test = 0.15, val = 0.15, only_presence = TRUE)
-training <- native_range[[1]]
-testing <- native_range[[3]]
-validation <- native_range[[2]]
+```{r map native and invasive data}
+native <- map2(hofi_sample, points, bind_cols) %>% 
+  map(~filter(., x > -3741268, x < 3725142, y > -2277277, y < 2638496)) %>% 
+  map(~filter(., Range == "Native")) %>% 
+  map(st_as_sf, coords = c("x", "y"), crs = st_crs(proj_crs), remove = F)
+invasive <- map2(hofi_sample, points, bind_cols) %>% 
+  map(~filter(., x > -3741268, x < 3725142, y > -2277277, y < 2638496)) %>% 
+  map(~filter(., Range == "Invasive")) %>% 
+  map(st_as_sf, coords = c("x", "y"), crs = st_crs(proj_crs), remove = F) %>% 
+  identity()
+ggplot() +
+  geom_spatraster(data = template) +
+  guides(fill = "none") +
+  geom_sf(bind_rows(native), mapping = aes(col=year), alpha = 0.4) +
+  scale_color_paletteer_c(`"pals::ocean.amp"`, name = "Year", direction = -1) +
+  ggtitle("Native Range")
+ggplot() +
+  geom_spatraster(data = template) +
+  guides(fill = "none") +
+  geom_sf(bind_rows(invasive), mapping = aes(col=year), alpha = 0.4) +
+  scale_color_paletteer_c(`"pals::ocean.amp"`, name = "Year", direction = -1) +
+  ggtitle("Invasive Range")
 ```
 
-## Starting Model
+It is a little difficult to imagine how to generate pseudo-absences when there is such a density of presences. But let's do some thinning first.
 
-I will start off by training a boosted regression tree model on the training dataset, with all hyperparameters set to defaults and no selection of variables. I will refine this later.
-
-```{r starting model}
-starter <- train(
-  method = "BRT",
-  data = training,
-  progress = TRUE
-)
-jk <- doJk(starter, metric = "tss")
-jk
-plotResponse(starter, var = "urban") + xlab("Urbanization Index")
-plotResponse(starter, var = "temp_diurnal_range") + 
-  xlab("Diurnal Temperature Range")
+```{r spatiotemporal thinning}
+native_thin <- native %>% 
+  map(thin_by_cell, raster = template, coords = c("x", "y"))
+invasive_thin <- invasive %>% 
+  map(thin_by_cell, raster = template, coords = c("x", "y"))
+native_abs <- native_thin %>% bind_rows() %>% 
+  sample_pseudoabs(raster = template %>% 
+                     crop(ext(-2448618, -373881, -2277277, 2638496)), 
+                   coords = c("X", "Y"),
+                   n = 1000, method = c("dist_min", 50000), return_pres = F)
+ggplot() +
+  geom_spatraster(data = template) +
+  guides(fill = F) +
+  geom_sf(native_abs, mapping = aes(col=class), alpha = 0.4) +
+  ggtitle("Native Range") +
+  scale_color_paletteer_d(`"nbapalettes::sixers_retro"`)
+invasive_abs <- invasive_thin %>% bind_rows() %>% 
+  sample_pseudoabs(raster = template %>% 
+                     crop(ext(-373881, 3725142, -2277277, 2638496)),
+                   coords = c("X", "Y"),
+                   n = 6300, method = c("dist_min", 50000), return_pres = F)
+ggplot() +
+  geom_spatraster(data = template) +
+  guides(fill = F) +
+  geom_sf(invasive_abs, mapping = aes(col=class), alpha = 0.4) +
+  ggtitle("Invasive Range") +
+  scale_color_paletteer_d(`"nbapalettes::sixers_retro"`)
 ```
 
-Urbanization index and diurnal temperature range appear to be the most important variables, which is quite interesting. But there is a problem. I want to perform variable reduction on this dataset because there are 20 predictors, some of which are highly correlated, and variable importance can be very computationally intensive to calculate. So I have to shift this over to the `xgboost` machine learning method, which can handle very large datasets efficiently.
+Now I need to pair these presences and pseudo-absences with my environmental predictors, which are the 19 bioclim variables plus a land use change index.
 
-```{r xgboost first fit}
-library(xgboost)
-library(caret)
-library(doParallel)
-library(tictoc)
-
-training <- training@data %>% 
-  mutate(pa = as.factor(training@pa) %>% fct_recode(absent = "0", present = "1"))
-
-mytrControl <- trainControl(
-  method = "cv",
-  number = 5,
-  # 5 fold cross-validation
-  summaryFunction = twoClassSummary,
-  classProbs = TRUE,
-  allowParallel = TRUE
-)
-
-mytuneGrid <- expand.grid(
-  nrounds = seq(from = 500, to = 15000, by = 2000),
-  eta = seq(0, 0.3, 0.05),
-  max_depth = seq(3, 10, 1),
-  subsample = seq(0.5, 1, 0.1),
-  gamma = seq(0, 0.1, 0.02),
-  colsample_bytree = seq(0, 1, 0.2),
-  min_child_weight = seq(0, 5, 1)
-)
-
-tic()
-
-cluster <- makeCluster(6)
-registerDoParallel(cluster)
-
-xgb_fit <- train(
-  form = pa ~ .,
-  data = training,
-  method = "xgbTree",
-  metric = "ROC",
-  trControl = mytrControl,
-  # tuneGrid = mytuneGrid,
-  verbose = TRUE
-)
-
-stopCluster(cluster)
-registerDoSEQ()
-toc()
+```{r extract climate data}
+native_points <- native_thin %>% map(~transmute(., class = "presence")) %>% 
+  map2(replicate(78, slice_sample(native_abs, n = 100), simplify = F), bind_rows)
+invasive_points <- invasive_thin %>% map(~transmute(., class = "presence")) %>% 
+  map2(replicate(78, slice_sample(invasive_abs, n = 100), simplify = F), bind_rows)
+files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
+  keep(str_detect, pattern = "\\.grd$") %>% set_names(ts)
+col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
+  append("urban") %>% flatten_chr()
+plan(multisession)
+native_extract <- future_map2(files2, native_points, function(f, p) {
+  r <- rast(f); terra::extract(r, p, ID = F)
+}, .options = furrr_options(seed = T)) %>% 
+  map(~set_names(., col_names)) %>% 
+  map2(native_points, bind_cols) %>% 
+  list_rbind(names_to = "Year") %>% 
+  st_as_sf(sf_column_name = "geometry")
+invasive_extract <- future_map2(files2, invasive_points, function(f, p) {
+  r <- rast(f); terra::extract(r, p, ID = F)
+}, .options = furrr_options(seed = T)) %>% 
+  map(~set_names(., col_names)) %>% 
+  map2(invasive_points, bind_cols) %>% 
+  list_rbind(names_to = "Year") %>% 
+  st_as_sf(sf_column_name = "geometry")
+native_extract %>% select(-Year) %>% plot_pres_vs_bg(class)
 ```
+
+This shows that in the native range at least there is some meaningful difference between the presences and the pseudoabsences.
+
+```{r invasive range comparison}
+invasive_extract %>% select(-Year) %>% plot_pres_vs_bg(class)
+```
+
+This is all well and good, but it would probably help to filter down to uncorrelated variables. I do so here.
+
+```{r filter uncorrelated}
+plan(multisession)
+high_cor <- files2 %>% map(rast) %>% map(filter_high_cor)
+high_cor <- high_cor %>% 
+  map(function(x) {
+    case_when(
+      str_detect(x, "AD") ~ "urban",
+      str_detect(x, "_1$") ~ "bio1",
+      str_detect(x, "_2$") ~ "bio2",
+      str_detect(x, "_3$") ~ "bio3",
+      str_detect(x, "_4$") ~ "bio4",
+      str_detect(x, "_5$") ~ "bio5",
+      str_detect(x, "_6$") ~ "bio6",
+      str_detect(x, "_7$") ~ "bio7",
+      str_detect(x, "_8$") ~ "bio8",
+      str_detect(x, "_9$") ~ "bio9",
+      str_detect(x, "_10") ~ "bio10",
+      str_detect(x, "_11") ~ "bio11",
+      str_detect(x, "_12") ~ "bio12",
+      str_detect(x, "_13") ~ "bio13",
+      str_detect(x, "_14") ~ "bio14",
+      str_detect(x, "_15") ~ "bio15",
+      str_detect(x, "_16") ~ "bio16",
+      str_detect(x, "_17") ~ "bio17",
+      str_detect(x, "_18") ~ "bio18",
+      str_detect(x, "_19") ~ "bio19"
+    )
+  })
+high_cor <- high_cor %>% flatten_chr() %>% unique()
+high_cor
+```
+
+This brings us down to 10 predictors instead of 20.
+
+# Native SDM
+
+## Fit model
+
+Here we can see the randomly assigned spatial cross-validation folds:
+
+```{r fit native sdm}
+native_rec <- native_extract %>% 
+  select(-all_of(high_cor), -Year) %>% 
+  recipe(formula = class ~ .)
+native_models <- workflow_set(
+  preproc = list(default = native_rec),
+  models = list(
+    rf = sdm_spec_rf(),
+    gbm = sdm_spec_boost_tree()
+  ),
+  cross = T
+) %>% 
+  option_add(control = control_ensemble_grid())
+native_cv <- spatial_block_cv(native_extract, v = 5, method = "random")
+autoplot(native_cv)
+```
+
+Here I compare the results from different SDM specifications:
+
+```{r compare fits}
+# native_models <- native_models %>% 
+#   workflow_map("tune_grid", resamples = native_cv, grid = 20, metrics = sdm_metric_set(),
+#                verbose = TRUE)
+# autoplot(native_models)
+```
+
+It seems that MaxEnt does really poorly in this situation, and gbm / random forest models do a lot better. I will keep this in mind for the invasive SDM.
+
+## Predict
+
+Let's see the fit of the best models to the presence records across the whole range.
+
+```{r predictions native}
+# native_ensemble <- simple_ensemble() %>% 
+#   add_member(native_models, metric = "tss_max")
+native_ensemble <- qs::qread(here("Data/Input/native_sdm_ensemble.qs")) %>% 
+  calib_class_thresh(class_thresh = "tss_max",
+                     metric_thresh = c("tss_max", 0.7))
+predict_ni_2017 <- native_ensemble %>% 
+  predict_raster(
+    rast("~/Documents/Very_Large_Data/predictors/predictors_2017.grd") %>% 
+      `names<-`(col_names), 
+    type = "class",
+    fun = "weighted_mean",
+    class_thresh = c("tss_max"),
+    metric_thresh = c("tss_max", 0.7))
+ggplot() + 
+  geom_spatraster(data = predict_ni_2017, aes(fill = binary_weighted_mean)) +
+  scale_fill_paletteer_d(`"calecopal::superbloom3"`) +
+  geom_sf(data = native_extract %>% filter(class == "presence",
+                                           Year == "2017"), alpha = 0.1) +
+  geom_sf(data = invasive_extract %>% filter(class == "presence",
+                                             Year == "2017"), alpha = 0.1) +
+  ggtitle("2017")
+predict_ni_1940 <- native_ensemble %>% 
+  predict_raster(
+    rast("~/Documents/Very_Large_Data/predictors/predictors_1940.grd") %>% 
+      `names<-`(col_names), 
+    type = "class",
+    fun = "weighted_mean",
+    class_thresh = c("tss_max"),
+    metric_thresh = c("tss_max", 0.7))
+ggplot() + 
+  geom_spatraster(data = predict_ni_1940, aes(fill = binary_weighted_mean)) +
+  scale_fill_paletteer_d(`"calecopal::superbloom3"`) +
+  geom_sf(data = native_extract %>% filter(class == "presence",
+                                           Year == "1940"), alpha = 0.5) +
+  geom_sf(data = invasive_extract %>% filter(class == "presence",
+                                             Year == "1940"), alpha = 0.5) +
+  ggtitle("1940")
+```
+
+The model does quite well, though it does over-predict presence in southern Mexico and under-predict presence in Florida.
+
+# Invasive SDM
+
+## Fit model
+
+Here we can see the randomly assigned spatial cross-validation folds:
+
+```{r prep invasive sdm}
+invasive_rec <- invasive_extract %>% 
+  select(-all_of(high_cor), -Year) %>% 
+  recipe(formula = class ~ .)
+invasive_models <- workflow_set(
+  preproc = list(default = invasive_rec),
+  models = list(
+    rf = sdm_spec_rf(),
+    gbm = sdm_spec_boost_tree()
+  ),
+  cross = T
+) %>% 
+  option_add(control = control_ensemble_grid())
+invasive_cv <- spatial_block_cv(invasive_extract, v = 5, method = "random")
+autoplot(invasive_cv)
+```
+
+Here I compare the results from different SDM specifications:
+
+```{r tune invasive sdm}
+# invasive_models <- invasive_models %>% 
+#    workflow_map("tune_grid", resamples = invasive_cv, grid = 20, 
+#                 metrics = sdm_metric_set(),
+#                 verbose = TRUE)
+# autoplot(invasive_models)
+```
+
+## Predict
+
+Let's see the fit of the best models to the presence records across the whole range.
+
+```{r predictions invasive}
+# invasive_ensemble <- simple_ensemble() %>%
+#   add_member(invasive_models, metric = "tss_max")
+invasive_ensemble <- qs::qread(here("Data/Input/invasive_sdm_ensemble.qs")) %>% 
+  calib_class_thresh(class_thresh = "tss_max",
+                     metric_thresh = c("tss_max", 0.7))
+predict_in_2017 <- invasive_ensemble %>% 
+  predict_raster(
+    rast("~/Documents/Very_Large_Data/predictors/predictors_2017.grd") %>% 
+      `names<-`(col_names), 
+    type = "class",
+    fun = "weighted_mean",
+    class_thresh = c("tss_max"),
+    metric_thresh = c("tss_max", 0.7))
+ggplot() + 
+  geom_spatraster(data = predict_in_2017, aes(fill = binary_weighted_mean)) +
+  scale_fill_paletteer_d(`"calecopal::superbloom3"`)
+ggplot() + 
+  geom_spatraster(data = predict_in_2017, aes(fill = binary_weighted_mean)) +
+  scale_fill_paletteer_d(`"calecopal::superbloom3"`) +
+  geom_sf(data = native_extract %>% filter(class == "presence",
+                                           Year == "2017"), alpha = 0.1) +
+  geom_sf(data = invasive_extract %>% filter(class == "presence",
+                                             Year == "2017"), alpha = 0.1) +
+  ggtitle("2017")
+predict_in_1940 <- invasive_ensemble %>% 
+  predict_raster(
+    rast("~/Documents/Very_Large_Data/predictors/predictors_1940.grd") %>% 
+      `names<-`(col_names), 
+    type = "class",
+    fun = "weighted_mean",
+    class_thresh = c("tss_max"),
+    metric_thresh = c("tss_max", 0.7))
+ggplot() + 
+  geom_spatraster(data = predict_in_1940, aes(fill = binary_weighted_mean)) +
+  scale_fill_paletteer_d(`"calecopal::superbloom3"`)
+ggplot() + 
+  geom_spatraster(data = predict_in_1940, aes(fill = binary_weighted_mean)) +
+  scale_fill_paletteer_d(`"calecopal::superbloom3"`) +
+  geom_sf(data = native_extract %>% filter(class == "presence",
+                                           Year == "1940"), alpha = 0.6) +
+  geom_sf(data = invasive_extract %>% filter(class == "presence",
+                                             Year == "1940"), alpha = 0.6) +
+  ggtitle("1940")
+```
+
+Overall the invasive occurrences do a better job of prediction.
+
+# Measure Overlap
+
+Now I can look statistically at how much the predictions from the native and invasive SDMs overlap and get a sense of how analogous they are for the purposes of my models. To do this I will generate predictions for all 78 years of the study based on both SDMs, then graph Schoener's D measure of overlap between them.
+
+```{r overlap}
+plan(sequential)
+invasive_predict <- files2 %>% future_map(function(f) {
+  r <- rast(f) %>% `names<-`(col_names)
+  p <- invasive_ensemble %>% 
+    predict_raster(
+      r,
+      fun = "weighted_mean",
+      metric_thresh = c("tss_max", 0.7))
+}, .options = furrr_options(seed = T))
+native_predict <- files2 %>% future_map(function(f) {
+  r <- rast(f) %>% `names<-`(col_names)
+  p <- native_ensemble %>% 
+    predict_raster(
+      r,
+      fun = "weighted_mean",
+      metric_thresh = c("tss_max", 0.7))
+}, .options = furrr_options(seed = T))
+dismo::nicheOverlap(raster(native_predict[[1]]), raster(invasive_predict[[1]]), 
+                    stat = "D",
+                    mask = FALSE, checkNegatives = FALSE)
+overlap_metric <- map2(native_predict, invasive_predict, 
+                       ~dismo::nicheOverlap(raster(.x), raster(.y),
+                                            stat = "D",
+                                            mask = FALSE, checkNegatives = FALSE))
+data.frame(Overlap = flatten_dbl(overlap_metric),
+           Year = ts) %>% 
+  ggplot(aes(x = Year, y = Overlap)) + geom_line()
+```
+
+The overlap is consistently high throughout.

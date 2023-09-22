@@ -26,7 +26,7 @@ library(here)
 #   cc_inst(buffer = 2000) %>% # remove zoo and herbaria within 2km 
 #   cc_sea() %>% # remove from ocean 
 #   distinct(decimallongitude,decimallatitude,specieskey,datasetkey, .keep_all = TRUE)
-hofi_sample <- vroom("~/Documents/Very Large Data/hofi_gbif_qc.tsv")
+hofi_sample <- vroom("~/Documents/Very_Large_Data/hofi_gbif_qc.tsv")
 ```
 
 ## Intro
