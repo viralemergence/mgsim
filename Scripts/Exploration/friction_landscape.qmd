@@ -13,7 +13,10 @@ library(cowplot)
 library(paletteer)
 library(furrr)
 library(terra)
+library(sf)
+library(here)
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
 ```
 
 # Goal
@@ -89,24 +92,9 @@ hofi %>% mutate(Source = "House Finch") %>%
 
 I am going to create three friction landscapes: one with only urbanization, one with only elevation, and one that incorporates both.
 
-The most straightforward is urbanization. It's an index that goes from 0 to 1, and I expect the highest conductance with the highest urbanization.
+## Elevation Friction Landscape
 
-```{r urban friction}
-urban_raster <- "~/Documents/Very_Large_Data/predictors" %>% 
-  list.files(pattern = "*.grd$", full.names = TRUE) %>% 
-  map(rast, lyrs = 20) %>% 
-  rast() %>% 
-  mask(rast(finch_region$region_raster))
-urban_matrix <- as.matrix(urban_raster) %>% 
-  scales::rescale() %>% 
-  identity()
-urban_friction <- map(1:78, function(i) {
-  finch_region$raster_from_values(urban_matrix[, i] %>% discard(is.na(.)))
-}) %>% stack()
-plot(urban_friction[[78]])
-```
-
-Next I want to make an elevation friction landscape. This is a little more complex because elevation does not go from 0 to 1, as shown:
+I want to make an elevation friction landscape. This is a little complex because elevation does not go from 0 to 1, as shown:
 
 ```{r elevation raster}
 elev_raster <- get_elev_raster(finch_region$region_raster, z = 4) %>% 
@@ -121,19 +109,59 @@ What I am going to do is truncate everything to a 0 m to 3000 m range (rounding 
 ```{r elevation friction}
 elev_matrix <- elev_raster[] %>% 
   scales::rescale(to = c(1, 0), from = c(0, 3000))
-indices <- which(is.na(elev_raster)[] & !is.na(gap_filler)[])
 elev_matrix[elev_matrix<0] <- 0
 elev_matrix[elev_matrix>1] <- 1
-elev_matrix[indices] <- 1
 elev_friction <- finch_region$raster_from_values(elev_matrix %>% discard(is.na(.)))
 plot(elev_friction)
 ```
+
+## Urban Friction Landscape
+
+Urbanization is an index that goes from 0 to 1, and I expect the highest conductance with the highest urbanization.
+
+```{r urban friction}
+urban_raster <- "~/Documents/Very_Large_Data/predictors" %>% 
+  list.files(pattern = "*.grd$", full.names = TRUE) %>% 
+  map(rast, lyrs = 20) %>% 
+  rast() %>% 
+  mask(rast(finch_region$region_raster))
+urban_matrix <- as.matrix(urban_raster) %>% 
+  # scales::rescale() %>% 
+  identity()
+urban_friction <- map(1:78, function(i) {
+  finch_region$raster_from_values(urban_matrix[, i] %>% discard(is.na(.)))
+}) %>% stack()
+plot(urban_friction[[78]])
+```
+
+This landscape is rather sparse. Mostly, the birds cannot disperse, because the urbanized areas are like little islands in a sea of nothing. I am going to address this by adding a kernel density estimation to each urbanized grid cell. Here I use an Epanechnikov kernel density estimator with a bandwidth of 100 km.
+
+```{r kde2d}
+urban_dfs <- map(1:78, function(i) {
+  finch_region$coordinates %>%
+    cbind(urbanization = urban_matrix[finch_region$region_indices, i]) %>% 
+    filter(urbanization > 0) %>% 
+    st_as_sf(coords = c("x", "y"), crs = st_crs(proj_crs))
+})
+# plan(multisession)
+# urban_friction <- future_map(1:78, function(i) {
+#   kde(urban_dfs[[i]], band_width = 100000, kernel = "epanechnikov", 
+#             weights = urban_dfs[[i]]$urbanization, grid = finch_region$region_raster) %>% 
+#   mask(finch_region$region_raster)
+# }) %>% stack()
+# urban_scaled <- scales::rescale(values(urban_friction)) %>% .[finch_region$region_indices,] %>%
+#   finch_region$raster_from_values()
+urban_scaled <- stack(here("Data/Input/urban_friction_landscape.grd"))
+plot(urban_scaled[[78]])
+```
+
+## Urban + Elevation Friction
 
 Finally, I want to make a friction landscape that includes both factors, multiplied together.
 
 ```{r urban + elevation}
 full_friction <- map(1:78, function(i) {
-  mat <- urban_matrix * elev_matrix
+  mat <- as.matrix(urban_scaled) * elev_matrix
   finch_region$raster_from_values(mat[, i] %>% discard(is.na(.)))
 }) %>% stack()
 plot(full_friction[[1]])
