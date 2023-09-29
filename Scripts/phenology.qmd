@@ -17,12 +17,7 @@ devtools::install_github("stevenpawley/colino")
 library(colino)
 library(gganimate)
 library(cowplot)
-large_studies <- read_excel(here("Data", "Input", "hofi_phenology.xlsx"))
-nest_watch <- read_csv("~/Documents/Very_Large_Data/attempts_locs-20230518.csv") %>%
-  filter(`Species Name`%in%c("House Finch", "House Finch (Common"),
-         Year < 2018,
-         !is.na(`First Lay Date`),
-         !is.na(`Fledge Date`))
+library(DALEXtra)
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
 columns <- tribble(~bioclim, ~name,
@@ -51,6 +46,7 @@ I found four studies where breeding season length was explicitly estimated from 
 Here are my data from the studies that actually used a large number of nests to estimate breeding season length. I want to get my data from more problematic sources into this format.
 
 ```{r good data}
+large_studies <- read_excel(here("Data", "Input", "hofi_phenology.xlsx"))
 large_studies
 ```
 
@@ -59,6 +55,11 @@ large_studies
 Nest Watch is a citizen science project run by the Cornell Lab of Ornithology. I downloaded a database of nest attempts and filtered it down to house finch nests only, and only nests with a lay date and a fledge date. What I will do is filter this down to sites where more than one nest was recorded, and use the earliest lay date and the latest fledge date to define the breeding season at each site.
 
 ```{r nest watch}
+nest_watch <- read_csv("~/Documents/Very_Large_Data/attempts_locs-20230518.csv") %>%
+  filter(`Species Name`%in%c("House Finch", "House Finch (Common"),
+         Year < 2018,
+         !is.na(`First Lay Date`),
+         !is.na(`Fledge Date`))
 nw_processed <- nest_watch %>% group_by(`Location ID`, Year) %>% 
   mutate(count = n()) %>% 
   filter(count>1) %>% 
@@ -248,24 +249,24 @@ my.cluster <- parallel::makeCluster(
 
 doParallel::registerDoParallel(my.cluster)
 
-tune_res <- tune_grid(
-  tune_wf,
-  resamples = vfold_cv(training(season_split)),
-  grid = 20
-)
-
-tune_res %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse") %>%
-  select(mean, min_n, mtry) %>%
-  pivot_longer(min_n:mtry,
-    values_to = "value",
-    names_to = "parameter"
-  ) %>%
-  ggplot(aes(value, mean, color = parameter)) +
-  geom_point(show.legend = FALSE) +
-  facet_wrap(~parameter, scales = "free_x") +
-  labs(x = NULL, y = "RMSE")
+# tune_res <- tune_grid(
+#   tune_wf,
+#   resamples = vfold_cv(training(season_split)),
+#   grid = 20
+# )
+# 
+# tune_res %>%
+#   collect_metrics() %>%
+#   filter(.metric == "rmse") %>%
+#   select(mean, min_n, mtry) %>%
+#   pivot_longer(min_n:mtry,
+#     values_to = "value",
+#     names_to = "parameter"
+#   ) %>%
+#   ggplot(aes(value, mean, color = parameter)) +
+#   geom_point(show.legend = FALSE) +
+#   facet_wrap(~parameter, scales = "free_x") +
+#   labs(x = NULL, y = "RMSE")
 
 rf_grid <- grid_regular(
   mtry(range = c(2, 5)),
@@ -437,18 +438,24 @@ full_split <- season_extract %>%
   mutate(Nests = importance_weights(Nests)) %>% 
   initial_split(prop = 0.8)
 
-tune_spec <- rand_forest(
+tune_spec <- boost_tree(
   mtry = tune(),
-  trees = 1000,
-  min_n = tune()
+  trees = tune(),
+  min_n = tune(),
+  tree_depth = tune(),
+  learn_rate = tune(),
+  loss_reduction = tune(),
+  sample_size = tune(),
+  stop_iter = tune()
 ) %>%
   set_mode("regression") %>%
-  set_engine("ranger", importance = "permutation")
+  set_engine("xgboost", importance = "permutation", 
+             colsample_bytree = 0.3, counts = FALSE)
 
 tree_rec <- full_split %>% 
   training() %>% 
   recipe(Season_Length ~ .) %>%
-  # step_select_vip(all_predictors(), outcome = "Season_Length", 
+  # step_select_vip(all_predictors(), outcome = "Season_Length",
   #                 model = tune_spec, threshold = 0.5) %>%
   prep()
 
@@ -469,77 +476,32 @@ tune_res <- tune_grid(
   grid = 20
 )
 
-tune_res %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse") %>%
-  select(mean, min_n, mtry) %>%
-  pivot_longer(min_n:mtry,
-    values_to = "value",
-    names_to = "parameter"
-  ) %>%
-  ggplot(aes(value, mean, color = parameter)) +
-  geom_point(show.legend = FALSE) +
-  facet_wrap(~parameter, scales = "free_x") +
-  labs(x = NULL, y = "RMSE")
+choose_tree <- select_best(tune_res, metric = "rmse")
 
-rf_grid <- grid_regular(
-  mtry(range = c(2, 5)),
-  min_n(range = c(10, 20)),
-  levels = 5
-)
-
-regular_res <- tune_grid(
-  tune_wf,
-  resamples = vfold_cv(training(full_split)),
-  grid = rf_grid
-)
-
-regular_res %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse") %>%
-  mutate(min_n = factor(min_n)) %>%
-  ggplot(aes(mtry, mean, color = min_n)) +
-  geom_line(alpha = 0.5, linewidth = 1.5) +
-  geom_point() +
-  labs(y = "RMSE")
-
-model_spec <- rand_forest(
-  mtry = 4,
-  trees = 1000,
-  min_n = 20
-) %>%
-  set_mode("regression") %>%
-  set_engine("ranger", importance = "permutation")
+final_res <- tune_wf %>% 
+  finalize_workflow(choose_tree)
 
 tree_rec <- full_split %>% 
   training() %>% 
   recipe(Season_Length ~ .) %>%
-  step_select_vip(all_predictors(), outcome = "Season_Length",
-                  model = model_spec, threshold = 0.95, cutoff = 20) %>%
-  # step_rm(all_of(exclude)) %>% 
+  # step_rm(all_of(c("bio12", "bio14", "bio10", "bio13", "bio4", "bio17", "bio18", 
+  #                "bio7", "bio15", "bio19", "bio8", "bio2", "bio16", "bio3",
+  #                "bio9"))) %>% 
   prep(training = training(full_split)) %>% 
   identity()
 
-exclude <- tree_rec$steps[[1]]$exclude
-
-tree_rec <- full_split %>% 
-  training() %>% 
-  recipe(Season_Length ~ .) %>%
-  step_rm(all_of(exclude)) %>% 
-  prep(training = training(full_split)) %>% 
-  identity()
-
-rf_workflow <- workflow() %>% 
+gbm_workflow <- final_res %>%  
   add_case_weights(Nests) %>% 
-  add_model(model_spec) %>% 
-  add_recipe(tree_rec)
+  # add_model(model_spec) %>% 
+  # add_recipe(tree_rec) %>% 
+  identity()
 
-rf_fit <- fit(rf_workflow, data = training(full_split))
+gbm_fit <- fit(gbm_workflow, data = training(full_split))
 
 last_fit(rf_workflow, full_split, metrics = metric_set(rsq, mpe)) %>% 
   collect_metrics()
 
-full_predict <- predict(rf_fit, new_data = predict_extract %>% 
+full_predict <- predict(gbm_fit, new_data = predict_extract %>% 
                             mutate(Latitude = ly_data$Latitude) %>% 
                             select(Year, Latitude, bio1:bio19) %>% 
                           filter(complete.cases(.)))
@@ -560,4 +522,32 @@ ani3 <- NA_map +
   transition_time(Year) +
   ease_aes('linear')
 animate(ani3, nframes = 78, fps = 2, renderer = gifski_renderer())
+```
+
+Just checking quickly over the partial dependence plots to make sure they match the data well.
+
+```{r latitude}
+ggplot(season_est, aes(x = Latitude, y = Season_Length)) + geom_point() +
+  geom_smooth()
+ggplot(season_est, aes(x = Year, y = Season_Length)) + geom_point() +
+  geom_smooth()
+full_explainer <- explain_tidymodels(
+  gbm_fit,
+  data = training(full_split) %>% select(-Season_Length),
+  y = training(full_split) %>% pull(Season_Length),
+  verbose = F
+)
+full_explainer %>% 
+  model_profile(variables = c("Latitude", "Year"), N = NULL) %>% 
+  plot()
+```
+
+Now I will export these predictions to a raster stack for use as input data later.
+
+```{r export predictions}
+season_pred <- full_predict %>% group_by(Year) %>% group_split(.keep = F) %>% 
+  map(rast, crs = proj_crs, extent = ext(finch_region$region_raster)) %>% 
+  rast()
+names(season_pred) <- 1940:2017
+writeRaster(season_pred, here("Data/Input/breeding_season_length.tif"))
 ```
