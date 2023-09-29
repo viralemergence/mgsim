@@ -6,6 +6,8 @@ editor: visual
 ---
 
 ```{r setup}
+library(conflicted)
+library(raster)
 library(tidysdm)
 library(terra)
 library(tidyterra)
@@ -15,6 +17,9 @@ library(sf)
 library(tidyverse)
 library(paletteer)
 library(furrr)
+library(DALEX)
+library(climateStability)
+conflict_prefer_all("dplyr", quiet = T)
 i_am("Scripts/sdm_native_invasive.qmd")
 data.dir <- "~/Documents/Very_Large_Data"
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
@@ -139,42 +144,6 @@ This shows that in the native range at least there is some meaningful difference
 invasive_extract %>% select(-Year) %>% plot_pres_vs_bg(class)
 ```
 
-This is all well and good, but it would probably help to filter down to uncorrelated variables. I do so here.
-
-```{r filter uncorrelated}
-plan(multisession)
-high_cor <- files2 %>% map(rast) %>% map(filter_high_cor)
-high_cor <- high_cor %>% 
-  map(function(x) {
-    case_when(
-      str_detect(x, "AD") ~ "urban",
-      str_detect(x, "_1$") ~ "bio1",
-      str_detect(x, "_2$") ~ "bio2",
-      str_detect(x, "_3$") ~ "bio3",
-      str_detect(x, "_4$") ~ "bio4",
-      str_detect(x, "_5$") ~ "bio5",
-      str_detect(x, "_6$") ~ "bio6",
-      str_detect(x, "_7$") ~ "bio7",
-      str_detect(x, "_8$") ~ "bio8",
-      str_detect(x, "_9$") ~ "bio9",
-      str_detect(x, "_10") ~ "bio10",
-      str_detect(x, "_11") ~ "bio11",
-      str_detect(x, "_12") ~ "bio12",
-      str_detect(x, "_13") ~ "bio13",
-      str_detect(x, "_14") ~ "bio14",
-      str_detect(x, "_15") ~ "bio15",
-      str_detect(x, "_16") ~ "bio16",
-      str_detect(x, "_17") ~ "bio17",
-      str_detect(x, "_18") ~ "bio18",
-      str_detect(x, "_19") ~ "bio19"
-    )
-  })
-high_cor <- high_cor %>% flatten_chr() %>% unique()
-high_cor
-```
-
-This brings us down to 10 predictors instead of 20.
-
 # Native SDM
 
 ## Fit model
@@ -183,7 +152,7 @@ Here we can see the randomly assigned spatial cross-validation folds:
 
 ```{r fit native sdm}
 native_rec <- native_extract %>% 
-  select(-all_of(high_cor), -Year) %>% 
+  select(-Year) %>% 
   recipe(formula = class ~ .)
 native_models <- workflow_set(
   preproc = list(default = native_rec),
@@ -263,7 +232,7 @@ Here we can see the randomly assigned spatial cross-validation folds:
 
 ```{r prep invasive sdm}
 invasive_rec <- invasive_extract %>% 
-  select(-all_of(high_cor), -Year) %>% 
+  select(-Year) %>% 
   recipe(formula = class ~ .)
 invasive_models <- workflow_set(
   preproc = list(default = invasive_rec),
@@ -375,3 +344,99 @@ data.frame(Overlap = flatten_dbl(overlap_metric),
 ```
 
 The overlap is consistently high throughout.
+
+# Full SDM
+
+Now that it is clear that the estimates from the native and invasive SDMs mostly overlap, I feel confident enough to try a SDM with all of the data points and generate habitat suitability maps based on probability of occurrence.
+
+## Fit model
+
+```{r prep full sdm}
+full_extract <- native_extract %>% 
+  bind_rows(invasive_extract)
+full_rec <- full_extract %>% 
+  select(-Year) %>% 
+  recipe(formula = class ~ .)
+full_models <- workflow_set(
+  preproc = list(default = full_rec),
+  models = list(
+    rf = sdm_spec_rf(),
+    gbm = sdm_spec_boost_tree()
+  ),
+  cross = T
+) %>% 
+  option_add(control = control_ensemble_grid())
+full_cv <- spatial_block_cv(full_extract, v = 5, method = "random")
+autoplot(full_cv)
+```
+
+Here I compare results from different SDM specifications.
+
+```{r tune full sdm}
+doParallel::registerDoParallel()
+full_models <- full_models %>%
+   workflow_map("tune_grid", resamples = full_cv, grid = 20,
+                metrics = sdm_metric_set(),
+                verbose = TRUE)
+autoplot(full_models)
+```
+
+I want to take a moment to explore the variable importance and partial dependence plots because I'm interested in the effect of urbanization on presence.
+
+```{r explain}
+full_ensemble <- simple_ensemble() %>%
+  add_member(full_models, metric = "boyce_cont")
+full_ensemble <- qs::qread(here("Data/Input/full_sdm_ensemble.qs"))
+full_explainer <- explain_tidysdm(full_ensemble, verbose = F)
+full_explainer %>%
+  model_parts() %>% 
+  plot()
+```
+
+Clearly, urbanization is the most important predictor of presence for the house finch, followed by temperature seasonality and mean annual temperature.
+
+Now I want to look at the partial dependence profile for urbanization.
+
+```{r pd}
+full_explainer %>% 
+  model_profile(variables = "urban", N = 2000) %>% 
+  plot() + ggtitle("Partial dependence profile for urbanization")
+```
+
+This appears to be a threshold effect: some minimal amount of urbanization is required for house finches to be present.
+
+## Predict
+
+Here I have the specific goal of producing a stack of habitat suitability maps to use for simulations later. First I will test one year, 2000, to see how it looks.
+
+```{r predict 2000}
+predict2000 <- full_ensemble %>% 
+  predict_raster(
+    rast("~/Documents/Very_Large_Data/predictors/predictors_2000.grd") %>% 
+      `names<-`(col_names), 
+    type = "prob",
+    fun = "weighted_mean",
+    metric_thresh = c("tss_max", 0.7))
+ggplot() + 
+  geom_spatraster(data = predict2000, aes(fill = weighted_mean)) +
+  scale_fill_paletteer_c(`"scico::bamako"`, direction = -1) +
+  geom_sf(data = native_extract %>% filter(class == "presence",
+                                           Year == "2000"), alpha = 0.3) +
+  geom_sf(data = invasive_extract %>% filter(class == "presence",
+                                             Year == "2000"), alpha = 0.3) +
+  ggtitle("Probability of occurrence 2000")
+```
+
+This looks pretty good, but two things have to happen first: the predictions have to be masked to the extent of the study area, and I have to scale these values from 0 to 1.
+
+```{r predict stack}
+suitability <- map(files2, rast) %>% 
+  map(function(r) {predict_raster(object = full_ensemble,
+                      raster = r %>% `names<-`(col_names),
+                      type = "prob",
+                      fun = "weighted_mean",
+                      metric_thresh = c("boyce_cont", 0.95))}) %>% 
+  map(mask, mask = template) %>% 
+  rast() %>% rescale0to1()
+terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v1.tif"))
+```
