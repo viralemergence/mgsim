@@ -1,0 +1,34 @@
+---
+title: "What is Urbanization to a Finch?"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = F, message = F}
+library(conflicted)
+library(tidyverse)
+library(terra)
+library(tidyterra)
+library(here)
+```
+
+# Goal
+
+To break down exactly what about urbanization is biologically relevant to the house finch, and how it might affect habitat suitability and dispersal.
+
+# Components of Land Use Change
+
+Currently, the raster of urbanization I have been using has been based on strictly urban land area (towns and cities). I show this here.
+
+```{r strict urban}
+urb1 <- here("Data/Input/urban_raster_latlong.grd") %>% rast()
+ggplot() + geom_spatraster(data = urb1, aes(fill = `AD1940`)) + 
+  scale_fill_hypso_c() + ggtitle("1940")
+```
+
+However, I can expand beyond this strict definition of urbanization. I could plot out population counts instead:
+
+```{r population count}
+
+```
