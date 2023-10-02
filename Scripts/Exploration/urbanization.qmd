@@ -11,6 +11,12 @@ library(tidyverse)
 library(terra)
 library(tidyterra)
 library(here)
+library(paletteer)
+library(furrr)
+conflicts_prefer(tidyterra::filter)
+source(here("Scripts/convenience_functions.R"))
+wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 ```
 
 # Goal
@@ -19,16 +25,114 @@ To break down exactly what about urbanization is biologically relevant to the ho
 
 # Components of Land Use Change
 
+## Urban area
+
 Currently, the raster of urbanization I have been using has been based on strictly urban land area (towns and cities). I show this here.
 
 ```{r strict urban}
 urb1 <- here("Data/Input/urban_raster_latlong.grd") %>% rast()
 ggplot() + geom_spatraster(data = urb1, aes(fill = `AD1940`)) + 
-  scale_fill_hypso_c() + ggtitle("1940")
+  scale_fill_hypso_c(name = "Built-up\nareas\nkm2") + ggtitle("1940")
 ```
+
+## Population count
 
 However, I can expand beyond this strict definition of urbanization. I could plot out population counts instead:
 
-```{r population count}
+```{r population count, warning=FALSE}
+bbox <- ext(-128, -61, 15, 54)
+source_time <- c(1940, 1950, 1960, 1970, 1980, 1990, 2000, 2001:2017)
+target_time <- c(1940:2017)
+pop_rasters <- "~/Documents/Very_Large_Data/baseline/zip/" %>%
+  list.files(full.names = TRUE, include.dirs = TRUE) %>%
+  discard(str_detect, pattern = "\\.zip") %>%
+  keep(str_detect, pattern = "pop") %>%
+  map(list.files, full.names = TRUE) %>%
+  map(~keep(., str_detect, pattern = "popc")) %>%
+  flatten_chr() %>%
+  map(rast) %>%
+  map(crop, bbox)
+urb2 <- rast(pop_rasters) %>% interpolate_raster(source_time, target_time, "AD")
+ggplot() + geom_spatraster(data = urb2, aes(fill = `AD1941`)) + 
+  scale_fill_paletteer_c("scico::devon", trans = "log10", name = "Population") + 
+  ggtitle("1941")
+```
 
+## Other land use types
+
+Hyde 3.2 also has data on cropland.
+
+```{r cropland, message = F}
+crop_rasters <- "~/Documents/Very_Large_Data/baseline/zip/" %>%
+  list.files(full.names = TRUE, include.dirs = TRUE) %>%
+  discard(str_detect, pattern = "\\.zip") %>%
+  keep(str_detect, pattern = "lu") %>%
+  map(list.files, full.names = TRUE) %>%
+  map(~keep(., str_detect, pattern = "cropland")) %>%
+  flatten_chr() %>%
+  map(rast) %>%
+  map(crop, bbox)
+urb3 <- rast(crop_rasters) %>% interpolate_raster(source_time, target_time, "AD")
+ggplot() + geom_spatraster(data = urb3, aes(fill = `AD1941`)) + 
+  scale_fill_paletteer_c("scico::bamako", name = "Cropland\n(km2)") + 
+  ggtitle("1941")
+```
+
+Here is cropland combined with urban areas:
+
+```{r cropland + urban}
+ggplot() + geom_spatraster(data = urb1 + urb3, aes(fill = `AD1941`)) +
+  scale_fill_paletteer_c(`"pals::kovesi.linear_green_5_95_c69"`, direction = -1,
+                         name = "Cropland\n+ urban\n(km2)") + 
+  ggtitle("1941")
+```
+
+## Feeder density
+
+I have data from Project FeederWatch from 1988 to 2020. This dataset has the disadvantage of not going back as far as the others, but the distinct advantage that it gets at what might be most relevant to house finches, which is bird feeder density.
+
+```{r map bird feeders, message = F}
+usa <- map_data("usa")
+canada <- map_data("worldHires", "Canada")
+plan(multisession)
+pfw <- "Data/Validation/FeederWatch" %>% here() %>% 
+  list.files(pattern = "PFW", full.names = T) %>% 
+  map(vroom, show_col_types = F) %>% 
+  future_map(ZeroFillPFW, "houfin", rollup = F) %>% bind_rows()
+pfw %>% group_by(LATITUDE, LONGITUDE) %>% 
+  filter(Year==1997) %>% 
+  summarize(Finches = if_else(sum(HOW_MANY)>0, "Present", "Absent")) %>% 
+  ggplot() +
+  geom_polygon(data = usa, 
+               aes(x=long, y = lat, group = group), 
+               fill = "gray50", 
+               color="black") +
+  geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+               fill = "gray50", color="black") + 
+  coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55)) +
+  geom_point(aes(x = LONGITUDE, y = LATITUDE, color = Finches), alpha = 0.6) +
+  scale_color_paletteer_d("nbapalettes::huskies") + theme_map() +
+  ggtitle("House Finch Observations in 1996")
+```
+
+What I need to do is rasterize these data to my study region for the house finch, then count the number of feeders in each grid cell per year.
+
+```{r rasterize feeder data}
+region <- qs::qread(here("Data/Input/finch_region.qs"))
+feeder_stack <- pfw %>% group_by(Year) %>% group_split() %>% 
+  map(~group_by(., LATITUDE, LONGITUDE)) %>% 
+  map(~summarize(., feeder_count = n(), .groups = "drop")) %>% 
+  map(vect, geom = c("LONGITUDE", "LATITUDE"), crs = wgs84) %>% 
+  map(project, crs(proj_crs)) %>% 
+  map(rasterize, rast(region$region_raster), field = "feeder_count",
+      background = 0) %>% 
+  map(mask, rast(region$region_raster)) %>% 
+  rast() %>% 
+  identity()
+names(feeder_stack) <- 1988:2020 %>% map(~paste0("AD", .))
+ggplot() + 
+  geom_spatraster(data = feeder_stack, aes(fill = `AD1995`)) +
+  scale_fill_paletteer_c(`"pals::ocean.solar"`,
+                         name = "Bird Feeders") + 
+  ggtitle("1995")
 ```
