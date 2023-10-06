@@ -358,3 +358,96 @@ list(urban = urban_fit, population = pop_fit, cropland = crop_fit,
 ```
 
 Human population count seems to do the best, though urban area does nearly as well.
+
+# Urbanization and Conductance
+
+I want to model the effects of urbanization on the conductance landscape (barriers and facilitators of dispersal on the landscape.) I have some empirical data on conductance in the form of occurrence records back to 1940, when the house finch was introduced to its invasive range.
+
+If we consider the invasive range of the house finch, eastern North America, starting in the year of first occurrence, each grid cell will have a distance to the nearest grid cell occupied by house finches. That distance will decrease over time as the range expands. These slopes of decreasing distance to the house finch range frontier can be considered a metric of conductance if I control for distance from site of first introduction.
+
+First let's look at occurrence over time in the invasive range.
+
+```{r invasive range occurrences}
+hofi_sample <- vroom("~/Documents/Very_Large_Data/hofi_gbif_qc.tsv") %>% 
+  filter(decimallongitude>-128, decimallongitude<(-61),
+         decimallatitude>15, decimallatitude<54) %>%
+  filter(year < 2018, year > 1939) %>% 
+  add_row(year = 1941, decimallatitude = 40.614167, 
+          decimallongitude = -73.536111) %>% 
+  add_row(year = 1944, decimallatitude = 40.641944, 
+          decimallongitude = -73.694167)
+points <- hofi_sample %>% 
+    st_as_sf(coords = c("decimallongitude", "decimallatitude"), 
+             crs = crs(wgs84)) %>% 
+    st_transform(crs(proj_crs)) %>% 
+  bind_cols(st_coordinates(.)) %>% 
+  filter(X > (-333881), Y > (-1059959))
+points %>% 
+  filter(year %in% seq(1941, 2017, by = 15)) %>% 
+  ggplot() +
+  geom_spatraster(data = template[[1]] %>% is.na()) +
+  scale_fill_paletteer_d("nbapalettes::rockets_city") +
+  theme(legend.position = "none") +
+  geom_sf(col = "white") + 
+  xlim(-333881, 2638496) +
+  ylim(-1059959, 2933161) +
+  facet_wrap(~year)
+```
+
+Next, to get a better sense of conductance, I will determine the year of first sighting of house finches for each grid cell in the invasive range.
+
+```{r year of first sighting}
+first_sighting <- points %>% select(X, Y, year) %>% 
+  rasterize(template, field = "year", fun = min)
+ggplot() + 
+  geom_spatraster(data = first_sighting, aes(fill = min)) +
+  scale_fill_paletteer_c("pals::ocean.tempo", name = "First Sighted") +
+  xlim(-333881, 2638496) +
+  ylim(-1059959, 2933161)
+```
+
+Year of first sighting is one way to think about conductance, and one that I will revisit. But another way to think about it is as decreasing distance over time to the nearest finch-occupied cell.
+
+Here I pick a grid cell at random from the invasive range and show a graph of its distance from the nearest finch-occupied grid cell over time.
+
+```{r distance to finch occupied cell}
+template <- template[[1]]
+presence_thinned <- points %>%
+  group_by(year) %>%
+  group_split() %>%
+  map_at(3:64, thin_by_cell, raster = template, coords = c("X", "Y"))
+distances <- presence_thinned %>% 
+  map(st_distance,
+      st_as_sf(
+        region$coordinates %>% filter(x > (-333881), y > (-1059959)),
+        coords = c("x", "y"),
+        crs = proj_crs
+      ))
+random_cell <- region$coordinates %>% filter(x > (-333881), y > (-1059959)) %>% 
+  rownames_to_column("cell") %>% mutate(across(everything(), as.numeric)) %>% 
+  sample_n(1)
+ggplot() +
+  geom_spatraster(data = template[[1]] %>% is.na()) +
+  scale_fill_paletteer_d("nbapalettes::rockets_city") +
+  theme(legend.position = "none") +
+  geom_point(random_cell, mapping = aes(x, y), col = "white") +
+  xlim(-333881, 2638496) +
+  ylim(-1059959, 2933161) +
+  ggtitle("Random cell")
+distances %>% map(~.[,random_cell$cell]) %>% map_dbl(min, na.rm = T) %>% 
+  data.frame(distance = ., Year = pull(points, year) %>% unique() %>% sort()) %>% 
+  ggplot(aes(x = Year, y = distance)) + geom_line() + 
+  geom_smooth(method = "lm") +
+  ylab("Distance to nearest finch-occupied cell (m)") +
+  ylim(0, NA)
+```
+
+There is a bunch of wiggle in here caused by erratic sightings in other cells. I think I can smooth this out by retaining grid cells that have ever had a finch sighting previously.
+
+```{r distance to finch occupied cell 2}
+points %>%
+  group_by(year) %>%
+  group_split() %>%
+  map_at(3:64, thin_by_cell, raster = template, coords = c("X", "Y")) %>% 
+  accumulate(bind_rows, .dir = "backward")
+```
