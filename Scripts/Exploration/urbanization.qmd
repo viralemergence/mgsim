@@ -394,6 +394,8 @@ points %>%
   facet_wrap(~year)
 ```
 
+## Year of First Sighting
+
 Next, to get a better sense of conductance, I will determine the year of first sighting of house finches for each grid cell in the invasive range.
 
 ```{r year of first sighting}
@@ -405,6 +407,40 @@ ggplot() +
   xlim(-333881, 2638496) +
   ylim(-1059959, 2933161)
 ```
+
+As expected, there is a correlation between year of first sighting and distance from Jones Beach (the location of the very first sighting in the invasive range.) So the really interesting metric is the anomaly from the expected relationship between year of first sighting and distance from Jones Beach.
+
+```{r year of first sighting distance to jones beach}
+dist_raster <- st_distance(points %>% filter(year == 1941), 
+            st_as_sf(
+              region$coordinates %>% filter(x > (-333881), y > (-1059959)),
+              coords = c("x", "y"),
+              crs = proj_crs
+            )) %>% as.vector() %>% 
+  bind_cols(region$coordinates %>% filter(x > (-333881), y > (-1059959))) %>% 
+  set_names(c("distance", "x", "y")) %>% 
+  st_as_sf(coords = c("x", "y"),
+              crs = proj_crs) %>% 
+  rasterize(template, field = "distance", fun = mean)
+cor(values(first_sighting), values(dist_raster), use = "complete.obs")
+```
+
+A Pearson correlation of 0.46, which is significant but far from a perfect correlation. What will be really interesting will be to map the residuals from a linear model of the two.
+
+```{r first sighting residual}
+lm1 <- lm(values(first_sighting) ~ values(dist_raster))
+summary(lm1)
+resid_lm <- first_sighting * NA
+values(resid_lm)[-lm1$na.action] <- lm1$residuals
+ggplot() +
+  geom_spatraster(data = resid_lm, aes(fill = min)) +
+  scale_fill_gradient2(low = "#001260FF", mid = "#EBE5E0FF", high = "#590007FF",
+                       name = "Friction") +
+  xlim(-333881, 2638496) +
+  ylim(-1059959, 2933161)
+```
+
+## Distance to Nearest Finch-Occupied Cell
 
 Year of first sighting is one way to think about conductance, and one that I will revisit. But another way to think about it is as decreasing distance over time to the nearest finch-occupied cell.
 
@@ -445,9 +481,32 @@ distances %>% map(~.[,random_cell$cell]) %>% map_dbl(min, na.rm = T) %>%
 There is a bunch of wiggle in here caused by erratic sightings in other cells. I think I can smooth this out by retaining grid cells that have ever had a finch sighting previously.
 
 ```{r distance to finch occupied cell 2}
-points %>%
+sightings <- points %>%
+  select(-all_of(c("X", "Y"))) %>% 
   group_by(year) %>%
   group_split() %>%
-  map_at(3:64, thin_by_cell, raster = template, coords = c("X", "Y")) %>% 
-  accumulate(bind_rows, .dir = "backward")
+  map_at(3:64, thin_by_cell, raster = template) %>% 
+  accumulate(bind_rows)
+distances <- sightings %>% 
+  map(st_distance,
+      st_as_sf(
+        region$coordinates %>% filter(x > (-333881), y > (-1059959)),
+        coords = c("x", "y"),
+        crs = proj_crs
+      ))
+random_cell <- region$coordinates %>% filter(x > (-333881), y > (-1059959)) %>% 
+  rownames_to_column("cell") %>% mutate(across(everything(), as.numeric)) %>% 
+  sample_n(1)
+ggplot() +
+  geom_spatraster(data = template[[1]] %>% is.na()) +
+  scale_fill_paletteer_d("nbapalettes::rockets_city") +
+  theme(legend.position = "none") +
+  geom_point(random_cell, mapping = aes(x, y), col = "white") +
+  xlim(-333881, 2638496) +
+  ylim(-1059959, 2933161) +
+  ggtitle("Random cell")
+distances %>% map(~.[,random_cell$cell]) %>% map_dbl(min, na.rm = T) %>% 
+  data.frame(distance = ., Year = pull(points, year) %>% unique() %>% sort()) %>% 
+  ggplot(aes(x = Year, y = distance/1000)) + geom_line() + 
+  ylab("Distance to nearest finch-occupied cell (km)") + ylim(0, NA)
 ```
