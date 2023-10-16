@@ -16,6 +16,7 @@ library(cowplot)
 library(landscapemetrics)
 library(here)
 library(qs)
+library(tidyterra)
 bbox <- extent(-128, -61, 15, 54)
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 bioclim1940 <- rast("~/Documents/Very_Large_Data/ERA5/BioClim_1940.nc")
@@ -202,4 +203,45 @@ ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
                          name = "Average\nInward\nDispersal",
                          limits = c(0, 0.012)) +
   theme_map()
+```
+
+# Density-Dependent Dispersal
+
+`poems` has four parameters for setting density-dependent dispersal, as follows:
+
+1.  `dispersal_source_n_k`: Dispersal proportion (p) density dependence via source population abundance divided by carrying capacity (n/k), where p is reduced via a linear slope (defined by two list items) from n/k \<= *cutoff* (p = 0) to n/k \>= *threshold*.
+2.  `dispersal_target_k`: Dispersal rate (r) density dependence via target population carrying capacity (k), where r is reduced via a linear slope (through the origin) when k \<= *threshold.*
+3.  `dispersal_target_n`: Dispersal rate (r) density dependence via target population abundance (n), where r is reduced via a linear slope (defined by two list items) from n \>= *threshold* to n \<= *cutoff* (r = 0) or visa-versa.
+4.  `dispersal_target_n_k`: Dispersal rate (r) density dependence via target population abundance divided by carrying capacity (n/k), where r is reduced via a linear slope (defined by two list items) from n/k \>= *threshold* to n/k \<= *cutoff* (r = 0) or visa-versa.
+
+Now that I have data on habitat suitability, I can test out some of these. Let's look at probability of occurrence multiplied by a population density pulled from my literature review for that parameter.
+
+```{r carrying capacity map}
+carrying_capacity <- rast(here("Data/Input/habitat_suitability_v1.tif"))*200000
+ggplot() +
+  geom_spatraster(data = carrying_capacity, aes(fill = `1940`)) +
+  scale_fill_paletteer_c("pals::linearl", name = "Carrying Capacity") +
+  ggtitle("1940")
+```
+
+Let's try a test where the target habitat suitability for dispersal is the maximum carrying capacity (`dispersal_target_k` = 200000).
+
+```{r test dispersal target k}
+test_dispersal <- dispersal_gen$generate(input_values =
+                                           list(dispersal_p = 0.5,
+                                                dispersal_r = 500))$dispersal_data
+# population_dispersal(
+#       replicates = 10,
+#       time_steps = 78,
+#       years_per_step = 1,
+#       populations = 7,
+#       demographic_stochasticity = TRUE,
+#       density_stages = c(0, 1, 1),
+#       dispersal = dispersal_gen$dispersal_data,
+#       dispersal_stages = c(0, 1, 0.5),
+#       dispersal_source_n_k = list(cutoff = -0.5, threshold = 1.5),
+#       dispersal_target_k = 5,
+#       dispersal_target_n = list(threshold = 10, cutoff = 15),
+#       simulator = simulator
+#     )
 ```

@@ -214,6 +214,15 @@ These are all the parameters that relate to the demography of the house finch in
 
 There is a widely accepted argument that house finches are subject to an Allee effect, as it explains some of their invasion dynamics [@veit1996], but no one really knows how strong that Allee effect is. I will just have to use a vague prior here.
 
+## Population density
+
+I have some estimates of finch density taken from parks. I have no idea how well these scale up.
+
+```{r population density}
+grid_cell_density <- (c(105, 123, 119, 181, 66, 65, 110, 89, 112, 180, 162, 175)/(1.21406))*2150.66
+ggplot(data = NULL, aes(x = grid_cell_density)) + geom_density()
+```
+
 ## Mortality (juvenile, winter)
 
 I have only one good data source on the survivorship of juveniles over their first winter [@milby1976]. I will generate a beta distribution based on this estimate and its uncertainty.
