@@ -45,9 +45,9 @@ template_raster[!is.na(template_raster)] <- 1
 template_raster[is.na(template_raster)] <- 0
 patch_raster <- template_raster %>% get_patches(class = 1) %>% 
   .[[1]] %>% .[[1]] %>% 
-  raster::mask(raster(bioclim1940_proj[[13]]))
+  mask(bioclim1940_proj[[13]])
 patch_raster[patch_raster != 23] <- NA
-finch_region <- Region$new(template_raster = patch_raster)
+finch_region <- Region$new(template_raster = raster(patch_raster))
 plot(finch_region$region_raster)
 ```
 
@@ -109,7 +109,7 @@ Here I will generate dispersals using some realistic values from my prior distri
 ```{r generate dispersals}
 test_dispersal <- dispersal_gen$generate(input_values =
                                            list(dispersal_p = 0.5,
-                                                dispersal_r = 500))$dispersal_data
+                                                dispersal_r = 200))$dispersal_data
 dispersal_out <- test_dispersal[[1]] %>% group_by(source_pop) %>% 
   summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
   right_join(rowid_to_column(finch_region$coordinates, "source_pop"))
@@ -120,13 +120,13 @@ ggplot(dispersal_out, aes(x, y, fill = avg_dispersal_rate)) +
   geom_tile() + 
   scale_fill_paletteer_c(`"pals::ocean.speed"`, 
                          name = "Average\nOutward\nDispersal",
-                         limits = c(0, 0.012)) +
+                         limits = c(0, 0.02)) +
   theme_map()
 ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
   geom_tile() + 
   scale_fill_paletteer_c(`"pals::ocean.speed"`, 
                          name = "Average\nInward\nDispersal",
-                         limits = c(0, 0.012)) +
+                         limits = c(0, 0.02)) +
   theme_map()
 ```
 
@@ -142,7 +142,7 @@ urban_friction_dispersal$dispersal_friction <- DispersalFriction$new(conductance
 urban_friction_dispersal$distance_data <- qread(here("Data/Input/urban_friction_distance.qs"))
 test_dispersal <- urban_friction_dispersal$generate(input_values =
                                            list(dispersal_p = 0.5,
-                                                dispersal_r = 500))$dispersal_data
+                                                dispersal_r = 300))$dispersal_data
 dispersal_out <- test_dispersal[[1]] %>% group_by(source_pop) %>% 
   summarise(avg_dispersal_rate = mean(dispersal_rate)) %>% 
   right_join(rowid_to_column(finch_region$coordinates, "source_pop"))
@@ -195,13 +195,13 @@ ggplot(dispersal_out, aes(x, y, fill = avg_dispersal_rate)) +
   geom_tile() + 
   scale_fill_paletteer_c(`"pals::ocean.speed"`, 
                          name = "Average\nOutward\nDispersal",
-                         limits = c(0, 0.012)) +
+                         limits = c(0, 0.025)) +
   theme_map()
 ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
   geom_tile() + 
   scale_fill_paletteer_c(`"pals::ocean.speed"`, 
                          name = "Average\nInward\nDispersal",
-                         limits = c(0, 0.012)) +
+                         limits = c(0, 0.02)) +
   theme_map()
 ```
 
@@ -212,7 +212,7 @@ ggplot(dispersal_in, aes(x, y, fill = avg_dispersal_rate)) +
 1.  `dispersal_source_n_k`: Dispersal proportion (p) density dependence via source population abundance divided by carrying capacity (n/k), where p is reduced via a linear slope (defined by two list items) from n/k \<= *cutoff* (p = 0) to n/k \>= *threshold*.
 2.  `dispersal_target_k`: Dispersal rate (r) density dependence via target population carrying capacity (k), where r is reduced via a linear slope (through the origin) when k \<= *threshold.*
 3.  `dispersal_target_n`: Dispersal rate (r) density dependence via target population abundance (n), where r is reduced via a linear slope (defined by two list items) from n \>= *threshold* to n \<= *cutoff* (r = 0) or visa-versa.
-4.  `dispersal_target_n_k`: Dispersal rate (r) density dependence via target population abundance divided by carrying capacity (n/k), where r is reduced via a linear slope (defined by two list items) from n/k \>= *threshold* to n/k \<= *cutoff* (r = 0) or visa-versa.
+4.  `dispersal_target_n_k`: Dispersal rate (r) density dependence via target population abundance divided by carrying capacity (n/k), where r is reduced via a linear slope (defined by two list items) from n/k \>= *threshold* to n/k \<= *cutoff* (r = 0) or vice versa.
 
 Now that I have data on habitat suitability, I can test out some of these. Let's look at probability of occurrence multiplied by a population density pulled from my literature review for that parameter.
 
@@ -224,24 +224,217 @@ ggplot() +
   ggtitle("1940")
 ```
 
-Let's try a test where the target habitat suitability for dispersal is the maximum carrying capacity (`dispersal_target_k` = 200000).
+Let's try a test with no density dependence processes. I will start with one population of 100k finches in a random cell in the range.
 
-```{r test dispersal target k}
+```{r test dispersal no density dependence}
+dispersal_gen <- DispersalGenerator$new(
+  region = finch_region,
+  dispersal_max_distance = 1500, # km
+  distance_classes = seq(10, 1500, 10),
+  distance_scale = 1000, # km
+  dispersal_function_data = b_lookup,
+  inputs = c("dispersal_p",
+             "dispersal_r"),
+  decimals = 3
+)
+distance_matrix <- qread(here("Data/Input", "distance_matrix.qs"))
+distance_data <- qread(here("Data/Input", "dispersal_distance_data.qs"))
+dispersal_gen$distance_data <- distance_data
+dispersal_gen$dispersal_matrix <- distance_matrix
 test_dispersal <- dispersal_gen$generate(input_values =
                                            list(dispersal_p = 0.5,
-                                                dispersal_r = 500))$dispersal_data
-# population_dispersal(
-#       replicates = 10,
-#       time_steps = 78,
-#       years_per_step = 1,
-#       populations = 7,
-#       demographic_stochasticity = TRUE,
-#       density_stages = c(0, 1, 1),
-#       dispersal = dispersal_gen$dispersal_data,
-#       dispersal_stages = c(0, 1, 0.5),
-#       dispersal_source_n_k = list(cutoff = -0.5, threshold = 1.5),
-#       dispersal_target_k = 5,
-#       dispersal_target_n = list(threshold = 10, cutoff = 15),
-#       simulator = simulator
-#     )
+                                                dispersal_r = 200))$dispersal_data
+dispersal_standard <- population_dispersal(
+      replicates = 10,
+      time_steps = 78,
+      years_per_step = 1,
+      populations = 6355,
+      demographic_stochasticity = TRUE,
+      density_stages = 1,
+      dispersal_stages = 1,
+      dispersal = test_dispersal,
+      dispersal_target_k = NULL,
+      dispersal_source_n_k = NULL,
+      dispersal_target_n = NULL,
+      simulator = SimulatorReference$new()
+    )
+set.seed(21343)
+random_cell <- finch_region$coordinates %>% 
+  rownames_to_column("cell") %>% mutate(across(everything(), as.numeric)) %>% 
+  sample_n(1)
+ggplot() +
+  geom_spatraster(data = template_raster > 0) +
+  scale_fill_paletteer_d("nbapalettes::rockets_city") +
+  theme(legend.position = "none") +
+  geom_point(random_cell, mapping = aes(x, y), col = "white") +
+  ggtitle("Random cell")
+stage_abundance <- c(rep(0, random_cell$cell - 1),
+    100000,
+    rep(0, 6355 - random_cell$cell)) %>% matrix(nrow = 1) %>% list()
+occupied_indices <- random_cell$cell
+cc <- carrying_capacity %>% as.matrix() %>% .[finch_region$region_indices,]
+for (i in 1:78) {
+  stage_abundance[[i + 1]] <- dispersal_standard(
+    r = 1,
+    tm = i,
+    carrying_capacity = cc[, i],
+    stage_abundance[[i]],
+    occupied_indices = which(stage_abundance[[i]] > 0)
+  )
+}
+no_dd_test <- stage_abundance %>% 
+  .[round(seq(1, 78, length.out = 6))] %>% 
+  map(as.vector) %>% 
+  map(~finch_region$raster_from_values(.)) %>% 
+  map(rast) %>% rast()
+names(no_dd_test) <- 1940:2017 %>% .[round(seq(1, 78, length.out = 6))]
+ggplot() +
+  stat_spatraster(data = no_dd_test, aes(fill = after_stat(value))) +
+  scale_fill_viridis_c(trans = "pseudo_log", na.value = NA, 
+                       breaks = c(0, 1000, 10000, 100000),
+                       labels = c(0, 1000, 10000, "100000")) +
+  facet_wrap(~lyr)
 ```
+
+Now I will try a test where dispersal proportion is dependent on source density. There is a cutoff of 0.25 density below which birds do not disperse, and a threshold of 0.75 above which there is full dispersal.
+
+```{r source density}
+source_nk_dispersal <- population_dispersal(
+      replicates = 10,
+      time_steps = 78,
+      years_per_step = 1,
+      populations = 6355,
+      demographic_stochasticity = TRUE,
+      density_stages = 1,
+      dispersal_stages = 1,
+      dispersal = test_dispersal,
+      dispersal_target_k = NULL,
+      dispersal_source_n_k = list(cutoff = 0.25, threshold = 0.75),
+      dispersal_target_n = NULL,
+      simulator = SimulatorReference$new()
+    )
+stage_abundance <- c(rep(0, random_cell$cell - 1),
+    100000,
+    rep(0, 6355 - random_cell$cell)) %>% matrix(nrow = 1) %>% list()
+occupied_indices <- random_cell$cell
+cc <- carrying_capacity %>% as.matrix() %>% .[finch_region$region_indices,]
+for (i in 1:78) {
+  stage_abundance[[i + 1]] <- source_nk_dispersal(
+    r = 1,
+    tm = i,
+    carrying_capacity = cc[, i],
+    stage_abundance[[i]],
+    occupied_indices = which(stage_abundance[[i]] > 0)
+  )
+}
+source_density_test <- stage_abundance %>% 
+  .[round(seq(1, 78, length.out = 6))] %>% 
+  map(as.vector) %>% 
+  map(~finch_region$raster_from_values(.)) %>% 
+  map(rast) %>% rast()
+names(source_density_test) <- 1940:2017 %>% .[round(seq(1, 78, length.out = 6))]
+ggplot() +
+  stat_spatraster(data = source_density_test, aes(fill = after_stat(value))) +
+  scale_fill_viridis_c(trans = "pseudo_log", na.value = NA, 
+                       breaks = c(0, 1000, 10000, 100000),
+                       labels = c(0, 1000, 10000, "100000")) +
+  facet_wrap(~lyr)
+```
+
+Dispersal is more limited in this scenario because when population densities are low, the birds do not move.
+
+Now I will run a test of target population density, in which dispersal rate to a population goes down after a threshold of 0.2 and goes to nothing after a cutoff of 0.8.
+
+```{r target density}
+target_nk_dispersal <- population_dispersal(
+      replicates = 10,
+      time_steps = 78,
+      years_per_step = 1,
+      populations = 6355,
+      demographic_stochasticity = TRUE,
+      density_stages = 1,
+      dispersal_stages = 1,
+      dispersal = test_dispersal,
+      dispersal_target_k = NULL,
+      dispersal_source_n_k = NULL,
+      dispersal_target_n = NULL,
+      dispersal_target_n_k = list(cutoff = 0.8, threshold = 0.2),
+      simulator = SimulatorReference$new()
+    )
+stage_abundance <- c(rep(0, random_cell$cell - 1),
+    100000,
+    rep(0, 6355 - random_cell$cell)) %>% matrix(nrow = 1) %>% list()
+occupied_indices <- random_cell$cell
+cc <- carrying_capacity %>% as.matrix() %>% .[finch_region$region_indices,]
+for (i in 1:78) {
+  stage_abundance[[i + 1]] <- target_nk_dispersal(
+    r = 1,
+    tm = i,
+    carrying_capacity = cc[,i],
+    stage_abundance[[i]],
+    occupied_indices = which(stage_abundance[[i]] > 0)
+  )
+}
+target_density_test <- stage_abundance %>% 
+  .[round(seq(1, 78, length.out = 6))] %>% 
+  map(as.vector) %>% 
+  map(~finch_region$raster_from_values(.)) %>% 
+  map(rast) %>% rast()
+names(target_density_test) <- 1940:2017 %>% .[round(seq(1, 78, length.out = 6))]
+ggplot() +
+  stat_spatraster(data = target_density_test, aes(fill = after_stat(value))) +
+  scale_fill_viridis_c(trans = "pseudo_log", na.value = NA, 
+                       breaks = c(0, 1000, 10000, 100000),
+                       labels = c(0, 1000, 10000, "100000")) +
+  facet_wrap(~lyr)
+```
+
+You can see a target density effect here because the birds do not disperse into the unsuitable habitat in the northeast.
+
+Here I will do a test of both together.
+
+```{r both types}
+both <- population_dispersal(
+      replicates = 10,
+      time_steps = 78,
+      years_per_step = 1,
+      populations = 6355,
+      demographic_stochasticity = TRUE,
+      density_stages = 1,
+      dispersal_stages = 1,
+      dispersal = test_dispersal,
+      dispersal_target_k = NULL,
+      dispersal_source_n_k = list(cutoff = 0.25, threshold = 0.75),
+      dispersal_target_n = NULL,
+      dispersal_target_n_k = list(cutoff = 0.8, threshold = 0.2),
+      simulator = SimulatorReference$new()
+    )
+stage_abundance <- c(rep(0, random_cell$cell - 1),
+    100000,
+    rep(0, 6355 - random_cell$cell)) %>% matrix(nrow = 1) %>% list()
+occupied_indices <- random_cell$cell
+cc <- carrying_capacity %>% as.matrix() %>% .[finch_region$region_indices,]
+for (i in 1:78) {
+  stage_abundance[[i + 1]] <- both(
+    r = 1,
+    tm = i,
+    carrying_capacity = cc[,i],
+    stage_abundance[[i]],
+    occupied_indices = which(stage_abundance[[i]] > 0)
+  )
+}
+both_test <- stage_abundance %>% 
+  .[round(seq(1, 78, length.out = 6))] %>% 
+  map(as.vector) %>% 
+  map(~finch_region$raster_from_values(.)) %>% 
+  map(rast) %>% rast()
+names(both_test) <- 1940:2017 %>% .[round(seq(1, 78, length.out = 6))]
+ggplot() +
+  stat_spatraster(data = both_test, aes(fill = after_stat(value))) +
+  scale_fill_viridis_c(trans = "pseudo_log", na.value = NA, 
+                       breaks = c(0, 1000, 10000, 100000),
+                       labels = c(0, 1000, 10000, "100000")) +
+  facet_wrap(~lyr)
+```
+
+Here the dispersal is the most limited.
