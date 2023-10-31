@@ -1,0 +1,274 @@
+---
+title: "First MG/HM Simulation"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, echo = F, include = F}
+library(raster)
+library(terra)
+library(tidyverse)
+library(poems)
+library(epizootic)
+library(qs)
+data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
+```
+
+# Finch-only simulation
+
+## Goal
+
+To produce one functional simulation of the house finch system from 1940 to 1993. I'm aware this is a lofty goal. It'll have to go by parts.
+
+## Input Data
+
+### Model Settings
+
+There are some overall model settings that need to be decided upon.
+
+```{r model settings}
+parallel_cores <- 3
+nsims <- 1
+burn_in_steps <- 0
+timesteps <- 54 + burn_in_steps
+random_seed <- 72
+```
+
+### Region
+
+```{r region}
+region <- data_dir %>% file.path("finch_region.qs") %>% qread()
+```
+
+### Spatial Autocorrelation
+
+This object calculates spatial autocorrelation among cells. This is useful for dispersal and carrying capacity calculations.
+
+```{r autocorrelation}
+env_corr <- SpatialCorrelation$new(region = region, 
+                                   amplitude = 0.99, 
+                                   breadth = 850, 
+                                   distance_scale = 1000)
+env_corr$calculate_compact_decomposition(decimals = 4)
+```
+
+### Breeding Season Length
+
+```{r breeding season length}
+burn_in <- rast(replicate(burn_in_steps, rast(
+    file.path(data_dir, "breeding_season_length.tif"), lyrs = 1
+  )))
+bsl_raster <- data_dir %>% file.path("breeding_season_length.tif") %>% 
+  rast(lyrs = 1:54) %>% c(burn_in)
+bsl <- SpatialModel$new(region = region,
+                        bsl_raster = raster(bsl_raster),
+                        layers = timesteps,
+                        bsl_values = as.matrix(bsl_raster))
+```
+
+### Model Template
+
+This object stores fixed parameters for the model (ones that are not sampled via Latin hypercube sampling.)
+
+```{r simulation model}
+model_template <- SimulationModel$new(
+  simulation_function = "disease_simulator",
+  region = region,
+  timesteps = timesteps,
+  populations = region$region_cells,
+  stages = 2,
+  compartments = 4,
+  seasons = 2,
+  demographic_stochasticity = TRUE,
+  density_dependence = "logistic",
+  results_selection = c("abundance"),
+  hs_file = "habitat_suitability_v1" #,
+  # attribute_aliases : may be needed later
+)
+```
+
+### Carrying Capacity and Initial Abundance
+
+This object is a generator. This means that it generates complex outputs (in this case, a matrix of carrying capacity throughout the simulation and a matrix of initial abundance) based on simple inputs (in this case, maximum population density and number of finches released on Jones Beach.)
+
+```{r carrying capacity generator}
+capacity_gen <- Generator$new(
+  description = "capacity",
+  region = region,
+  spatial_correlation = env_corr,
+  generate_rasters = FALSE,
+  # use but don't generate
+  burn_in_steps =  burn_in_steps,
+  generative_requirements = list(
+    hs_raster = "file",
+    initial_abundance = "function",
+    carrying_capacity = "function"
+  ),
+  inputs = c("density_max", "hs_file", "jones_beach"),
+  outputs = c("initial_abundance", "carrying_capacity")
+)
+# Here we tell the generator to import the HS file and save it as "hs_matrix"
+capacity_gen$add_file_template(
+  param = "hs_raster",
+  path_template = file.path(data_dir, "%s.tif"),
+  path_params = "hs_file",
+  file_type = "tif"
+)
+# Here we subset the hs_matrix to have only the region cells, and we add the burn in
+# Also, we tell the generator to generate the carrying_capacity based on "density_max" and "hs_matrix".
+capacity_gen$add_function_template(
+  param = "carrying_capacity",
+  function_def = function(params) {
+    hs_matrix <- hs_raster %>% as.matrix() %>%
+      .[params$region$region_indices, ]
+    hs_matrix[!is.finite(hs_matrix)] <- 0
+    # repeat the first timestep n times as burn in
+    hs_matrix <- cbind(replicate(params$burn_in_steps, hs_matrix[, 1]), hs_matrix)
+    # round the density values
+    round(params$density_max * hs_matrix)
+  },
+  call_params = c("density_max", "hs_matrix", "burn_in_steps", "region")
+)
+# Here we tell the generator what function to use to generate initial_abundance
+# based on the carrying capacity of the first time step and the
+capacity_gen$add_function_template(
+  param = "initial_abundance",
+  function_def = function(params) {
+    # Fill this in with a function to generate
+    # carrying capacity for the native range and
+    # a starting population in Jones Beach
+  },
+  call_params = c("carrying_capacity", "jones_beach")
+)
+
+system.time({
+  test_capacity <- capacity_gen$generate(input_values = list(density_max = 250, jones_beach = 50))
+})
+
+raster::plot(
+  region$raster_from_values(test_capacity[[1]]),
+  main = "Initial abundance",
+  colNA = "blue"
+)
+```
+
+### Dispersal
+
+This generator can take input abundances and shift them around according to dispersal rules.
+
+```{r dispersal generator}
+b_lookup <- data.frame(d_max = -Inf, b = 0:904)
+for (i in 2:904) {
+  b_lookup$d_max[i] <- which.max(exp(-1*(1:1501)/b_lookup$b[i]) <= 0.19)
+}
+b_lookup$d_max[905] <- 1501
+
+dispersal_gen <- DispersalGenerator$new(
+  region = region,
+  spatial_correlation = env_corr,
+  dispersal_max_distance = 1500, # km
+  distance_classes = seq(10, 1500, 10),
+  distance_scale = 1000, # km
+  dispersal_function_data = b_lookup,
+  # dispersal_friction = DispersalFriction$new(conductance = friction),
+  inputs = c("dispersal_p",
+             "dispersal_r",
+             "dispersal_source_n_k",
+             "dispersal_target_n_k"),
+  decimals = 3
+)
+
+# distance_matrix <- dispersal_gen$calculate_distance_matrix()
+# dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
+# these are pre-calculated because they're computationally intensive
+distance_data <- qread(file.path(data_dir, "dispersal_distance_data.qs"))
+dispersal_gen$distance_data <- distance_data
+
+# Test run
+sample_dispersal_data <- dispersal_gen$generate(
+  input_values = list(
+    dispersal_p = 0.5,
+    dispersal_r = 300,
+    dispersal_source_n_k = list(cutoff = 0.25, threshold = 0.75),
+    dispersal_target_n_k = list(cutoff = 0.8, threshold = 0.2)
+  )
+) %>%
+  .$dispersal_data
+head(sample_dispersal_data[[1]])
+```
+
+### Latin Hypercube Sampling
+
+I am only going to run one test simulation for now. However, I still want to generate a data set sampling all the variable parameters.
+
+```{r lhs}
+lhs_generator <- LatinHypercubeSampler$new()
+
+# Dispersal parameters
+lhs_generator$set_beta_parameter("dispersal_p_juv", alpha = 9.834837, 
+                                 beta = 2.019125)
+lhs_generator$set_beta_parameter("dispersal_p_adult", alpha = 1.5685, 
+                                 beta = 2.365266)
+lhs_generator$set_truncnorm_parameter("dispersal_r_juv", lower = 0, upper = 1500, 
+                                      mean = 725.9071, sd = sqrt(204006.6))
+lhs_generator$set_normal_parameter("dispersal_r_adult", mean = 679.4172,
+                                   sd = sqrt(18594.59))
+# May need to modify these
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_cutoff", lower = 0, 
+                                    upper = 1)
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_threshold", lower = 0, 
+                                    upper = 1)
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_cutoff", lower = 0, 
+                                    upper = 1)
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_threshold", lower = 0, 
+                                    upper = 1)
+
+# Population growth parameters
+# Allee parameter goes here
+# Initial population parameter goes here
+lhs_generator$set_uniform_parameter("density_max", lower = 186000, upper = 310000)
+lhs_generator$set_poisson_parameter("birth", lambda = 8.509018)
+
+# Transmission parameters
+lhs_generator$set_uniform_parameter("beta_Sa_winter", lower = 0, upper = 0.07588)
+lhs_generator$set_uniform_parameter("beta_Sa_summer", lower = 0, upper = 0.007784)
+lhs_generator$set_triangular_parameter("Sj_multiplier", lower = 0, upper = 8.5,
+                                       mode = 3)
+lhs_generator$set_beta_parameter("beta_I2_modifier", alpha = 1.547023,
+                                 beta = 0.4239236)
+
+# Mortality parameters
+lhs_generator$set_beta_parameter("mortality_Sj_winter", alpha = 3.962104,
+                                 beta = 2.228683)
+lhs_generator$set_beta_parameter("mortality_Sa_winter", alpha = 21.89136,
+                                 beta = 19.59278)
+lhs_generator$set_beta_parameter("mortality_Sj_summer", alpha = 14.51403,
+                                 beta = 21.53632)
+lhs_generator$set_beta_parameter("mortality_I1j_summer", alpha = 2.756404,
+                                 beta = 62.47181)
+lhs_generator$set_beta_parameter("mortality_I1j_winter", alpha = 2.756404,
+                                 beta = 62.47181)
+lhs_generator$set_beta_parameter("mortality_I1a_summer", alpha = 1.771183,
+                                 beta = 27.19457)
+lhs_generator$set_beta_parameter("mortality_I1a_winter", alpha = 1.678424,
+                                 beta = 41.15975)
+lhs_generator$set_beta_parameter("mortality_I2_modifier", alpha = 1.033367,
+                                 beta = 3.505319)
+
+# Recovery parameters
+lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,
+                                 beta = 620.1732)
+lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,
+                                 beta = 29.18489)
+
+sample_data <- lhs_generator$generate_samples(number = nsims, 
+                                              random_seed = random_seed) %>%
+    mutate(# birth = birth/summer_length, 
+    #        mortality_Sj_winter = mortality_Sj_winter / (365-summer_length),
+    #        mortality_Sa_winter = mortality_Sa_winter / (365-summer_length),
+    #        mortality_Sj_summer = mortality_Sj_summer / summer_length,
+      # The above lines have to go inside the simulator.
+           sample = 1:nsims, mortality_Sa_summer = 0
+    )
+```
