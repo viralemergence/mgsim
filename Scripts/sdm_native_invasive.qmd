@@ -373,19 +373,19 @@ autoplot(full_cv)
 Here I compare results from different SDM specifications.
 
 ```{r tune full sdm}
-doParallel::registerDoParallel()
-full_models <- full_models %>%
-   workflow_map("tune_grid", resamples = full_cv, grid = 20,
-                metrics = sdm_metric_set(),
-                verbose = TRUE)
-autoplot(full_models)
+# doParallel::registerDoParallel()
+# full_models <- full_models %>%
+#    workflow_map("tune_grid", resamples = full_cv, grid = 20,
+#                 metrics = sdm_metric_set(),
+#                 verbose = TRUE)
+# autoplot(full_models)
 ```
 
 I want to take a moment to explore the variable importance and partial dependence plots because I'm interested in the effect of urbanization on presence.
 
 ```{r explain}
-full_ensemble <- simple_ensemble() %>%
-  add_member(full_models, metric = "boyce_cont")
+# full_ensemble <- simple_ensemble() %>%
+#   add_member(full_models, metric = "boyce_cont")
 full_ensemble <- qs::qread(here("Data/Input/full_sdm_ensemble.qs"))
 full_explainer <- explain_tidysdm(full_ensemble, verbose = F)
 full_explainer %>%
@@ -438,5 +438,5 @@ suitability <- map(files2, rast) %>%
                       metric_thresh = c("boyce_cont", 0.95))}) %>% 
   map(mask, mask = template) %>% 
   rast() %>% rescale0to1()
-terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v1.tif"))
+# terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v1.tif"))
 ```
