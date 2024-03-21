@@ -13,6 +13,8 @@ library(poems)
 library(epizootic)
 library(qs)
 library(data.table)
+library(sf)
+library(gganimate)
 data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
 ```
 
@@ -31,7 +33,7 @@ There are some overall model settings that need to be decided upon.
 ```{r model settings}
 parallel_cores <- 1
 nsims <- 1
-burn_in_steps <- 2
+burn_in_steps <- 5
 timesteps <- 54 + burn_in_steps
 random_seed <- 72
 results_dir <- "~/Documents/mgsim/Data/Output/epizootic_test"
@@ -99,7 +101,7 @@ model_template <- DiseaseModel$new(
   results_selection = c("abundance"),
   results_breakdown = "stages",
   season_functions = list(siri_model_summer, siri_model_winter),
-  hs_file = "habitat_suitability_v1",
+  hs_file = "habitat_suitability_v2",
   mask_file = "native_range_mask",
   verbose = FALSE,
   # I will need to modify this for the next simulation phase
@@ -368,27 +370,10 @@ handler$run()
 Let's look at the outcome of this simulation.
 
 ```{r viz}
-sim <- results_dir |> file.path("sample_1_results.qs") |> read_rds()
-time_series <- sim$all$abundance_stages |> 
-  map(as.data.table) |> 
-  map(setnames, c("Summer", "Winter")) |> 
-  map(\(df) df[3:56,]) |> 
-  map(\(df) df[, Timestep := c(1940:1993)]) |> 
-  map(melt, id.vars = "Timestep", 
-      variable.name = "Season", value.name = "Abundance") |> 
-  map(setorder, Timestep, Season) |>
-  list_rbind() |>
-  _[, Stage := c(rep("Juvenile", 108), rep("Adult", 108))] |>
-  setorder(Timestep, Season) |>
-  identity()
-ggplot(time_series, aes(x = Timestep, y = Abundance, 
-                        group = interaction(Season, Stage),
-                        col = interaction(Season, Stage))) +
-  geom_line()
-sim_map <- sim$abundance[,,1] |> region$raster_from_values()
-plot(sim_map[[3]])
-plot(sim_map[[13]])
-plot(sim_map[[23]])
-plot(sim_map[[33]])
-plot(sim_map[[43]])
+basemap <- rnaturalearth::ne_coastline() |> 
+  st_transform(crs(region$region_raster)) |> 
+  st_crop(st_bbox(region$region_raster))
+source(here::here("Scripts/animate_sim.R"))
+animate_sim(file.path(results_dir, "sample_1_results.qs"),
+            region, 3, 1940:1993)
 ```

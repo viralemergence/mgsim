@@ -25,9 +25,9 @@ data.dir <- "~/Documents/Very_Large_Data"
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
 wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
 finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
-ts <- 1940:2017
+ts <- 1940:2016
 hofi_sample <- vroom(file.path(data.dir, "hofi_gbif_qc.tsv")) %>% 
-  filter(year < 2018) %>% 
+  filter(year < 2017) %>% 
   # filter(decimallongitude>-128, decimallongitude<(-61), 
   #        decimallatitude>15, decimallatitude<54, year<2018) %>% 
   group_by(year) %>% group_split()
@@ -113,10 +113,12 @@ Now I need to pair these presences and pseudo-absences with my environmental pre
 
 ```{r extract climate data}
 native_points <- native_thin %>% map(~transmute(., class = "presence")) %>% 
-  map2(replicate(78, slice_sample(native_abs, n = 100), simplify = F), bind_rows)
+  map2(replicate(77, slice_sample(native_abs, n = 100), simplify = F), bind_rows)
 invasive_points <- invasive_thin %>% map(~transmute(., class = "presence")) %>% 
-  map2(replicate(78, slice_sample(invasive_abs, n = 100), simplify = F), bind_rows)
-files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
+  map2(replicate(77, slice_sample(invasive_abs, n = 100), simplify = F), bind_rows)
+files2 <- list.files("~/Documents/Very_Large_Data/predictors/CHELSA",
+                     pattern = "^predictors_.+",
+                     full.names = T) %>% 
   keep(str_detect, pattern = "\\.grd$") %>% set_names(ts)
 col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
   append("urban") %>% flatten_chr()
@@ -353,7 +355,8 @@ Now that it is clear that the estimates from the native and invasive SDMs mostly
 
 ```{r prep full sdm}
 full_extract <- native_extract %>% 
-  bind_rows(invasive_extract)
+  bind_rows(invasive_extract) %>%
+  filter(!if_any(everything(), is.na))
 full_rec <- full_extract %>% 
   select(-Year) %>% 
   recipe(formula = class ~ .)
@@ -386,7 +389,8 @@ I want to take a moment to explore the variable importance and partial dependenc
 ```{r explain}
 full_ensemble <- simple_ensemble() %>%
   add_member(full_models, metric = "boyce_cont")
-full_ensemble <- qs::qread(here("Data/Input/full_sdm_ensemble.qs"))
+qs::qsave(full_ensemble, here("Data/Input/full_sdm_ensemble_v2.qs"))
+# full_ensemble <- qs::qread(here("Data/Input/full_sdm_ensemble.qs"))
 full_explainer <- explain_tidysdm(full_ensemble, verbose = F)
 full_explainer %>%
   model_parts() %>% 
@@ -407,24 +411,24 @@ This appears to be a threshold effect: some minimal amount of urbanization is re
 
 ## Predict
 
-Here I have the specific goal of producing a stack of habitat suitability maps to use for simulations later. First I will test one year, 2000, to see how it looks.
+Here I have the specific goal of producing a stack of habitat suitability maps to use for simulations later. First I will test one year, 1960, to see how it looks.
 
-```{r predict 2000}
-predict2000 <- full_ensemble %>% 
+```{r predict 1960}
+predict1960 <- full_ensemble %>% 
   predict_raster(
-    rast("~/Documents/Very_Large_Data/predictors/predictors_2000.grd") %>% 
+    rast("~/Documents/Very_Large_Data/predictors/CHELSA/predictors_1960.grd") %>% 
       `names<-`(col_names), 
     type = "prob",
     fun = "weighted_mean",
     metric_thresh = c("tss_max", 0.7))
 ggplot() + 
-  geom_spatraster(data = predict2000, aes(fill = weighted_mean)) +
+  geom_spatraster(data = predict1960, aes(fill = weighted_mean)) +
   scale_fill_paletteer_c(`"scico::bamako"`, direction = -1) +
   geom_sf(data = native_extract %>% filter(class == "presence",
-                                           Year == "2000"), alpha = 0.3) +
+                                           Year == "1960"), alpha = 0.3) +
   geom_sf(data = invasive_extract %>% filter(class == "presence",
-                                             Year == "2000"), alpha = 0.3) +
-  ggtitle("Probability of occurrence 2000")
+                                             Year == "1960"), alpha = 0.3) +
+  ggtitle("Probability of occurrence 1960")
 ```
 
 This looks pretty good, but two things have to happen first: the predictions have to be masked to the extent of the study area, and I have to scale these values from 0 to 1.
@@ -437,6 +441,6 @@ suitability <- map(files2, rast) %>%
                       fun = "weighted_mean",
                       metric_thresh = c("boyce_cont", 0.95))}) %>% 
   map(mask, mask = template) %>% 
-  rast() %>% rescale0to1()
+  rast() |> rescale0to1()
 terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v2.tif"))
 ```

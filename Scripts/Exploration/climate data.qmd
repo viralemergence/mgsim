@@ -1,0 +1,254 @@
+---
+title: "Investigation of North America climate data"
+author: "July Pilowsky"
+format: pdf
+editor: visual
+---
+
+```{r setup, include = FALSE}
+library(vroom)
+library(cowplot)
+library(paletteer)
+library(terra)
+library(tidyterra)
+library(fs)
+library(dismo)
+library(tidyverse)
+library(furrr)
+knitr::opts_chunk$set(echo = F)
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+generate <- FALSE
+```
+
+# The Problem
+
+The problem is this: there is an anomaly in some of the bioclim variables I calculated from ERA5 reanalysis climate data, out of the Copernicus climate data store.
+
+```{r visualize anomaly}
+era5_hofi <- vroom("~/Documents/Very_Large_Data/gbif_hofi_predictors.csv",
+                   show_col_types = F)
+era5_hofi |>
+  pivot_longer(mat:pcq, names_to = "bioclim_var", values_to = "bioclim_values") |>
+  filter(bioclim_var %in% c("mat", "temp_seasonality", "min_coldest_month")) |>
+  ggplot(aes(x = year, y = bioclim_values, col = bioclim_var)) +
+  geom_point() +
+  facet_grid(
+    rows = vars(bioclim_var),
+    scales = "free",
+    labeller = labeller(
+      bioclim_var = c(
+        mat = "MAT",
+        temp_seasonality = "Temp. Seasonality",
+        min_coldest_month = "Min. Coldest Month"
+      )
+    )
+  ) +
+  theme_minimal() +
+  xlab("Year") +
+  ylab("Bioclim Values") +
+  geom_vline(xintercept = 1960, linetype = "dotted") +
+  theme(
+    legend.position = "none",
+    strip.text.y = element_text(
+      angle = 0,
+      hjust = 0,
+      size = 10,
+      margin = margin(
+        t = 0,
+        r = 10,
+        b = 0,
+        l = 10
+      )
+    )
+  )
+```
+
+As you can see, there are fluctuations around the year 1960 in several climate variables, including three climate variables which are the most important bioclim variables for habitat suitability in the house finch. This causes serious fluctuations in simulations of the species.
+
+# Investigation
+
+Now I am going to investigate more deeply what is going on in this troublesome time period.
+
+```{r 1960, fig.width=8, fig.height=4}
+bioclim1958 <- rast("~/Documents/Very_Large_Data/ERA5/BioClim_1958.nc")
+bioclim1959 <- rast("~/Documents/Very_Large_Data/ERA5/BioClim_1959.nc")
+bioclim1960 <- rast("~/Documents/Very_Large_Data/ERA5/old_BioClim_1960.nc")
+bioclim1961 <- rast("~/Documents/Very_Large_Data/ERA5/BioClim_1961.nc")
+mat1960 <- ggplot() +
+  geom_spatraster(data = bioclim1960 |> select(1)) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(255, 302)) +
+  ggtitle("1960 MAT") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+mat1961 <- ggplot() +
+  geom_spatraster(data = bioclim1961 |> select(1)) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(255, 302)) +
+  ggtitle("1961 MAT") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+seas1958 <- ggplot() +
+  geom_spatraster(data = bioclim1958 |> select(4)) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(100, 1500)) +
+  ggtitle("1958 Temperature Seasonality") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+seas1959 <- ggplot() +
+  geom_spatraster(data = bioclim1959 |> select(4)) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(100, 1500)) +
+  ggtitle("1959 Temperature Seasonality") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+seas1960 <- ggplot() +
+  geom_spatraster(data = bioclim1960 |> select(4)) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(100, 1500)) +
+  ggtitle("1960 Temperature Seasonality") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+seas1961 <- ggplot() +
+  geom_spatraster(data = bioclim1961 |> select(4)) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(100, 1500)) +
+  ggtitle("1961 Temperature Seasonality") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+plot_grid(mat1960, mat1961, seas1960, seas1961, nrow = 2)
+plot_grid(seas1958, seas1959, seas1960, seas1961, nrow = 1)
+```
+
+It seems that the problems in the 1959 and 1960 data are very real.
+
+# A Solution: Re-Download ERA5
+
+The ERA5 reanalysis has been updated since I last downloaded it, so here I have re-downloaded the data for 1960 and will re-calculate the bioclim variables to see if it's all fixed.
+
+```{r new 1960}
+new1960 <- rast("~/Documents/Very_Large_data/1960 hourly levels.nc")
+daily_temp <- new1960 |> _[[1:8784]] |> tapp(index = "days", mean)
+daily_temp_min <- new1960 |> _[[1:8784]] |> tapp(index = "days", min)
+daily_temp_max <- new1960 |> _[[1:8784]] |> tapp(index = "days", max)
+daily_precip <- new1960 |> _[[8785:17568]] |> tapp(index = "days", mean)
+daily_precip_min <- new1960 |> _[[8785:17568]] |> tapp(index = "days", min)
+daily_precip_max <- new1960 |> _[[8785:17568]] |> tapp(index = "days", max)
+pq <- new1960 |> _[[8785:17568]] |> tapp(index = "months", mean) |> 
+  tapp(index = rep(1:4, each = 3, length.out = 12), mean)
+tq <- new1960 |> _[[1:8784]] |> tapp(index = "months", mean) |> 
+  tapp(index = rep(1:4, each = 3, length.out = 12), mean)
+bio1 <- terra::mean(daily_temp)
+bio2 <- terra::mean(daily_temp_max - daily_temp_min, na.rm = T)
+bio4 <- daily_temp |> tapp(index = "months", mean) |> stdev() %>% `*`(100)
+bio5 <- max(daily_temp_max)
+bio6 <- min(daily_temp_min)
+bio7 <- bio5 - bio6
+bio3 <- bio2/bio7*100
+bio8 <- selectRange(tq, terra::which.max(pq))
+bio9 <- selectRange(tq, terra::which.min(pq))
+bio10 <- selectRange(tq, terra::which.max(tq))
+bio11 <- selectRange(tq, terra::which.min(tq))
+bio12 <- terra::mean(daily_precip)
+bio13 <- daily_precip |> tapp(index = "months", mean) |> max()
+bio14 <- daily_precip |> tapp(index = "months", mean) |> min()
+bio15 <- daily_precip |> tapp(index = "months", mean) |> stdev() |> (`/`)(bio12) |> 
+  (`*`)(100)
+bio16 <- max(pq)
+bio17 <- min(pq)
+bio18 <- selectRange(pq, terra::which.max(tq))
+bio19 <- selectRange(pq, terra::which.min(tq))
+new_bioclim1960 <- list(bio1, bio2, bio3, bio4, bio5, bio6, bio7, bio8, bio9,                          bio10, bio11, bio12, bio13, bio14, bio15, bio16, bio17, 
+                        bio18, bio19) |> rast()
+names(new_bioclim1960) <- names(bioclim1960)
+new_mat1960 <- mat1960 <- ggplot() +
+  geom_spatraster(data = bio1) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(255, 302)) +
+  ggtitle("New 1960 MAT") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+new_seas1960 <- ggplot() +
+  geom_spatraster(data = bio4) +
+  scale_fill_whitebox_c(palette = "deep", limits = c(100, 1500)) +
+  ggtitle("New 1960 Temperature Seasonality") +
+  theme(axis.text.x = element_text(
+      angle = -25,
+      hjust = 0,
+      size = 10))
+plot_grid(mat1960, seas1960, new_mat1960, new_seas1960, mat1961, seas1961, nrow = 3)
+```
+
+The new 1960 data look much less anomalous.
+
+```{r write raster, include=FALSE}
+new_bioclim1960 |> resample(bioclim1960) |> 
+  terra::writeRaster("~/Documents/Very_Large_Data/ERA5/BioClim_1960.nc")
+```
+
+Let's look at an updated time series using the new data to make sure:
+
+```{r checkup}
+era5_hofi_new <- vroom("~/Documents/Very_Large_Data/gbif_hofi_predictors_v2.csv",
+                   show_col_types = F)
+era5_hofi_new |>
+  pivot_longer(mat:pcq, names_to = "bioclim_var", values_to = "bioclim_values") |>
+  filter(bioclim_var %in% c("mat", "temp_seasonality", "min_coldest_month")) |>
+  ggplot(aes(x = year, y = bioclim_values, col = bioclim_var)) +
+  geom_point() +
+  facet_grid(
+    rows = vars(bioclim_var),
+    scales = "free",
+    labeller = labeller(
+      bioclim_var = c(
+        mat = "MAT",
+        temp_seasonality = "Temp. Seasonality",
+        min_coldest_month = "Min. Coldest Month"
+      )
+    )
+  ) +
+  theme_minimal() +
+  xlab("Year") +
+  ylab("Bioclim Values") +
+  geom_vline(xintercept = 1960, linetype = "dotted") +
+  theme(
+    legend.position = "none",
+    strip.text.y = element_text(
+      angle = 0,
+      hjust = 0,
+      size = 10,
+      margin = margin(
+        t = 0,
+        r = 10,
+        b = 0,
+        l = 10
+      )
+    )
+  )
+```
+
+Now 1960 looks just like any other year. However, this still raises concerns. If 1960 was so radically different from the previous time I downloaded it, mightn't that be true of all the data I downloaded from the ERA5 reanalysis? I would re-download the whole thing and check, but the Copernicus data store is slammed right now. Which turns my attention to...
+
+# A Solution: CHELSA data
+
+CHELSA Climate has a dataset going from 1901-2016. Let's have a look at it.
+
+```{r chelsa inspect}
+chelsa_9_2013 <- rast("~/Documents/Very_Large_Data/CHELSA/prec/CHELSAcruts_prec_9_2013_V.1.0.tif")
+chelsa_9_2013 |> plot()
+```
+
+These are global, have a very fine spatial resolution, and use a negative number (-32768) as a placeholder for NA for the oceans. All of this needs to be fixed for my purposes.
+
+What I'm going to do is write code to calculate bioclim variables for one year, and if that seems to work out, I will scale it up to all years.
+
+```{r process 1960}
+# source(calculate_bioclim.R)
+```

@@ -23,14 +23,14 @@ proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=W
 years <- 1940:2021 %>% as.character()
 # plan(multisession)
 # future_walk(years, function(x) {
-#   if (!file.exists(paste0('~/Documents/Very Large Data/', "BioClim_", x, ".nc"))) {
+#   if (!file.exists(paste0('~/Documents/Very_Large_Data/', "BioClim_", x, ".nc"))) {
 #     BioClim(
 #       Y_start = x,
 #       Y_end = x,
 #       T_res = 'day',
 #       Extent = bbox,
 #       DataSet = 'era5',
-#       Dir = '~/Documents/Very Large Data/',
+#       Dir = '~/Documents/Very_Large_Data/',
 #       Keep_Monthly = TRUE,
 #       API_User = user,
 #       API_Key = key,
@@ -42,7 +42,8 @@ years <- 1940:2021 %>% as.character()
 library(tidyverse)
 extract <- terra::extract
 project <- terra::project
-urban_rasters <- "~/Documents/Very_Large_Data/baseline/zip/" %>%
+select <- dplyr::select
+urban_rasters <- "~/Documents/Very_Large_Data/Hyde 3.2/zip/" %>%
   list.files(full.names = TRUE, include.dirs = TRUE) %>%
   discard(str_detect, pattern = "\\.zip") %>%
   keep(str_detect, pattern = "pop") %>%
@@ -125,7 +126,7 @@ finch_region <- qs::qread(here::here("Data/Input/finch_region.qs"))
 gap_filler <- finch_region$region_raster
 gap_filler[!is.na(gap_filler)] <- 0
 files <- "~/Documents/Very_Large_Data/ERA5" %>% 
-  list.files(full.names = T) %>%
+  list.files(full.names = T, pattern = "^BioClim_.+nc$") %>%
   .[1:78]
 plan(multisession)
 future_walk(1:length(files), function(i) {
@@ -158,14 +159,16 @@ Now I want to extract data from these twenty predictors for the GBIF points I ha
 
 ```{r extract data, message = F}
 library(vroom)
-hofi_sample <- vroom("~/Documents/Very Large Data/hofi_gbif_qc.tsv") %>% 
+hofi_sample <- vroom("~/Documents/Very_Large_Data/hofi_gbif_qc.tsv") %>% 
   filter(decimallongitude>-128, decimallongitude<(-61), 
          decimallatitude>15, decimallatitude<54, year<2018) %>% 
   group_by(year) %>% group_split()
 points <- hofi_sample %>% map(~select(., decimallongitude, decimallatitude)) %>% 
   map(sf_project, from = crs(urban_raster[[1]]), to = proj_crs) %>% 
   set_names(ts)
-files2 <- list.files("~/Documents/Very_Large_Data/predictors", full.names = T) %>% 
+files2 <- list.files("~/Documents/Very_Large_Data/predictors", 
+                     pattern = "^predictors_.+",
+                     full.names = T) %>% 
   keep(str_detect, pattern = "\\.grd$") %>% set_names(ts)
 col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
   append("urban") %>% flatten_chr()
@@ -282,7 +285,7 @@ overlap <- values(grid.clim.nat$w + grid.clim.inv$w) %>%
 overlap/addition
 ```
 
-82.5% overlap in the niche space of the native and invasive, which means I can probably safely pool the data across the range for the SDM.
+72.7% overlap in the niche space of the native and invasive, which means I can probably safely pool the data across the range for the SDM.
 
 Now I will export my data on the background points as well as on the occurrences/niches.
 
@@ -300,7 +303,7 @@ partition <- pcs %>% select(gbifid, countrycode, locality, stateprovince, decima
                decimallongitude, coordinateuncertaintyinmeters, month, year, bio1:urban,
                Range)
 names(partition)[10:28] <- columns$name
-vroom_write(partition, "~/Documents/Very Large Data/gbif_hofi_predictors.csv")
+vroom_write(partition, "~/Documents/Very_Large_Data/gbif_hofi_predictors_v2.csv")
 background_inv <- bg_points_inv %>% map(as.data.frame) %>% list_rbind() %>% 
   bind_cols(bg_extract_inv) %>% 
   set_names(c("x", "y", "Year", columns$name, "urban")) %>% 
@@ -310,5 +313,5 @@ background_nat <- bg_points_nat %>% map(as.data.frame) %>% list_rbind() %>%
   set_names(c("x", "y", "Year", columns$name, "urban")) %>% 
   mutate(Range = "Native")
 bind_rows(background_inv, background_nat) %>% 
-  vroom_write("~/Documents/Very Large Data/hofi_background_points.csv")
+  vroom_write("~/Documents/Very_Large_Data/hofi_background_points_v2.csv")
 ```
