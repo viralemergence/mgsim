@@ -4,13 +4,14 @@ library(tidyverse)
 library(poems)
 library(epizootic)
 library(qs)
+fail <- setdiff(c(1:10000), list.files(here::here("Data/Output/Round 1")) |> map_chr(\(x) str_extract(x, "[0-9]+")) |> as.numeric())
 data_dir <- here::here("Data/Input")
 parallel_cores <- 8
 nsims <- 10000
 burn_in_steps <- 5
 timesteps <- 54 + burn_in_steps
 random_seed <- 72
-results_dir <- here::here("Data/Output/epizootic_test")
+results_dir <- here::here("Data/Output/Round 1.5")
 region <- data_dir %>% file.path("finch_region.qs") %>% qread()
 env_corr <- SpatialCorrelation$new(region = region,
                                    amplitude = 0.99,
@@ -110,8 +111,8 @@ capacity_gen$add_file_template(
 capacity_gen$add_function_template(
   param = "carrying_capacity",
   function_def = function(params) {
-    hs_matrix <- params$hs_raster %>% as.matrix() %>%
-      .[params$region$region_indices, 1:(params$time_steps - params$burn_in_steps)]
+    hs_matrix <- params$hs_raster |> as.matrix() |>
+      _[params$region$region_indices, 1:(params$time_steps - params$burn_in_steps)]
     hs_matrix[!is.finite(hs_matrix)] <- 0
     # repeat the first timestep n times as burn in
     hs_matrix <- cbind(replicate(params$burn_in_steps, hs_matrix[, 1]), hs_matrix)
@@ -127,10 +128,10 @@ capacity_gen$add_function_template(
 capacity_gen$add_function_template(
   param = "initial_abundance",
   function_def = function(params) {
-    hs_matrix <- params$hs_raster %>%
-      raster::mask(params$mask_raster) %>%
-      as.matrix() %>%
-      .[params$region$region_indices, ] %>%
+    hs_matrix <- params$hs_raster |>
+      raster::mask(params$mask_raster) |>
+      as.matrix() |>
+      _[params$region$region_indices, ] |>
       identity()
     hs_matrix[!is.finite(hs_matrix)] <- 0
     hs_vector <- hs_matrix[, 1]
@@ -276,7 +277,7 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
          mortality_Rj_winter = mortality_Sj_winter,
          mortality_Ra_winter = mortality_Sa_winter)
 handler <- SimulationHandler$new(
-  sample_data = sample_data[32,],
+  sample_data = sample_data[fail,],
   model_template = model_template,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
@@ -284,4 +285,9 @@ handler <- SimulationHandler$new(
   parallel_cores = parallel_cores,
   results_dir = results_dir
 )
-handler$run()
+sim_log <- handler$run()
+
+results_dir %>% list.files(full.names = T, pattern = "qs") %>%
+  gtools::mixedsort() %>%
+  walk2(map_chr(fail[-sim_log$failed_indices], \(i) paste0(here::here("Data/Output/Round 1"), "/sample_", i, "_results.qs")),
+        \(x, y) fs::file_move(x, y))
