@@ -2,16 +2,15 @@ library(raster)
 library(terra)
 library(tidyverse)
 library(poems)
-library(furrr)
 library(epizootic)
 library(qs)
 data_dir <- here::here("Data/Input")
-parallel_cores <- 10
+parallel_cores <- 8
 nsims <- 10000
 burn_in_steps <- 5
 timesteps <- 54 + burn_in_steps
 random_seed <- 72
-results_dir <- here::here("Data/Output/Round 1")
+results_dir <- here::here("Data/Output/epizootic_test")
 region <- data_dir %>% file.path("finch_region.qs") %>% qread()
 env_corr <- SpatialCorrelation$new(region = region,
                                    amplitude = 0.99,
@@ -52,7 +51,7 @@ model_template <- DiseaseModel$new(
   results_selection = c("abundance"),
   results_breakdown = "stages",
   season_functions = list(siri_model_summer, siri_model_winter),
-  hs_file = "habitat_suitability_v2",
+  hs_file = "habitat_suitability_v3",
   mask_file = "native_range_mask",
   verbose = FALSE,
   # I will need to modify this for the next simulation phase
@@ -147,7 +146,7 @@ capacity_gen$add_function_template(
 system.time({
   test_capacity <- capacity_gen$generate(input_values = list(density_max = 186000,
                                                              initial_release = 50,
-                                                             hs_file = "habitat_suitability_v1",
+                                                             hs_file = "habitat_suitability_v3",
                                                              mask_file = "native_range_mask"))
 })
 
@@ -277,7 +276,7 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
          mortality_Rj_winter = mortality_Sj_winter,
          mortality_Ra_winter = mortality_Sa_winter)
 handler <- SimulationHandler$new(
-  sample_data = sample_data,
+  sample_data = sample_data[32,],
   model_template = model_template,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,

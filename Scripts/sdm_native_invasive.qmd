@@ -442,5 +442,11 @@ suitability <- map(files2, rast) %>%
                       metric_thresh = c("boyce_cont", 0.95))}) %>% 
   map(mask, mask = template) %>% 
   rast() |> rescale0to1()
-terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v2.tif"))
+# Rasterization of the coastline landed Jones Beach in the ocean so it has to be
+# interpolated back in so the house finches can be introduced there
+adjacent(suitability, 6075, 8) |> as.vector() -> indices
+for (l in 1:nlyr(suitability)) {
+  suitability[[l]][6075] <- suitability[[l]][indices][,1] |> mean(na.rm = T)
+}
+terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v3.tif"))
 ```

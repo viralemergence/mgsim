@@ -22,10 +22,10 @@ animate_sim <- function(path, region, burn_in, years) {
   anim <- ggplot() +
     geom_sf(data = basemap) +
     geom_tile(data = dt, mapping = aes(x, y, fill = Abundance)) +
-    scale_fill_viridis_c(labels = label_comma()) +
+    scale_fill_viridis_c(labels = scales::label_comma()) +
     transition_time(Time) +
     labs(title = "Year: {frame_time}") +
     theme_void()
 
-  animate(anim, nframes = length(unique(dt$Time)))
+  return(animate(anim, nframes = length(unique(dt$Time))))
 }

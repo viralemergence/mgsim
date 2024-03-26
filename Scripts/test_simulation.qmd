@@ -1,8 +1,9 @@
 ---
 title: "First MG/HM Simulation"
 author: "July Pilowsky"
-format: html
-editor: visual
+output: 
+  html_document:
+    self_contained: true
 ---
 
 ```{r setup, echo = F, include = F}
@@ -101,7 +102,7 @@ model_template <- DiseaseModel$new(
   results_selection = c("abundance"),
   results_breakdown = "stages",
   season_functions = list(siri_model_summer, siri_model_winter),
-  hs_file = "habitat_suitability_v2",
+  hs_file = "habitat_suitability_v3",
   mask_file = "native_range_mask",
   verbose = FALSE,
   # I will need to modify this for the next simulation phase
@@ -203,7 +204,7 @@ capacity_gen$add_function_template(
 system.time({
   test_capacity <- capacity_gen$generate(input_values = list(density_max = 186000, 
                                                              initial_release = 50,
-                                                             hs_file = "habitat_suitability_v1",
+                                                             hs_file = "habitat_suitability_v3",
                                                              mask_file = "native_range_mask"))
 })
 
@@ -375,5 +376,5 @@ basemap <- rnaturalearth::ne_coastline() |>
   st_crop(st_bbox(region$region_raster))
 source(here::here("Scripts/animate_sim.R"))
 animate_sim(file.path(results_dir, "sample_1_results.qs"),
-            region, 3, 1940:1993)
+            region, 5, 1940:1993)
 ```
