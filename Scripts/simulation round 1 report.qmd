@@ -31,11 +31,6 @@ Round 1 simulations went from 1940 to 1993, the year before the first MG outbrea
 I fully intend to implement a more formal validation process in the future. However, for now, I have two quick-and-dirty validation metrics. The first: in the final timestep of the simulation, are there house finches in Washington, DC (the location of the initial MG outbreak)? The second: is the range size of the house finch close to what we know the range size ought to be in 1993, measured in number of grid cells in the study region?
 
 ```{r, echo = F, message = F}
-hofi_sample <- vroom::vroom(file.path(data.dir, "hofi_gbif_qc.tsv")) %>% 
-  filter(year < 2017) |> 
-  select(decimallongitude, decimallatitude) %>% 
-  sf_project(from = wgs84, to = proj_crs) %>%
-  raster::rasterize(region$region_raster)
 dc <- list.files(results_dir, pattern = "qs", full.names = TRUE) |>
   gtools::mixedsort() %>%
   future_map_lgl(function(file) {
@@ -48,27 +43,25 @@ ranges <- list.files(results_dir, pattern = "qs", full.names = TRUE) |>
     mat <- qread(file)
     sum(mat$abundance[, 59, 1] > 0)
   })
-print(paste0("Out of 10,000 simulations, ", sum(dc), " had birds present in DC."))
+print(paste0("Out of ", length(dc), " simulations, ", sum(dc), " had birds present in DC."))
 ggplot(data = NULL, aes(x = ranges)) + geom_histogram() + 
-  geom_vline(xintercept = sum(raster::values(hofi_sample > 0), na.rm = T),
+  geom_vline(xintercept = 4511,
              linetype = "dashed")
 ```
 
-None of the simulations meet the minimum requirement of having birds in DC in 1993. None of the simulations even get close to the target range size of 4,511 cells.
-
 # The Top Performers
 
-Let's look at the simulation that hit the largest range size, #5564.
+Let's look at the simulation that has birds in DC and gets closest to the true range size: #4615.
 
 ```{r viz}
-qread(file.path(results_dir, "sample_5564_results.qs"))$abundance[ , 59, 1] |> 
+qread(file.path(results_dir, "sample_4615_results.qs"))$abundance[ , 59, 1] |> 
   region$raster_from_values() |> 
   gplot() + geom_tile(aes(fill = value)) + theme_map() +
   scale_fill_paletteer_c("grDevices::Rocket", transform = "log1p",
                          breaks = c(0, 10, 100, 1000, 10000, 100000),
                          name = "Abundance") +
   ggtitle("Summer 1993")
-qread(file.path(results_dir, "sample_5564_results.qs"))$abundance[ , 59, 2] |> 
+qread(file.path(results_dir, "sample_4615_results.qs"))$abundance[ , 59, 2] |> 
   region$raster_from_values() |> 
   gplot() + geom_tile(aes(fill = value)) + theme_map() +
   scale_fill_paletteer_c("grDevices::Rocket", transform = "log1p",
@@ -77,4 +70,4 @@ qread(file.path(results_dir, "sample_5564_results.qs"))$abundance[ , 59, 2] |>
   ggtitle("Winter 1993/94")
 ```
 
-We can see here that there is a dynamic of winter transients (dispersal occurs at the beginning of winter) that do not survive the winter, so the range essentially never expands.
+Unfortunately this is still not a very accurate picture of the house finch invasion, showing the limitations of the validation metrics I have used here.
