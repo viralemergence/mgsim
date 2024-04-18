@@ -10,7 +10,7 @@ nsims <- 10000
 burn_in_steps <- 5
 timesteps <- 54 + burn_in_steps
 random_seed <- 72
-results_dir <- here::here("Data/Output/Round 1")
+results_dir <- here::here("Data/Output/Round 1.5")
 region <- data_dir %>% file.path("finch_region.qs") %>% qread()
 env_corr <- SpatialCorrelation$new(region = region,
                                    amplitude = 0.99,
@@ -276,7 +276,7 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
          mortality_Rj_winter = mortality_Sj_winter,
          mortality_Ra_winter = mortality_Sa_winter)
 handler <- SimulationHandler$new(
-  sample_data = sample_data,
+  sample_data = sample_data[c(4, 38),],
   model_template = model_template,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
