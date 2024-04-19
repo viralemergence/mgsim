@@ -6,7 +6,7 @@ library(epizootic)
 library(qs)
 library(here)
 data_dir <- here("Data/Input")
-parallel_cores <- 1
+parallel_cores <- 4
 nsims <- 3211
 burn_in_steps <- 0
 timesteps <- 23 + burn_in_steps
@@ -271,7 +271,7 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
          recovery_I2a_winter = recovery_I2) |>
   right_join(round1_sample_data) |>
   rename(abundance_file = sample)
-write_csv(sample_data, file.path(results_dir, "sample_data_round2.csv"))
+write_csv(sample_data, file.path(data_dir, "sample_data_round2.csv"))
 handler <- SimulationHandler$new(
   sample_data = sample_data,
   model_template = model_template,

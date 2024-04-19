@@ -1,0 +1,67 @@
+---
+title: "House Finch Simulation Round 2"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup, include = F}
+library(poems)
+library(qs)
+library(tidyverse)
+library(furrr)
+library(sf)
+library(rasterVis)
+library(cowplot)
+library(paletteer)
+plan(sequential)
+results_dir <- here::here("Data/Output/Round 2")
+data.dir <- "~/Documents/Very_Large_Data"
+region <- here::here("Data/Input/finch_region.qs") |> qread()
+proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
+wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ID[\"EPSG\",6326]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433],\n        ID[\"EPSG\",8901]],\n    CS[ellipsoidal,2],\n        AXIS[\"longitude\",east,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]],\n        AXIS[\"latitude\",north,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433,\n                ID[\"EPSG\",9122]]]]"
+```
+
+# What I did in Round 2
+
+Round 2 simulations went from 1994 to 2016. I filtered down the first 10,000 simulations to the ones that ended with house finches in Washington, DC in 1993. 3,211 remained. These simulations I continued from 1994 to 2016, introducing infected birds in DC at the first time step.
+
+# Validation
+
+I fully intend to implement a more formal validation process in the future. However, for now, I have two quick-and-dirty validation metrics. The first: does the disease persist until 2016? The second: does the house finch population persist until 2016?
+
+```{r, echo = F, message = F}
+survival <- list.files(results_dir, pattern = "qs", full.names = TRUE) |>
+  gtools::mixedsort() %>%
+  future_map_lgl(function(file) {
+    mat <- qread(file)
+    mat$all$abundance[23, 2] > 0
+  })
+prevalences <- list.files(results_dir, pattern = "qs", full.names = TRUE) |>
+  gtools::mixedsort() %>%
+  future_map(function(file) {
+    mat <- qread(file)
+    prevalence <- (mat$all$abundance_segments$stage_1_compartment_2 +
+                   mat$all$abundance_segments$stage_2_compartment_2 +
+                   mat$all$abundance_segments$stage_1_compartment_4 +
+                   mat$all$abundance_segments$stage_2_compartment_4) /
+                  (mat$all$abundance_segments$stage_1_compartment_1 +
+                   mat$all$abundance_segments$stage_2_compartment_1 +
+                   mat$all$abundance_segments$stage_1_compartment_3 +
+                   mat$all$abundance_segments$stage_2_compartment_3)
+    return(prevalence[23, 2])
+  })
+print(paste0("Out of ", length(survival), " simulations, ", sum(survival), " survived to 2016."))
+ggplot(data = NULL, aes(x = prevalences)) + geom_histogram() + 
+  xlab("Prevalence in 2016") + ylab("Number of Simulations")
+```
+
+# The Top Performers
+
+Let's look at the simulation that has birds in DC and gets closest to the true range size: #4615.
+
+```{r viz}
+qread(file.path(results_dir, "sample_4615_results.qs"))$abundance[ , 59, 1] |>  region$raster_from_values() 
+gplot() + geom_tile(aes(fill = value)) + theme_map() + scale_fill_paletteer_c("grDevices::Rocket", transform = "log1p", breaks = c(0, 10, 100, 1000, 10000, 100000), name = "Abundance") + ggtitle("Summer 1993") qread(file.path(results_dir, "sample_4615_results.qs"))$abundance[ , 59, 2] |>  region$raster_from_values()
+gplot() + geom_tile(aes(fill = value)) + theme_map() + scale_fill_paletteer_c("grDevices::Rocket", transform = "log1p", breaks = c(0, 10, 100, 1000, 10000, 100000), name = "Abundance") + ggtitle("Winter 1993/94")
+```
