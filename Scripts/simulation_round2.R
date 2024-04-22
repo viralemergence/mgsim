@@ -6,7 +6,7 @@ library(epizootic)
 library(qs)
 library(here)
 data_dir <- here("Data/Input")
-parallel_cores <- 4
+parallel_cores <- 16
 nsims <- 3211
 burn_in_steps <- 0
 timesteps <- 23 + burn_in_steps
@@ -254,8 +254,7 @@ round1_sample_data <- read_csv(file.path(data_dir, "sample_data_round1.csv")) |>
 
 sample_data <- lhs_generator$generate_samples(number = nsims,
                                               random_seed = random_seed) |>
-  mutate(sample = 1:nsims,
-         beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
+  mutate(beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
          beta_Sj_summer = beta_Sa_summer * Sj_multiplier,
          beta_Ra_winter = beta_Sa_winter * beta_I2_modifier,
          beta_Rj_winter = beta_Sj_winter * beta_I2_modifier,
@@ -269,11 +268,11 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
          recovery_I1a_winter = recovery_I1,
          recovery_I2j_winter = recovery_I2,
          recovery_I2a_winter = recovery_I2) |>
-  right_join(round1_sample_data) |>
+  bind_cols(round1_sample_data) |>
   rename(abundance_file = sample)
 write_csv(sample_data, file.path(data_dir, "sample_data_round2.csv"))
 handler <- SimulationHandler$new(
-  sample_data = sample_data,
+  sample_data = sample_data[1001,],
   model_template = model_template,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
