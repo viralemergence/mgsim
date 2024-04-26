@@ -6,12 +6,12 @@ library(epizootic)
 library(qs)
 library(here)
 data_dir <- here("Data/Input")
-parallel_cores <- 16
+parallel_cores <- 18
 nsims <- 3211
 burn_in_steps <- 0
 timesteps <- 23 + burn_in_steps
 random_seed <- 324
-results_dir <- here("Data/Output/breeding season counterfactual")
+results_dir <- here("Data/Output/Round 2")
 region <- data_dir %>% file.path("finch_region.qs") %>% qread()
 env_corr <- SpatialCorrelation$new(region = region,
                                    amplitude = 0.99,
@@ -177,8 +177,8 @@ capacity_gen$add_file_template(
 capacity_gen$add_function_template(
   param = "carrying_capacity",
   function_def = function(params) {
-    hs_matrix <- params$hs_raster %>% as.matrix() %>%
-      .[params$region$region_indices, 55:(54 + params$time_steps - params$burn_in_steps)]
+    hs_matrix <- params$hs_raster |> as.matrix() |>
+      _[params$region$region_indices, 55:(54 + params$time_steps - params$burn_in_steps)]
     hs_matrix[!is.finite(hs_matrix)] <- 0
     # repeat the first timestep n times as burn in
     if (params$burn_in_steps > 1) {
@@ -272,7 +272,7 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
   rename(abundance_file = sample)
 write_csv(sample_data, file.path(data_dir, "sample_data_round2.csv"))
 handler <- SimulationHandler$new(
-  sample_data = sample_data[1001,],
+  sample_data = sample_data,
   model_template = model_template,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
