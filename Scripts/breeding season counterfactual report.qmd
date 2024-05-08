@@ -24,7 +24,7 @@ wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n      
 
 # What I did in Round 2
 
-Round 2 simulations went from 1994 to 2016. I filtered down the first 10,000 simulations to the ones that ended with house finches in Washington, DC in 1993. 3,211 remained. These simulations I continued from 1994 to 2016, introducing infected birds in DC at the first time step.
+Round 2 simulations went from 1994 to 2016. I filtered down the first 10,000 simulations to the ones that ended with house finches in Washington, DC in 1993. 3,211 remained. These simulations I continued from 1994 to 2016, introducing infected birds in DC at the first time step. These simulations started in the breeding season.
 
 # Validation
 

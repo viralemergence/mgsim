@@ -1,7 +1,11 @@
 animate_sim <- function(path, region, burn_in, years) {
 
   sim <- qread(path)
-  arr <- sim$abundance[, burn_in:ncol(sim$abundance),]
+  if (burn_in > 0) {
+    arr <- sim$abundance[, burn_in:ncol(sim$abundance),]
+  } else {
+    arr <- sim$abundance
+  }
   season <- c(0, 0.5)
   # Create a data.frame with the correct x, y, z coordinates
   df <- expand.grid(Population = 1:dim(arr)[1], y = 1:dim(arr)[2],
