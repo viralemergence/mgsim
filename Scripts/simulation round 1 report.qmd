@@ -15,7 +15,7 @@ library(rasterVis)
 library(cowplot)
 library(paletteer)
 plan(sequential)
-results_dir <- here::here("Data/Output/Round 1")
+results_dir <- here::here("Data/Output/Round 1 daily")
 data.dir <- "~/Documents/Very_Large_Data"
 region <- here::here("Data/Input/finch_region.qs") |> qread()
 proj_crs <- "+proj=aea +lon_0=-94.5 +lat_1=21.5 +lat_2=47.5 +lat_0=34.5 +datum=WGS84 +units=m +no_defs"
@@ -51,17 +51,17 @@ ggplot(data = NULL, aes(x = ranges)) + geom_histogram() +
 
 # The Top Performers
 
-Let's look at the simulation that has birds in DC and gets closest to the true range size: #4615.
+Let's look at the simulation that has birds in DC and gets closest to the true range size: #9.
 
 ```{r viz}
-qread(file.path(results_dir, "sample_4615_results.qs"))$abundance[ , 59, 1] |> 
+qread(file.path(results_dir, "sample_9_results.qs"))$abundance[ , 59, 1] |> 
   region$raster_from_values() |> 
   gplot() + geom_tile(aes(fill = value)) + theme_map() +
   scale_fill_paletteer_c("grDevices::Rocket", transform = "log1p",
                          breaks = c(0, 10, 100, 1000, 10000, 100000),
                          name = "Abundance") +
   ggtitle("Summer 1993")
-qread(file.path(results_dir, "sample_4615_results.qs"))$abundance[ , 59, 2] |> 
+qread(file.path(results_dir, "sample_9_results.qs"))$abundance[ , 59, 2] |> 
   region$raster_from_values() |> 
   gplot() + geom_tile(aes(fill = value)) + theme_map() +
   scale_fill_paletteer_c("grDevices::Rocket", transform = "log1p",
