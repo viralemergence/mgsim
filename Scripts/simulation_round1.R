@@ -5,12 +5,17 @@ library(poems)
 library(epizootic)
 library(qs)
 data_dir <- here::here("Data/Input")
-parallel_cores <- 12
+parallel_cores <- 18
 nsims <- 10000
 burn_in_steps <- 5
 timesteps <- 54 + burn_in_steps
 random_seed <- 72
 results_dir <- here::here("Data/Output/Round 1 daily")
+unrun <- results_dir %>% list.files(pattern = "qs") %>%
+  str_extract("[0-9]+") %>%
+  setdiff(1:10000, .) %>%
+  as.numeric()
+results_dir <- here::here("Data/Output/scratch")
 region <- data_dir %>% file.path("finch_region.qs") %>% qread()
 env_corr <- SpatialCorrelation$new(region = region,
                                    amplitude = 0.99,
@@ -276,7 +281,7 @@ sample_data <- lhs_generator$generate_samples(number = nsims,
          mortality_Rj_winter = mortality_Sj_winter,
          mortality_Ra_winter = mortality_Sa_winter)
 handler <- SimulationHandler$new(
-  sample_data = sample_data,
+  sample_data = sample_data[unrun,],
   model_template = model_template,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,

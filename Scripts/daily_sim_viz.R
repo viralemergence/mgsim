@@ -7,10 +7,13 @@ library(here)
 library(abind)
 library(data.table)
 library(sf)
+sim <- 12
 
 # Load data
-round1 <- here("Data/Output/Round 1/sample_2_results.qs") |> qread()
-round2 <- here("Data/Output/Round 2/sample_2_results.qs") |> qread()
+round1 <- paste0("Data/Output/Round 1 daily/sample_", sim, "_results.qs") %>%
+  here() |> qread()
+round2 <- paste0("Data/Output/Round 2 daily/sample_", sim, "_results.qs") %>%
+  here() |> qread()
 region <- here("Data/Input/finch_region.qs") |> qread()
 years <- c(1940:2016)
 basemap <- rnaturalearth::ne_coastline() |>
