@@ -1,0 +1,434 @@
+---
+title: "Combining epizootic and metaRange"
+author: "July Pilowsky"
+format: html
+---
+
+```{r setup}
+library(tidyverse)
+library(metaRange)
+library(epizootic)
+library(poems)
+library(qs)
+library(terra)
+library(furrr)
+data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
+random_seed <- 90
+```
+
+# Goal
+
+My goal here is to work out how to combine functionality from my package `epizootic` and the new package `metaRange` in order to run house finch / MG simulations. The hope is that these will be faster than simulations run on epizootic alone. Even if it doesn't work out, the exercise will familiarize me much more deeply with `metaRange`.
+
+# Import data
+
+For `metaRange`, all spatial datasets have to be in the form of `SpatRasterDatasets` from `terra`. These objects can hold sub-datasets, so I will combine all the environmental variables (habitat suitability and breeding season length) into one `SpatRasterDataset`.
+
+```{r create environment}
+landscape <- c(file.path(data_dir, "breeding_season_length.tif"), 
+  file.path(data_dir, "habitat_suitability_v3.tif")) |> map(rast) |> 
+  map(\(x) x[[1:77]]) |> sds()
+names(landscape) <- c("breeding_season_length", "habitat_suitability")
+```
+
+# Set up simulation object
+
+```{r create simulation object}
+set_verbosity(2)
+sim <- create_simulation(
+  source_environment = landscape,
+  ID = "test_simulation",
+  seed = 1566
+)
+sim$set_time_layer_mapping(c(rep_len(1, 5), 2:77))
+```
+
+With this, I have added a five-timestep burn-in.
+
+# Add traits
+
+Each simulation object in metaRange can have one or more species with one or more traits, which can be anything. In my simulations, some of the traits are the same for every simulation and some are different by simulation, but regardless, I will load in all of these as traits for my house finch species.
+
+```{r add traits}
+lhs_generator <- LatinHypercubeSampler$new()
+
+# Transmission parameters
+lhs_generator$set_uniform_parameter("beta_Sa_winter", lower = 0, upper = 0.07588)
+lhs_generator$set_uniform_parameter("beta_Sa_summer", lower = 0, upper = 0.007784)
+lhs_generator$set_triangular_parameter("Sj_multiplier", lower = 0, upper = 8.5,
+                                       mode = 3)
+lhs_generator$set_beta_parameter("beta_I2_modifier", alpha = 1.547023,
+                                 beta = 0.4239236)
+
+# Recovery parameters
+lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,
+                                 beta = 620.1732)
+lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,
+                                 beta = 29.18489)
+
+# How many birds are infected in DC at timestep 1?
+lhs_generator$set_uniform_parameter("infected_t1", lower = 1, upper = 20, decimals = 0)
+
+round1_sample_data <- read_csv(file.path(data_dir, "sample_data_round1.csv"))[4615,]
+
+sample_data <- lhs_generator$generate_samples(number = 1, 
+                                              random_seed = random_seed) |>
+    mutate(beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
+       beta_Sj_summer = beta_Sa_summer * Sj_multiplier,
+       beta_Ra_winter = beta_Sa_winter * beta_I2_modifier,
+       beta_Rj_winter = beta_Sj_winter * beta_I2_modifier,
+       beta_Ra_summer = beta_Sa_summer * beta_I2_modifier,
+       beta_Rj_summer = beta_Sj_summer * beta_I2_modifier,
+       recovery_I1j_summer = recovery_I1,
+       recovery_I1a_summer = recovery_I1,
+       recovery_I2j_summer = recovery_I2,
+       recovery_I2a_summer = recovery_I2,
+       recovery_I1j_winter = recovery_I1,
+       recovery_I1a_winter = recovery_I1,
+       recovery_I2j_winter = recovery_I2,
+       recovery_I2a_winter = recovery_I2) |>
+    select(-c("Sj_multiplier", "recovery_I1", "recovery_I2")) |>
+    cbind(round1_sample_data)
+
+sim$add_species("house_finch")
+rlang::inject(sim$add_traits(
+  species = "house_finch",
+  population_level = FALSE,
+  !!!sample_data
+))
+sim$house_finch$traits
+```
+
+# Add initial abundance
+
+In `metaRange`, abundance counts as a population-level, temporally dynamic trait, so I will add it with the `add_traits` method. It just feels different from the other traits because of the population level and the dynamism, so I'm putting it separately here. In my case, I will have a distinct abundance for each combination of life cycle stage and disease compartment.
+
+```{r add cc and abundance}
+initial_abundance <- rast(file.path(data_dir, "habitat_suitability_v3.tif")) |> 
+  mask(rast(file.path(data_dir, "native_range_mask.tif")),
+       updatevalue = 0) |>
+  as.array() |>
+  _[,,1] |>
+  base::`*`(sim$house_finch$traits$density_max) |>
+  round()
+# Initial release in the east
+initial_abundance[39, 118] <- sim$house_finch$traits$initial_release
+sim$add_traits(
+  species = "house_finch",
+  population_level = TRUE,
+  Sj_abundance = 0,
+  Sa_abundance = initial_abundance,
+  I1j_abundance = 0,
+  I1a_abundance = 0,
+  Rj_abundance = 0,
+  Ra_abundance = 0,
+  I2j_abundance = 0,
+  I2a_abundance = 0
+)
+plot(sim$house_finch, "Sa_abundance")
+```
+
+# Add processes
+
+This is a rather complicated task. `metaRange` works by having processes executed in a priority queue. The way this will work for mgsim is that I will queue processes so that the processes of the non-breeding season execute first, then the breeding season. There also needs to be a one-time process (which is more complicated to code in) for introducing infected birds into the population at the appropriate time step. Here is the order:
+
+1. Dispersal (broken down by life cycle stage)
+2. Daily disease simulator, non-breeding version
+3. Transition (juveniles get aged up into adults)
+4. Daily disease simulator, breeding version
+
+## Process: Disease introduction
+
+Plus the one-time process of introducing the infection in DC, if there are birds in DC, and ending the simulation if there are not. I'm going to do the one-time process first just to get it out of the way:
+
+```{r one time process}
+sim$add_process(
+  species = "house_finch", 
+  process_name = "disease_introduction",
+  process_fun = function() {
+    self$traits$Sa_abundance[44, 113] <- self$traits$Sa_abundance[44, 113] - self$traits$infected_t1
+    self$traits$I1a_abundance[44, 113] <- self$traits$infected_t1
+  },
+  execution_priority = 2,
+  queue = FALSE
+)
+sim$add_process(
+  process_name = "activate_disease",
+  process_fun = function() {
+    if (self$get_current_time_step() == 54) {
+      if (self$house_finch$traits$Sa_abundance[44, 113] >= self$house_finch$traits$infected_t1) {
+        self$queue$enqueue(self$house_finch$processes$disease_introduction)
+      } else {
+        self$exit()
+      }
+    }
+  },
+  execution_priority = 1
+)
+sim$add_process(
+  process_name = "stop_disease_introduction",
+  process_fun = function() {
+    if (self$get_current_time_step() == 56) {
+      self$queue$dequeue(self$house_finch$processes$disease_introduction$get_PID())
+    }
+  },
+  execution_priority = 1
+)
+```
+
+## Process: Dispersal
+
+To do the dispersal, I'm going to need to bring in my friends `DispersalGenerator` from `poems` and `disease_dispersal` from `epizootic`, because the dispersal in `metaRange` is wildly inadequate to my needs. Normally I load my `DispersalGenerator`s directly into my simulations, but `metaRange` can't handle that input, so I will use `DispersalGenerator` to calculate dispersal matrices I can use as traits, and use `disease_dispersal` to generate a dispersal function I can use as a process.
+
+```{r dispersal generators}
+region <- file.path(data_dir, "finch_region.qs") |> qread()
+r <- region$region_raster
+row_indices <- rowFromCell(r, region$region_indices)
+col_indices <- colFromCell(r, region$region_indices)
+index_matrix <- cbind(row_indices, col_indices)
+b_lookup <- data.frame(d_max = -Inf, b = 0:904)
+for (i in 2:904) {
+  b_lookup$d_max[i] <- which.max(exp(-1*(1:1501)/b_lookup$b[i]) <= 0.19)
+}
+b_lookup$d_max[905] <- 1501
+
+# distance_matrix <- dispersal_gen$calculate_distance_matrix()
+# dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
+# these are pre-calculated because they're computationally intensive
+distance_data <- qread(file.path(data_dir, "dispersal_distance_data.qs"))
+
+adult_dispersal_gen <- DispersalGenerator$new(
+  region = region,
+  distance_classes = seq(10, 1500, 10),
+  distance_scale = 1000, # km
+  dispersal_function_data = b_lookup,
+  decimals = 3,
+  inputs = c("dispersal_proportion", "dispersal_max_distance"),
+  dispersal_proportion = sim$house_finch$traits$dispersal_p_adult, 
+  dispersal_max_distance = sim$house_finch$traits$dispersal_r_adult
+)
+adult_dispersal_gen$distance_data <- distance_data
+adult_dispersal_gen$calculate_dispersals(type = "matrix")
+
+juvenile_dispersal_gen <- DispersalGenerator$new(
+  region = region,
+  distance_classes = seq(10, 1500, 10),
+  distance_scale = 1000, # km
+  dispersal_function_data = b_lookup,
+  decimals = 3,
+  dispersal_proportion = sim$house_finch$traits$dispersal_p_juv,
+  dispersal_max_distance = sim$house_finch$traits$dispersal_r_juv,
+)
+juvenile_dispersal_gen$distance_data <- distance_data
+juvenile_dispersal_gen$calculate_dispersals(type = "matrix")
+
+sim$add_traits(
+  species = "house_finch",
+  population_level = FALSE,
+  dispersal_juv = juvenile_dispersal_gen$dispersal_matrix,
+  dispersal_adult = adult_dispersal_gen$dispersal_matrix
+)
+
+dispersal_fun <- disease_dispersal(
+  replicates = 1,
+  time_steps = 77,
+  populations = 6355,
+  demographic_stochasticity = TRUE,
+  dispersal = list(sim$house_finch$traits$dispersal_juv,
+                   sim$house_finch$traits$dispersal_adult),
+  dispersal_type = "stages",
+  dispersal_source_n_k = list(cutoff = sim$house_finch$traits$dispersal_source_n_k_cutoff,
+                              threshold = sim$house_finch$traits$dispersal_source_n_k_threshold),
+  dispersal_target_k = NULL,
+  dispersal_target_n = NULL,
+  dispersal_target_n_k = list(cutoff = sim$house_finch$traits$dispersal_target_n_k_cutoff,
+                              threshold = sim$house_finch$traits$dispersal_target_n_k_threshold),
+  stages = 2,
+  compartments = 4,
+  simulator = SimulatorReference$new()
+)
+
+sim$add_process(
+  species = "house_finch", 
+  process_name = "dispersal",
+  process_fun = function() {
+    segment_abundance <- matrix(c(self$traits$Sj_abundance[index_matrix],
+                    self$traits$Sa_abundance[index_matrix],
+                    self$traits$I1j_abundance[index_matrix],
+                    self$traits$I1a_abundance[index_matrix],
+                    self$traits$Rj_abundance[index_matrix],
+                    self$traits$Ra_abundance[index_matrix],
+                    self$traits$I2j_abundance[index_matrix],
+                    self$traits$I2a_abundance[index_matrix]),
+                  nrow = 8, byrow = TRUE)
+    carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[index_matrix]
+    transformed <- dispersal_fun(
+      r = 1,
+      tm = 1,
+      carrying_capacity = carrying_capacity,
+      segment_abundance = segment_abundance
+    )
+    self$traits$Sj_abundance[index_matrix] <- transformed[1, ]
+    self$traits$Sa_abundance[index_matrix] <- transformed[2, ]
+    self$traits$I1j_abundance[index_matrix] <- transformed[3, ]
+    self$traits$I1a_abundance[index_matrix] <- transformed[4, ]
+    self$traits$Rj_abundance[index_matrix] <- transformed[5, ]
+    self$traits$Ra_abundance[index_matrix] <- transformed[6, ]
+    self$traits$I2j_abundance[index_matrix] <- transformed[7, ]
+    self$traits$I2a_abundance[index_matrix] <- transformed[8, ]
+  },
+  execution_priority = 3
+)
+```
+
+## Process: Transition
+
+Transition is not a very complicated process, thankfully. Juveniles in each disease compartment simply need to get aged up into adults of their compartment.
+
+```{r transition}
+sim$add_process(
+  species = "house_finch",
+  process_name = "transition",
+  process_fun = function() {
+    self$traits$Sa_abundance <- self$traits$Sa_abundance + self$traits$Sj_abundance
+    self$traits$Sj_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
+    self$traits$I1a_abundance <- self$traits$I1a_abundance + self$traits$I1j_abundance
+    self$traits$I1j_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
+    self$traits$Ra_abundance <- self$traits$Ra_abundance + self$traits$Rj_abundance
+    self$traits$Rj_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
+    self$traits$I2a_abundance <- self$traits$I2a_abundance + self$traits$I2j_abundance
+    self$traits$I2j_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
+  },
+  execution_priority = 5
+)
+```
+
+## Process: Daily disease simulator
+
+Now we need to add my `siri_model_winter` and `siri_model_summer` functions into the mix to do the daily disease simulation. Instead of importing them from `epizootic` I will reproduce them here in a format more optimized for `metaRange`.
+
+```{r daily disease simulator}
+sim$add_process(
+  species = "house_finch",
+  process_name = "breeding_season_dynamics",
+  process_fun = function() {
+    population_list <- map(1:length(self$traits$Sj_abundance), function(i) {
+      c(self$traits$Sj_abundance[i], self$traits$Sa_abundance[i], self$traits$I1j_abundance[i], self$traits$I1a_abundance[i], self$traits$Rj_abundance[i], self$traits$Ra_abundance[i], 
+      self$traits$I2j_abundance[i], self$traits$I2a_abundance[i])
+    })
+    occupied_indices <- which(map_lgl(population_list, \(x) sum(x) > 0))
+    active_pops <- length(occupied_indices)
+    if (active_pops == 0) {
+      sim$exit()
+    }
+    carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[occupied_indices]
+    season_length <- self$sim$environment$current$breeding_season_length[occupied_indices]
+
+    # Convert the units of anything seasonal to now be daily
+    fecundity <- replicate(active_pops, list(self$traits$fecundity)) |>
+      map2(season_length, \(x, y) {
+        x <- x/y
+        return(x)
+      })
+    mortality <- replicate(active_pops, list(c(
+      self$traits$mortality_Sj_summer,
+      self$traits$mortality_Sa_summer,
+      self$traits$mortality_I1j_summer,
+      self$traits$mortality_I1a_summer,
+      self$traits$mortality_Rj_summer,
+      self$traits$mortality_Ra_summer,
+      self$traits$mortality_I2j_summer,
+      self$traits$mortality_I2a_summer
+    ))) |>
+      map2(season_length, \(x, y) {
+        x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] <- x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] |>
+          (`/`)(y) |> pmin(1)
+        return(x)
+      })
+    transmission <- replicate(active_pops, list(c(
+      self$traits$beta_Sj_summer, self$traits$beta_Sa_summer, 0, 0,
+      self$traits$beta_Rj_summer, self$traits$beta_Ra_summer, 0, 0
+    )))
+    recovery <- replicate(active_pops, list(c(
+      0, 0, self$traits$recovery_I1j_summer, self$traits$recovery_I1a_summer, 0, 0,
+      self$traits$recovery_I2j_summer, self$traits$recovery_I2a_summer
+    )))
+
+    population_new <- future_pmap(list(initial_pop = population_list[occupied_indices],
+                              mortality = mortality,
+                              transmission = transmission,
+                              recovery = recovery,
+                              fecundity = fecundity,
+                              abundance_threshold = self$traits$abundance_threshold,
+                              carrying_capacity = carrying_capacity,
+                              season_length = season_length,
+                              season = "breeding"), aspatial_siri,
+                              .options = furrr_options(seed = random_seed))
+  },
+  execution_priority = 6
+)
+
+sim$add_process(
+  species = "house_finch",
+  process_name = "non_breeding_season_dynamics",
+  process_fun = function() {
+    population_list <- map(1:length(self$traits$Sj_abundance), function(i) {
+      c(self$traits$Sj_abundance[i], self$traits$Sa_abundance[i], self$traits$I1j_abundance[i], self$traits$I1a_abundance[i], self$traits$Rj_abundance[i], self$traits$Ra_abundance[i], 
+      self$traits$I2j_abundance[i], self$traits$I2a_abundance[i])
+    })
+    occupied_indices <- which(map_lgl(population_list, \(x) sum(x) > 0))
+    active_pops <- length(occupied_indices)
+    if (active_pops == 0) {
+      sim$exit()
+    }
+    carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[occupied_indices]
+    season_length <- 365 - self$sim$environment$current$breeding_season_length[occupied_indices]
+
+    # Convert the units of anything seasonal to now be daily
+    mortality <- replicate(active_pops, list(c(
+      self$traits$mortality_Sj_winter,
+      self$traits$mortality_Sa_winter,
+      self$traits$mortality_I1j_winter,
+      self$traits$mortality_I1a_winter,
+      self$traits$mortality_Rj_winter,
+      self$traits$mortality_Ra_winter,
+      self$traits$mortality_I2j_winter,
+      self$traits$mortality_I2a_winter
+    ))) |>
+      map2(season_length, \(x, y) {
+        x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] <- x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] |>
+          (`/`)(y) |> pmin(1)
+        return(x)
+      })
+    transmission <- replicate(active_pops, list(c(
+      self$traits$beta_Sj_winter, self$traits$beta_Sa_winter, 0, 0,
+      self$traits$beta_Rj_winter, self$traits$beta_Ra_winter, 0, 0
+    )))
+    recovery <- replicate(active_pops, list(c(
+      0, 0, self$traits$recovery_I1j_winter, self$traits$recovery_I1a_winter, 0, 0,
+      self$traits$recovery_I2j_winter, self$traits$recovery_I2a_winter
+    )))
+
+    population_new <- future_pmap(list(initial_pop = population_list[occupied_indices],
+                              mortality = mortality,
+                              transmission = transmission,
+                              recovery = recovery,
+                              fecundity = 0,
+                              abundance_threshold = self$traits$abundance_threshold,
+                              carrying_capacity = carrying_capacity,
+                              season_length = season_length,
+                              season = "non-breeding"), aspatial_siri,
+                              .options = furrr_options(seed = random_seed))
+  },
+  execution_priority = 4
+)
+```
+
+# Simulate!
+
+I have set up all the processes. I need to implement a `plan()` using `furrr` because I've implemented the daily simulator to run in parallel for this example. Then I simply run the simulation.
+
+```{r simulate}
+plan(multisession, workers = 8)
+sim$begin()
+```
