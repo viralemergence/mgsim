@@ -12,8 +12,10 @@ library(poems)
 library(qs)
 library(terra)
 library(furrr)
+library(Rcpp)
 data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
 random_seed <- 90
+sourceCpp("daily_disease_simulator.cpp")
 ```
 
 # Goal
@@ -27,7 +29,7 @@ For `metaRange`, all spatial datasets have to be in the form of `SpatRasterDatas
 ```{r create environment}
 landscape <- c(file.path(data_dir, "breeding_season_length.tif"), 
   file.path(data_dir, "habitat_suitability_v3.tif")) |> map(rast) |> 
-  map(\(x) x[[1:77]]) |> sds()
+  map(\(x) x[[1:77]]) |> map_at(1, round) |> sds()
 names(landscape) <- c("breeding_season_length", "habitat_suitability")
 ```
 
@@ -112,7 +114,7 @@ initial_abundance <- rast(file.path(data_dir, "habitat_suitability_v3.tif")) |>
   base::`*`(sim$house_finch$traits$density_max) |>
   round()
 # Initial release in the east
-initial_abundance[39, 118] <- sim$house_finch$traits$initial_release
+initial_abundance[38, 118] <- sim$house_finch$traits$initial_release
 sim$add_traits(
   species = "house_finch",
   population_level = TRUE,
@@ -312,25 +314,24 @@ sim$add_process(
   species = "house_finch",
   process_name = "breeding_season_dynamics",
   process_fun = function() {
-    population_list <- map(1:length(self$traits$Sj_abundance), function(i) {
-      c(self$traits$Sj_abundance[i], self$traits$Sa_abundance[i], self$traits$I1j_abundance[i], self$traits$I1a_abundance[i], self$traits$Rj_abundance[i], self$traits$Ra_abundance[i], 
-      self$traits$I2j_abundance[i], self$traits$I2a_abundance[i])
-    })
-    occupied_indices <- which(map_lgl(population_list, \(x) sum(x) > 0))
-    active_pops <- length(occupied_indices)
-    if (active_pops == 0) {
-      sim$exit()
-    }
-    carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[occupied_indices]
-    season_length <- self$sim$environment$current$breeding_season_length[occupied_indices]
-
-    # Convert the units of anything seasonal to now be daily
-    fecundity <- replicate(active_pops, list(self$traits$fecundity)) |>
-      map2(season_length, \(x, y) {
-        x <- x/y
-        return(x)
-      })
-    mortality <- replicate(active_pops, list(c(
+    population_new <- daily_siri_summer(
+      self$traits$Sj_abundance,
+      self$traits$Sa_abundance,
+      self$traits$I1j_abundance,
+      self$traits$I1a_abundance, 
+      self$traits$Rj_abundance, 
+      self$traits$Ra_abundance, 
+      self$traits$I2j_abundance, 
+      self$traits$I2a_abundance,
+      self$traits$fecundity,
+      self$traits$beta_Sj_winter, 
+      self$traits$beta_Sa_winter,
+      self$traits$beta_Rj_winter, 
+      self$traits$beta_Ra_winter,
+      self$traits$recovery_I1j_summer,
+      self$traits$recovery_I1a_summer,
+      self$traits$recovery_I2j_summer,
+      self$traits$recovery_I2a_summer,
       self$traits$mortality_Sj_summer,
       self$traits$mortality_Sa_summer,
       self$traits$mortality_I1j_summer,
@@ -338,32 +339,24 @@ sim$add_process(
       self$traits$mortality_Rj_summer,
       self$traits$mortality_Ra_summer,
       self$traits$mortality_I2j_summer,
-      self$traits$mortality_I2a_summer
-    ))) |>
-      map2(season_length, \(x, y) {
-        x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] <- x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] |>
-          (`/`)(y) |> pmin(1)
-        return(x)
-      })
-    transmission <- replicate(active_pops, list(c(
-      self$traits$beta_Sj_summer, self$traits$beta_Sa_summer, 0, 0,
-      self$traits$beta_Rj_summer, self$traits$beta_Ra_summer, 0, 0
-    )))
-    recovery <- replicate(active_pops, list(c(
-      0, 0, self$traits$recovery_I1j_summer, self$traits$recovery_I1a_summer, 0, 0,
-      self$traits$recovery_I2j_summer, self$traits$recovery_I2a_summer
-    )))
-
-    population_new <- future_pmap(list(initial_pop = population_list[occupied_indices],
-                              mortality = mortality,
-                              transmission = transmission,
-                              recovery = recovery,
-                              fecundity = fecundity,
-                              abundance_threshold = self$traits$abundance_threshold,
-                              carrying_capacity = carrying_capacity,
-                              season_length = season_length,
-                              season = "breeding"), aspatial_siri,
-                              .options = furrr_options(seed = random_seed))
+      self$traits$mortality_I2a_summer,
+      self$sim$environment$current$breeding_season_length,
+      self$traits$abundance_threshold,
+      self$traits$density_max,
+      self$sim$environment$current$habitat_suitability
+    )
+    if (sum(population_new) == 0) {
+      sim$exit()
+    } else {
+        self$traits$Sj_abundance <- population_new[1, ]
+        self$traits$Sa_abundance <- population_new[2, ]
+        self$traits$I1j_abundance <- population_new[3, ]
+        self$traits$I1a_abundance <- population_new[4, ]
+        self$traits$Rj_abundance <- population_new[5, ]
+        self$traits$Ra_abundance <- population_new[6, ]
+        self$traits$I2j_abundance <- population_new[7, ]
+        self$traits$I2a_abundance <- population_new[8, ]
+    }
   },
   execution_priority = 6
 )
@@ -383,7 +376,6 @@ sim$add_process(
     }
     carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[occupied_indices]
     season_length <- 365 - self$sim$environment$current$breeding_season_length[occupied_indices]
-
     # Convert the units of anything seasonal to now be daily
     mortality <- replicate(active_pops, list(c(
       self$traits$mortality_Sj_winter,
@@ -408,8 +400,8 @@ sim$add_process(
       0, 0, self$traits$recovery_I1j_winter, self$traits$recovery_I1a_winter, 0, 0,
       self$traits$recovery_I2j_winter, self$traits$recovery_I2a_winter
     )))
-
-    population_new <- future_pmap(list(initial_pop = population_list[occupied_indices],
+    if (active_pops > 0) {
+      population_new <- pmap(list(initial_pop = population_list[occupied_indices],
                               mortality = mortality,
                               transmission = transmission,
                               recovery = recovery,
@@ -417,8 +409,18 @@ sim$add_process(
                               abundance_threshold = self$traits$abundance_threshold,
                               carrying_capacity = carrying_capacity,
                               season_length = season_length,
-                              season = "non-breeding"), aspatial_siri,
-                              .options = furrr_options(seed = random_seed))
+                              season = "non-breeding"), aspatial_siri)
+      walk(1:active_pops, \(i) {
+        self$traits$Sj_abundance[occupied_indices[[i]]] <- population_new[[i]][1]
+        self$traits$Sa_abundance[occupied_indices[[i]]] <- population_new[[i]][2]
+        self$traits$I1j_abundance[occupied_indices[[i]]] <- population_new[[i]][3]
+        self$traits$I1a_abundance[occupied_indices[[i]]] <- population_new[[i]][4]
+        self$traits$Rj_abundance[occupied_indices[[i]]] <- population_new[[i]][5]
+        self$traits$Ra_abundance[occupied_indices[[i]]] <- population_new[[i]][6]
+        self$traits$I2j_abundance[occupied_indices[[i]]] <- population_new[[i]][7]
+        self$traits$I2a_abundance[occupied_indices[[i]]] <- population_new[[i]][8]
+      })
+    }
   },
   execution_priority = 4
 )
@@ -429,6 +431,5 @@ sim$add_process(
 I have set up all the processes. I need to implement a `plan()` using `furrr` because I've implemented the daily simulator to run in parallel for this example. Then I simply run the simulation.
 
 ```{r simulate}
-plan(multisession, workers = 8)
 sim$begin()
 ```

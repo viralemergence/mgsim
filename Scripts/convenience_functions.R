@@ -166,3 +166,20 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE){
   }
   return(OutputData)
 }
+
+
+#' Unpack the contents of a closure into the global environment
+#' 
+#' Sometimes for debugging purposes you need to unpack a closure like a 
+#' suitcase. 
+#' 
+#' @param closure The closure to be unpacked.
+#' @return Invisibly copies objects into the global environment.
+unpack_closure <- function(closure) {
+  closure_env <- environment(closure)
+  vars <- ls(envir = closure_env)
+  
+  for (var in vars) {
+    assign(var, get(var, envir = closure_env), envir = .GlobalEnv)
+  }
+}
