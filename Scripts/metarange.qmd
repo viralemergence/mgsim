@@ -14,6 +14,7 @@ library(terra)
 library(furrr)
 library(Rcpp)
 data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
+results_dir <- here::here("Data/Output/epizootic_test")
 random_seed <- 90
 sourceCpp("daily_disease_simulator.cpp")
 ```
@@ -132,16 +133,18 @@ plot(sim$house_finch, "Sa_abundance")
 
 # Add processes
 
-This is a rather complicated task. `metaRange` works by having processes executed in a priority queue. The way this will work for mgsim is that I will queue processes so that the processes of the non-breeding season execute first, then the breeding season. There also needs to be a one-time process (which is more complicated to code in) for introducing infected birds into the population at the appropriate time step. Here is the order:
+This is a rather complicated task. `metaRange` works by having processes executed in a priority queue. The way this will work for mgsim is that I will queue processes so that the processes of the non-breeding season execute first, then the breeding season. There also needs to be a one-time process (which is more complicated to code in) for introducing infected birds into the population at the appropriate time step. There also need to be processes for writing abundance files at appropriate timepoints. Here is the order:
 
 1. Dispersal (broken down by life cycle stage)
 2. Daily disease simulator, non-breeding version
-3. Transition (juveniles get aged up into adults)
-4. Daily disease simulator, breeding version
+3. Write abundance file
+4. Transition (juveniles get aged up into adults)
+5. Daily disease simulator, breeding version
+6. Write abundance file
 
 ## Process: Disease introduction
 
-Plus the one-time process of introducing the infection in DC, if there are birds in DC, and ending the simulation if there are not. I'm going to do the one-time process first just to get it out of the way:
+Plus there's the one-time process of introducing the infection in DC, if there are birds in DC, and ending the simulation if there are not. I'm going to do the one-time process first just to get it out of the way:
 
 ```{r one time process}
 sim$add_process(
@@ -175,6 +178,40 @@ sim$add_process(
     }
   },
   execution_priority = 1
+)
+```
+## Process: Save abundance in results files
+
+I want to save the susceptible adult abundance at each seasonal time step, so I will add a process to do that.
+
+```{r save abundance}
+sim$add_process(
+  species = "house_finch",
+  process_name = "save_abundance",
+  process_fun = function() {
+    save_species(
+      x = self,
+      traits = "Sa_abundance",
+      prefix = paste0("winter_", self$sim$get_current_time_step(), "_"),
+      path = results_dir,
+      overwrite = TRUE
+    )
+  },
+  execution_priority = 5
+)
+sim$add_process(
+  species = "house_finch",
+  process_name = "save_abundance",
+  process_fun = function() {
+    save_species(
+      x = self,
+      traits = "Sa_abundance",
+      prefix = paste0("summer_", self$sim$get_current_time_step(), "_"),
+      path = results_dir,
+      overwrite = TRUE
+    )
+  },
+  execution_priority = 8
 )
 ```
 
@@ -301,7 +338,7 @@ sim$add_process(
     self$traits$I2a_abundance <- self$traits$I2a_abundance + self$traits$I2j_abundance
     self$traits$I2j_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
   },
-  execution_priority = 5
+  execution_priority = 6
 )
 ```
 
@@ -348,36 +385,40 @@ sim$add_process(
     if (sum(population_new) == 0) {
       sim$exit()
     } else {
-        self$traits$Sj_abundance <- population_new[1, ]
-        self$traits$Sa_abundance <- population_new[2, ]
-        self$traits$I1j_abundance <- population_new[3, ]
-        self$traits$I1a_abundance <- population_new[4, ]
-        self$traits$Rj_abundance <- population_new[5, ]
-        self$traits$Ra_abundance <- population_new[6, ]
-        self$traits$I2j_abundance <- population_new[7, ]
-        self$traits$I2a_abundance <- population_new[8, ]
+      self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
+      self$traits$Sa_abundance <- matrix(population_new[2, ], nrow = 106, ncol = 161)
+      self$traits$I1j_abundance <- matrix(population_new[3, ], nrow = 106, ncol = 161)
+      self$traits$I1a_abundance <- matrix(population_new[4, ], nrow = 106, ncol = 161)
+      self$traits$Rj_abundance <- matrix(population_new[5, ], nrow = 106, ncol = 161)
+      self$traits$Ra_abundance <- matrix(population_new[6, ], nrow = 106, ncol = 161)
+      self$traits$I2j_abundance <- matrix(population_new[7, ], nrow = 106, ncol = 161)
+      self$traits$I2a_abundance <- matrix(population_new[8, ], nrow = 106, ncol = 161)
     }
   },
-  execution_priority = 6
+  execution_priority = 7
 )
 
 sim$add_process(
   species = "house_finch",
   process_name = "non_breeding_season_dynamics",
   process_fun = function() {
-    population_list <- map(1:length(self$traits$Sj_abundance), function(i) {
-      c(self$traits$Sj_abundance[i], self$traits$Sa_abundance[i], self$traits$I1j_abundance[i], self$traits$I1a_abundance[i], self$traits$Rj_abundance[i], self$traits$Ra_abundance[i], 
-      self$traits$I2j_abundance[i], self$traits$I2a_abundance[i])
-    })
-    occupied_indices <- which(map_lgl(population_list, \(x) sum(x) > 0))
-    active_pops <- length(occupied_indices)
-    if (active_pops == 0) {
-      sim$exit()
-    }
-    carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[occupied_indices]
-    season_length <- 365 - self$sim$environment$current$breeding_season_length[occupied_indices]
-    # Convert the units of anything seasonal to now be daily
-    mortality <- replicate(active_pops, list(c(
+    population_new <- daily_siri_winter(
+      self$traits$Sj_abundance,
+      self$traits$Sa_abundance,
+      self$traits$I1j_abundance,
+      self$traits$I1a_abundance, 
+      self$traits$Rj_abundance, 
+      self$traits$Ra_abundance, 
+      self$traits$I2j_abundance, 
+      self$traits$I2a_abundance,
+      self$traits$beta_Sj_winter, 
+      self$traits$beta_Sa_winter,
+      self$traits$beta_Rj_winter, 
+      self$traits$beta_Ra_winter,
+      self$traits$recovery_I1j_winter,
+      self$traits$recovery_I1a_winter,
+      self$traits$recovery_I2j_winter,
+      self$traits$recovery_I2a_winter,
       self$traits$mortality_Sj_winter,
       self$traits$mortality_Sa_winter,
       self$traits$mortality_I1j_winter,
@@ -385,41 +426,23 @@ sim$add_process(
       self$traits$mortality_Rj_winter,
       self$traits$mortality_Ra_winter,
       self$traits$mortality_I2j_winter,
-      self$traits$mortality_I2a_winter
-    ))) |>
-      map2(season_length, \(x, y) {
-        x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] <- x[as.logical(c(1, 1, 0, 0, 1, 1, 0, 0))] |>
-          (`/`)(y) |> pmin(1)
-        return(x)
-      })
-    transmission <- replicate(active_pops, list(c(
-      self$traits$beta_Sj_winter, self$traits$beta_Sa_winter, 0, 0,
-      self$traits$beta_Rj_winter, self$traits$beta_Ra_winter, 0, 0
-    )))
-    recovery <- replicate(active_pops, list(c(
-      0, 0, self$traits$recovery_I1j_winter, self$traits$recovery_I1a_winter, 0, 0,
-      self$traits$recovery_I2j_winter, self$traits$recovery_I2a_winter
-    )))
-    if (active_pops > 0) {
-      population_new <- pmap(list(initial_pop = population_list[occupied_indices],
-                              mortality = mortality,
-                              transmission = transmission,
-                              recovery = recovery,
-                              fecundity = 0,
-                              abundance_threshold = self$traits$abundance_threshold,
-                              carrying_capacity = carrying_capacity,
-                              season_length = season_length,
-                              season = "non-breeding"), aspatial_siri)
-      walk(1:active_pops, \(i) {
-        self$traits$Sj_abundance[occupied_indices[[i]]] <- population_new[[i]][1]
-        self$traits$Sa_abundance[occupied_indices[[i]]] <- population_new[[i]][2]
-        self$traits$I1j_abundance[occupied_indices[[i]]] <- population_new[[i]][3]
-        self$traits$I1a_abundance[occupied_indices[[i]]] <- population_new[[i]][4]
-        self$traits$Rj_abundance[occupied_indices[[i]]] <- population_new[[i]][5]
-        self$traits$Ra_abundance[occupied_indices[[i]]] <- population_new[[i]][6]
-        self$traits$I2j_abundance[occupied_indices[[i]]] <- population_new[[i]][7]
-        self$traits$I2a_abundance[occupied_indices[[i]]] <- population_new[[i]][8]
-      })
+      self$traits$mortality_I2a_winter,
+      self$sim$environment$current$breeding_season_length,
+      self$traits$abundance_threshold,
+      self$traits$density_max,
+      self$sim$environment$current$habitat_suitability
+    )
+    if (sum(population_new) == 0) {
+      sim$exit()
+    } else {
+      self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
+      self$traits$Sa_abundance <- matrix(population_new[2, ], nrow = 106, ncol = 161)
+      self$traits$I1j_abundance <- matrix(population_new[3, ], nrow = 106, ncol = 161)
+      self$traits$I1a_abundance <- matrix(population_new[4, ], nrow = 106, ncol = 161)
+      self$traits$Rj_abundance <- matrix(population_new[5, ], nrow = 106, ncol = 161)
+      self$traits$Ra_abundance <- matrix(population_new[6, ], nrow = 106, ncol = 161)
+      self$traits$I2j_abundance <- matrix(population_new[7, ], nrow = 106, ncol = 161)
+      self$traits$I2a_abundance <- matrix(population_new[8, ], nrow = 106, ncol = 161)
     }
   },
   execution_priority = 4
