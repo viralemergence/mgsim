@@ -5,10 +5,11 @@ library(epizootic)
 library(poems)
 library(qs)
 library(terra)
+library(tictoc)
 data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
 results_dir <- here::here("Data/Output/epizootic_test")
 random_seed <- 90
-n_sims <- 5
+n_sims <- 10000
 region <- data_dir |> file.path("finch_region.qs") |> qread()
 
 #### Create sample data frame ####
@@ -37,6 +38,9 @@ lhs_generator$set_uniform_parameter("abundance_threshold", lower = 0, upper = 25
 lhs_generator$set_uniform_parameter("initial_release", lower = 5, upper = 50, decimals = 0)
 lhs_generator$set_uniform_parameter("density_max", lower = 186000, upper = 310000, decimals = 0)
 lhs_generator$set_poisson_parameter("fecundity", lambda = 8.509018)
+
+# How many birds are infected in DC at timestep 1?
+lhs_generator$set_uniform_parameter("infected_t1", lower = 1, upper = 20, decimals = 0)
 
 # Transmission parameters
 lhs_generator$set_uniform_parameter("beta_Sa_winter", lower = 0, upper = 0.07588)
@@ -284,28 +288,31 @@ sim$add_process(
 
 #### Add results-saving processes ####
 sim$add_process(
-  species = "house_finch",
   process_name = "save_abundance_winter",
   process_fun = function() {
-    if (!dir.exists(self$traits$results_dir)) {
-      dir.create(self$traits$results_dir, recursive = TRUE)
+    if (!dir.exists(self$globals$results_dir)) {
+      dir.create(self$globals$results_dir, recursive = TRUE)
     }
 
-    if (self$sim$get_current_time_step() > 54) {
+    if (!dir.exists(self$globals$results_dir)) {
+      stop("The results directory could not be created.")
+    }
+
+    if (self$get_current_time_step() > 54) {
       save_species(
-        x = self,
+        x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance", 
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
-        prefix = paste0("winter_", self$sim$get_current_time_step(), "_"),
-        path = self$traits$results_dir,
+        prefix = paste0("winter_", self$get_current_time_step(), "_"),
+        path = self$globals$results_dir,
         overwrite = TRUE
       )
     } else {
       save_species(
-        x = self,
+        x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance"),
-        prefix = paste0("winter_", self$sim$get_current_time_step(), "_"),
-        path = self$traits$results_dir,
+        prefix = paste0("winter_", self$get_current_time_step(), "_"),
+        path = self$globals$results_dir,
         overwrite = TRUE
       )
     }
@@ -313,28 +320,24 @@ sim$add_process(
   execution_priority = 5
 )
 sim$add_process(
-  species = "house_finch",
   process_name = "save_abundance_summer",
   process_fun = function() {
-    if (!dir.exists(self$traits$results_dir)) {
-      dir.create(self$traits$results_dir, recursive = TRUE)
-    }
 
-    if (self$sim$get_current_time_step() > 54) {
+    if (self$get_current_time_step() > 54) {
       save_species(
-        x = self,
+        x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance", 
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
-        prefix = paste0("summer_", self$sim$get_current_time_step(), "_"),
-        path = self$traits$results_dir,
+        prefix = paste0("summer_", self$get_current_time_step(), "_"),
+        path = self$globals$results_dir,
         overwrite = TRUE
       )
     } else {
       save_species(
-        x = self,
+        x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance"),
-        prefix = paste0("summer_", self$sim$get_current_time_step(), "_"),
-        path = self$traits$results_dir,
+        prefix = paste0("summer_", self$get_current_time_step(), "_"),
+        path = self$globals$results_dir,
         overwrite = TRUE
       )
     }
@@ -447,7 +450,7 @@ sim$add_process(
       self$traits$density_max,
       self$sim$environment$current$habitat_suitability
     )
-    if (sum(population_new) == 0) {
+    if (!exists("population_new") || sum(population_new) == 0) {
       sim$exit()
     } else {
       self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
@@ -519,8 +522,13 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  parallel_threads = 3,
+  sample_data = sample_data,
+  parallel_threads = 22,
   results_dir = results_dir,
-  seed = random_seed
+  seed = random_seed,
+  species_name = "house_finch"
 )
+
+tic()
 sim_log <- sim_manager$run()
+toc()
