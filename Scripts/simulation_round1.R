@@ -6,8 +6,9 @@ library(poems)
 library(qs)
 library(terra)
 library(tictoc)
-data_dir <- "/Users/caryinstitute/Documents/mgsim/Data/Input"
-results_dir <- here::here("Data/Output/epizootic_test")
+library(here)
+data_dir <- here("Data/Input")
+results_dir <- here("Data/Output/epizootic_test")
 random_seed <- 90
 n_sims <- 10000
 region <- data_dir |> file.path("finch_region.qs") |> qread()
@@ -16,21 +17,21 @@ region <- data_dir |> file.path("finch_region.qs") |> qread()
 lhs_generator <- LatinHypercubeSampler$new()
 
 # Dispersal parameters
-lhs_generator$set_beta_parameter("dispersal_p_juv", alpha = 9.834837, 
+lhs_generator$set_beta_parameter("dispersal_p_juv", alpha = 9.834837,
                                  beta = 2.019125)
-lhs_generator$set_beta_parameter("dispersal_p_adult", alpha = 1.5685, 
+lhs_generator$set_beta_parameter("dispersal_p_adult", alpha = 1.5685,
                                  beta = 2.365266)
-lhs_generator$set_truncnorm_parameter("dispersal_r_juv", lower = 0, upper = 1500, 
+lhs_generator$set_truncnorm_parameter("dispersal_r_juv", lower = 0, upper = 1500,
                                       mean = 725.9071, sd = sqrt(204006.6))
 lhs_generator$set_normal_parameter("dispersal_r_adult", mean = 679.4172,
                                    sd = sqrt(18594.59))
-lhs_generator$set_uniform_parameter("dispersal_source_n_k_cutoff", lower = 0, 
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_cutoff", lower = 0,
                                     upper = 1)
-lhs_generator$set_uniform_parameter("dispersal_source_n_k_threshold", lower = 0, 
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_threshold", lower = 0,
                                     upper = 1)
-lhs_generator$set_uniform_parameter("dispersal_target_n_k_cutoff", lower = 0, 
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_cutoff", lower = 0,
                                     upper = 1)
-lhs_generator$set_uniform_parameter("dispersal_target_n_k_threshold", lower = 0, 
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_threshold", lower = 0,
                                     upper = 1)
 
 # Population growth parameters
@@ -74,9 +75,9 @@ lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,
 lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,
                                  beta = 29.18489)
 
-sample_data <- lhs_generator$generate_samples(number = n_sims, 
+sample_data <- lhs_generator$generate_samples(number = n_sims,
                                               random_seed = random_seed) |>
-  mutate(mortality_Sa_summer = 0, 
+  mutate(mortality_Sa_summer = 0,
         mortality_I2j_summer = mortality_I2_modifier * mortality_I1j_summer,
         mortality_I2j_winter = mortality_I2_modifier * mortality_I1j_winter,
         mortality_I2a_winter = mortality_I2_modifier * mortality_I1a_winter,
@@ -134,13 +135,13 @@ abundance_gen$add_file_template(
   file_type = "tif"
 )
 # Here we tell the generator what function to use to generate initial_abundance
-# based on the carrying capacity of the first time step, the native range, and 
+# based on the carrying capacity of the first time step, the native range, and
 # the number of finches released in Jones Beach, NY.
 abundance_gen$add_function_template(
   param = "Sa_abundance",
   function_def = function(params) {
-    hs_matrix <- params$hs_raster |> 
-                 raster::mask(params$mask_raster, updatevalue = 0) |> 
+    hs_matrix <- params$hs_raster |>
+                 raster::mask(params$mask_raster, updatevalue = 0) |>
                  as.array() |>
                  _[,,1] |>
                  base::`*`(params$density_max) |>
@@ -152,7 +153,7 @@ abundance_gen$add_function_template(
 )
 
 system.time({
-  test_capacity <- abundance_gen$generate(input_values = list(density_max = 186000, 
+  test_capacity <- abundance_gen$generate(input_values = list(density_max = 186000,
                                                              initial_release = 50))
 })
 
@@ -211,9 +212,9 @@ adult_dispersal_data <- adult_dispersal_gen$generate(
 head(adult_dispersal_data[[1]])
 
 #### Create simulation object ####
-# Creates the environment 
-landscape <- c(file.path(data_dir, "breeding_season_length.tif"), 
-  file.path(data_dir, "habitat_suitability_v3.tif")) |> map(rast) |> 
+# Creates the environment
+landscape <- c(file.path(data_dir, "breeding_season_length.tif"),
+  file.path(data_dir, "habitat_suitability_v3.tif")) |> map(rast) |>
   map(\(x) x[[1:77]]) |> map_at(1, round) |> sds()
 names(landscape) <- c("breeding_season_length", "habitat_suitability")
 # Create the object
@@ -254,33 +255,15 @@ sim$add_traits(
 #### Add one-time processes ####
 # Here I add processes for disease introduction, which happens only once
 sim$add_process(
-  species = "house_finch", 
-  process_name = "disease_introduction",
-  process_fun = function() {
-    self$traits$Sa_abundance[44, 113] <- self$traits$Sa_abundance[44, 113] - self$traits$infected_t1
-    self$traits$I1a_abundance[44, 113] <- self$traits$infected_t1
-  },
-  execution_priority = 2,
-  queue = FALSE
-)
-sim$add_process(
   process_name = "activate_disease",
   process_fun = function() {
     if (self$get_current_time_step() == 54) {
       if (self$house_finch$traits$Sa_abundance[44, 113] >= self$house_finch$traits$infected_t1) {
-        self$queue$enqueue(self$house_finch$processes$disease_introduction)
+        self$house_finch$traits$Sa_abundance[44, 113] <- self$house_finch$traits$Sa_abundance[44, 113] - self$house_finch$traits$infected_t1
+        self$house_finch$traits$I1a_abundance[44, 113] <- self$house_finch$traits$infected_t1
       } else {
         self$exit()
       }
-    }
-  },
-  execution_priority = 1
-)
-sim$add_process(
-  process_name = "stop_disease_introduction",
-  process_fun = function() {
-    if (self$get_current_time_step() == 56) {
-      self$queue$dequeue(self$house_finch$processes$disease_introduction$get_PID())
     }
   },
   execution_priority = 1
@@ -301,7 +284,7 @@ sim$add_process(
     if (self$get_current_time_step() > 54) {
       save_species(
         x = self$house_finch,
-        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance", 
+        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
         prefix = paste0("winter_", self$get_current_time_step(), "_"),
         path = self$globals$results_dir,
@@ -326,7 +309,7 @@ sim$add_process(
     if (self$get_current_time_step() > 54) {
       save_species(
         x = self$house_finch,
-        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance", 
+        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
         prefix = paste0("summer_", self$get_current_time_step(), "_"),
         path = self$globals$results_dir,
@@ -346,8 +329,9 @@ sim$add_process(
 )
 
 #### Add dispersal process ####
+
 sim$add_process(
-  species = "house_finch", 
+  species = "house_finch",
   process_name = "dispersal",
   process_fun = function() {
     dispersal_fun <- disease_dispersal(
@@ -370,21 +354,24 @@ sim$add_process(
     )
 
     segment_abundance <- matrix(c(self$traits$Sj_abundance[self$traits$index_matrix],
-                    self$traits$Sa_abundance[self$traits$index_matrix],
-                    self$traits$I1j_abundance[self$traits$index_matrix],
-                    self$traits$I1a_abundance[self$traits$index_matrix],
-                    self$traits$Rj_abundance[self$traits$index_matrix],
-                    self$traits$Ra_abundance[self$traits$index_matrix],
-                    self$traits$I2j_abundance[self$traits$index_matrix],
-                    self$traits$I2a_abundance[self$traits$index_matrix]),
-                  nrow = 8, byrow = TRUE)
+                                  self$traits$Sa_abundance[self$traits$index_matrix],
+                                  self$traits$I1j_abundance[self$traits$index_matrix],
+                                  self$traits$I1a_abundance[self$traits$index_matrix],
+                                  self$traits$Rj_abundance[self$traits$index_matrix],
+                                  self$traits$Ra_abundance[self$traits$index_matrix],
+                                  self$traits$I2j_abundance[self$traits$index_matrix],
+                                  self$traits$I2a_abundance[self$traits$index_matrix]),
+                                nrow = 8, byrow = TRUE)
+
     carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[self$traits$index_matrix]
+
     transformed <- dispersal_fun(
       r = 1,
       tm = 1,
       carrying_capacity = carrying_capacity,
       segment_abundance = segment_abundance
     )
+
     self$traits$Sj_abundance[self$traits$index_matrix] <- transformed[1, ]
     self$traits$Sa_abundance[self$traits$index_matrix] <- transformed[2, ]
     self$traits$I1j_abundance[self$traits$index_matrix] <- transformed[3, ]
@@ -396,6 +383,7 @@ sim$add_process(
   },
   execution_priority = 3
 )
+
 
 #### Add transition process ####
 sim$add_process(
@@ -423,15 +411,15 @@ sim$add_process(
       self$traits$Sj_abundance,
       self$traits$Sa_abundance,
       self$traits$I1j_abundance,
-      self$traits$I1a_abundance, 
-      self$traits$Rj_abundance, 
-      self$traits$Ra_abundance, 
-      self$traits$I2j_abundance, 
+      self$traits$I1a_abundance,
+      self$traits$Rj_abundance,
+      self$traits$Ra_abundance,
+      self$traits$I2j_abundance,
       self$traits$I2a_abundance,
       self$traits$fecundity,
-      self$traits$beta_Sj_winter, 
+      self$traits$beta_Sj_winter,
       self$traits$beta_Sa_winter,
-      self$traits$beta_Rj_winter, 
+      self$traits$beta_Rj_winter,
       self$traits$beta_Ra_winter,
       self$traits$recovery_I1j_summer,
       self$traits$recovery_I1a_summer,
@@ -450,7 +438,10 @@ sim$add_process(
       self$traits$density_max,
       self$sim$environment$current$habitat_suitability
     )
-    if (!exists("population_new") || sum(population_new) == 0) {
+    if (!exists("population_new")) {
+      sim$exit()
+    }
+    if (sum(population_new, na.rm = T) == 0) {
       sim$exit()
     } else {
       self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
@@ -474,14 +465,14 @@ sim$add_process(
       self$traits$Sj_abundance,
       self$traits$Sa_abundance,
       self$traits$I1j_abundance,
-      self$traits$I1a_abundance, 
-      self$traits$Rj_abundance, 
-      self$traits$Ra_abundance, 
-      self$traits$I2j_abundance, 
+      self$traits$I1a_abundance,
+      self$traits$Rj_abundance,
+      self$traits$Ra_abundance,
+      self$traits$I2j_abundance,
       self$traits$I2a_abundance,
-      self$traits$beta_Sj_winter, 
+      self$traits$beta_Sj_winter,
       self$traits$beta_Sa_winter,
-      self$traits$beta_Rj_winter, 
+      self$traits$beta_Rj_winter,
       self$traits$beta_Ra_winter,
       self$traits$recovery_I1j_winter,
       self$traits$recovery_I1a_winter,
@@ -500,7 +491,10 @@ sim$add_process(
       self$traits$density_max,
       self$sim$environment$current$habitat_suitability
     )
-    if (sum(population_new) == 0) {
+    if (!exists("population_new")) {
+      sim$exit()
+    }
+    if (sum(population_new, na.rm = T) == 0) {
       sim$exit()
     } else {
       self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
@@ -523,7 +517,7 @@ sim_manager <- metaRangeParallel$new(
                     adult_dispersal_gen,
                     abundance_gen),
   sample_data = sample_data,
-  parallel_threads = 22,
+  parallel_threads = 8,
   results_dir = results_dir,
   seed = random_seed,
   species_name = "house_finch"

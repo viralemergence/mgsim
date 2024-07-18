@@ -53,7 +53,35 @@ With this, I have added a five-timestep burn-in.
 Each simulation object in metaRange can have one or more species with one or more traits, which can be anything. In my simulations, some of the traits are the same for every simulation and some are different by simulation, but regardless, I will load in all of these as traits for my house finch species.
 
 ```{r add traits}
+#### Create sample data frame ####
 lhs_generator <- LatinHypercubeSampler$new()
+
+# Dispersal parameters
+lhs_generator$set_beta_parameter("dispersal_p_juv", alpha = 9.834837,
+                                 beta = 2.019125)
+lhs_generator$set_beta_parameter("dispersal_p_adult", alpha = 1.5685,
+                                 beta = 2.365266)
+lhs_generator$set_truncnorm_parameter("dispersal_r_juv", lower = 0, upper = 1500,
+                                      mean = 725.9071, sd = sqrt(204006.6))
+lhs_generator$set_normal_parameter("dispersal_r_adult", mean = 679.4172,
+                                   sd = sqrt(18594.59))
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_cutoff", lower = 0,
+                                    upper = 1)
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_threshold", lower = 0,
+                                    upper = 1)
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_cutoff", lower = 0,
+                                    upper = 1)
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_threshold", lower = 0,
+                                    upper = 1)
+
+# Population growth parameters
+lhs_generator$set_uniform_parameter("abundance_threshold", lower = 0, upper = 25, decimals = 0)
+lhs_generator$set_uniform_parameter("initial_release", lower = 5, upper = 50, decimals = 0)
+lhs_generator$set_uniform_parameter("density_max", lower = 186000, upper = 310000, decimals = 0)
+lhs_generator$set_poisson_parameter("fecundity", lambda = 8.509018)
+
+# How many birds are infected in DC at timestep 1?
+lhs_generator$set_uniform_parameter("infected_t1", lower = 1, upper = 20, decimals = 0)
 
 # Transmission parameters
 lhs_generator$set_uniform_parameter("beta_Sa_winter", lower = 0, upper = 0.07588)
@@ -63,35 +91,57 @@ lhs_generator$set_triangular_parameter("Sj_multiplier", lower = 0, upper = 8.5,
 lhs_generator$set_beta_parameter("beta_I2_modifier", alpha = 1.547023,
                                  beta = 0.4239236)
 
+# Mortality parameters
+lhs_generator$set_beta_parameter("mortality_Sj_winter", alpha = 3.962104,
+                                 beta = 2.228683)
+lhs_generator$set_beta_parameter("mortality_Sa_winter", alpha = 21.89136,
+                                 beta = 19.59278)
+lhs_generator$set_beta_parameter("mortality_Sj_summer", alpha = 14.51403,
+                                 beta = 21.53632)
+lhs_generator$set_beta_parameter("mortality_I1j_summer", alpha = 2.756404,
+                                 beta = 62.47181)
+lhs_generator$set_beta_parameter("mortality_I1j_winter", alpha = 2.756404,
+                                 beta = 62.47181)
+lhs_generator$set_beta_parameter("mortality_I1a_summer", alpha = 1.771183,
+                                 beta = 27.19457)
+lhs_generator$set_beta_parameter("mortality_I1a_winter", alpha = 1.678424,
+                                 beta = 41.15975)
+lhs_generator$set_beta_parameter("mortality_I2_modifier", alpha = 1.033367,
+                                 beta = 3.505319)
+
 # Recovery parameters
 lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,
                                  beta = 620.1732)
 lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,
                                  beta = 29.18489)
 
-# How many birds are infected in DC at timestep 1?
-lhs_generator$set_uniform_parameter("infected_t1", lower = 1, upper = 20, decimals = 0)
-
-round1_sample_data <- read_csv(file.path(data_dir, "sample_data_round1.csv"))[4615,]
-
-sample_data <- lhs_generator$generate_samples(number = 1, 
+sample_data <- lhs_generator$generate_samples(number = 10000,
                                               random_seed = random_seed) |>
-    mutate(beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
-       beta_Sj_summer = beta_Sa_summer * Sj_multiplier,
-       beta_Ra_winter = beta_Sa_winter * beta_I2_modifier,
-       beta_Rj_winter = beta_Sj_winter * beta_I2_modifier,
-       beta_Ra_summer = beta_Sa_summer * beta_I2_modifier,
-       beta_Rj_summer = beta_Sj_summer * beta_I2_modifier,
-       recovery_I1j_summer = recovery_I1,
-       recovery_I1a_summer = recovery_I1,
-       recovery_I2j_summer = recovery_I2,
-       recovery_I2a_summer = recovery_I2,
-       recovery_I1j_winter = recovery_I1,
-       recovery_I1a_winter = recovery_I1,
-       recovery_I2j_winter = recovery_I2,
-       recovery_I2a_winter = recovery_I2) |>
-    select(-c("Sj_multiplier", "recovery_I1", "recovery_I2")) |>
-    cbind(round1_sample_data)
+  mutate(mortality_Sa_summer = 0,
+        mortality_I2j_summer = mortality_I2_modifier * mortality_I1j_summer,
+        mortality_I2j_winter = mortality_I2_modifier * mortality_I1j_winter,
+        mortality_I2a_winter = mortality_I2_modifier * mortality_I1a_winter,
+        mortality_I2a_summer = mortality_I2_modifier * mortality_I1a_summer,
+        mortality_Rj_summer = mortality_Sj_summer,
+        mortality_Ra_summer = mortality_Sa_summer,
+        mortality_Rj_winter = mortality_Sj_winter,
+        mortality_Ra_winter = mortality_Sa_winter,
+        beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
+        beta_Sj_summer = beta_Sa_summer * Sj_multiplier,
+        beta_Ra_winter = beta_Sa_winter * beta_I2_modifier,
+        beta_Rj_winter = beta_Sj_winter * beta_I2_modifier,
+        beta_Ra_summer = beta_Sa_summer * beta_I2_modifier,
+        beta_Rj_summer = beta_Sj_summer * beta_I2_modifier,
+        recovery_I1j_summer = recovery_I1,
+        recovery_I1a_summer = recovery_I1,
+        recovery_I2j_summer = recovery_I2,
+        recovery_I2a_summer = recovery_I2,
+        recovery_I1j_winter = recovery_I1,
+        recovery_I1a_winter = recovery_I1,
+        recovery_I2j_winter = recovery_I2,
+        recovery_I2a_winter = recovery_I2) |>
+    select(-c("Sj_multiplier", "recovery_I1", "recovery_I2")) |> 
+  slice(4615)
 
 sim$add_species("house_finch")
 rlang::inject(sim$add_traits(
