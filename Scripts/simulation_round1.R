@@ -1,14 +1,16 @@
 #### Setup ####
-library(tidyverse)
+library(purrr)
+library(dplyr)
+library(readr)
 library(metaRange)
 library(epizootic)
 library(poems)
 library(qs)
 library(terra)
-library(tictoc)
 library(here)
-data_dir <- here("Data/Input")
-results_dir <- here("Data/Output/epizootic_test")
+i_am("mgsim/Scripts/simulation_round1.R")
+data_dir <- here("mgsim/Data_minimal/Input")
+results_dir <- here("mgsim/Data_minimal/Output/epizootic_test")
 random_seed <- 90
 n_sims <- 10000
 region <- data_dir |> file.path("finch_region.qs") |> qread()
@@ -516,13 +518,11 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data,
-  parallel_threads = 8,
+  sample_data = sample_data[1:2,],
+  parallel_threads = 2,
   results_dir = results_dir,
   seed = random_seed,
   species_name = "house_finch"
 )
 
-tic()
 sim_log <- sim_manager$run()
-toc()
