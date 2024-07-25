@@ -8,9 +8,11 @@ library(poems)
 library(qs)
 library(terra)
 library(here)
+library(doFuture)
+library(future.batchtools)
 i_am("mgsim/Scripts/simulation_round1.R")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- here("mgsim/Data_minimal/Output/epizootic_test")
+results_dir <- "/glade/work/pilowskyj/Round1"
 random_seed <- 90
 n_sims <- 10000
 region <- data_dir |> file.path("finch_region.qs") |> qread()
@@ -158,10 +160,6 @@ system.time({
   test_capacity <- abundance_gen$generate(input_values = list(density_max = 186000,
                                                              initial_release = 50))
 })
-
-plot(
-  rast(test_capacity[[1]])
-)
 
 #### Create dispersal generators ####
 b_lookup <- data.frame(d_max = -Inf, b = 0:904)
@@ -512,14 +510,18 @@ sim$add_process(
   execution_priority = 4
 )
 
+#### Set up parallel threading ####
+registerDoFuture()
+plan(batchtools_torque)
+
 #### Simulate ####
 sim_manager <- metaRangeParallel$new(
   simulation_template = sim,
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data[1:2,],
-  parallel_threads = 2,
+  sample_data = sample_data,
+  register_parallel = FALSE,
   results_dir = results_dir,
   seed = random_seed,
   species_name = "house_finch"
