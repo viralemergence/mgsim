@@ -10,6 +10,7 @@ library(terra)
 library(here)
 library(doFuture)
 library(future.batchtools)
+options(future.batchtools.output = TRUE)
 i_am("mgsim/Scripts/simulation_round1.R")
 data_dir <- here("mgsim/Data_minimal/Input")
 results_dir <- "/glade/work/pilowskyj/Round1"
@@ -512,7 +513,7 @@ sim$add_process(
 
 #### Set up parallel threading ####
 registerDoFuture()
-plan(batchtools_torque)
+plan(list(batchtools_torque, multicore))
 
 #### Simulate ####
 sim_manager <- metaRangeParallel$new(
@@ -520,7 +521,7 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data,
+  sample_data = sample_data[1:5,],
   register_parallel = FALSE,
   results_dir = results_dir,
   seed = random_seed,
