@@ -286,7 +286,7 @@ sim$add_process(
         x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
-        prefix = paste0("winter_", self$get_current_time_step(), "_"),
+        prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
         overwrite = TRUE
       )
@@ -294,7 +294,7 @@ sim$add_process(
       save_species(
         x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance"),
-        prefix = paste0("winter_", self$get_current_time_step(), "_"),
+        prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
         overwrite = TRUE
       )
@@ -311,7 +311,7 @@ sim$add_process(
         x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
-        prefix = paste0("summer_", self$get_current_time_step(), "_"),
+        prefix = paste0(self$get_current_time_step(), "_", "summer_"),
         path = self$globals$results_dir,
         overwrite = TRUE
       )
@@ -319,7 +319,7 @@ sim$add_process(
       save_species(
         x = self$house_finch,
         traits = c("Sj_abundance", "Sa_abundance"),
-        prefix = paste0("summer_", self$get_current_time_step(), "_"),
+        prefix = paste0(self$get_current_time_step(), "_summer_"),
         path = self$globals$results_dir,
         overwrite = TRUE
       )
