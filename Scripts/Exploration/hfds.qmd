@@ -14,6 +14,9 @@ library(gganimate)
 library(vroom)
 library(here)
 library(broom)
+library(qs)
+library(raster)
+library(sf)
 i_am("Scripts/Exploration/hfds.qmd")
 hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
 ```
@@ -81,10 +84,18 @@ hfds %>%
 The prevalences found by citizen scientists in the House Finch Disease Survey are not entirely reliable. However, trends in prevalence at each location may be more reliable.
 
 ```{r prevalence trends map}
-trends <- hfds %>% filter(Year < 2007, Year > 2001) %>%
-  group_by(ID) %>% 
-  mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>%
-  filter(sumyears==5, sumbirds > 0) %>% arrange(ID) %>%
+region_raster <- qread(here("Data/Input/finch_region.qs")) |> _$region_raster
+rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
+trends <- hfds |> 
+  mutate(region_cell = rasterized) |> 
+  filter(Year < 2016, Year > 2000) |> 
+  group_by(region_cell) |> 
+  mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>% 
+  filter(sumbirds > 0, sumyears == 15) %>% arrange(region_cell) %>%
   mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>%
   nest() %>%
   mutate(model = map(data, ~ glm(
@@ -99,7 +110,7 @@ trends <- hfds %>% filter(Year < 2007, Year > 2001) %>%
 basemap + theme_map() +
   scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
                           rescaler = scales::rescale_mid,
-                          name = "5 Year Trend") +
+                          name = "15 Year Trend") +
   geom_point(data = trends, aes(x = Longitude, y = Latitude, fill = estimate),
              size = 3, shape = 21)
 ```

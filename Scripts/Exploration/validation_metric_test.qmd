@@ -1,0 +1,101 @@
+---
+title: "Noodling with Validation Metrics"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup}
+library(raster)
+library(tidyverse)
+library(sf)
+library(qs)
+library(here)
+library(terra)
+example <- here("Data/Output/epizootic_test/simulation1")
+```
+
+# Goal
+
+I am testing out some possible validation metrics on an example simulation to see how the results look.
+
+# Prevalence Trends
+
+Trends in MG prevalence from 2001 to 2015 are only available for the Northeast, and even then they are patchy, but it's much better than nothing.
+
+```{r prevalence trends}
+hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
+region_raster <- qread(here("Data/Input/finch_region.qs")) |> _$region_raster
+rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
+trends <- hfds |> 
+  mutate(region_cell = rasterized) |> 
+  filter(Year < 2016, Year > 2000) |> 
+  group_by(region_cell) |> 
+  mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>% 
+  filter(sumbirds > 0, sumyears == 15) %>% arrange(region_cell) %>%
+  mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>%
+  nest() %>%
+  mutate(model = map(data, ~ glm(
+    cbind(NBirdsSick, NBirdsHealthy) ~ Year, family = binomial, data = .
+  ))) %>%
+  mutate(tidy = map(model, broom::tidy)) %>%
+  unnest(tidy) %>%
+  filter(term == "Year", p.value<0.05) %>%
+  mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
+         Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>% 
+  identity()
+basemap + theme_map() +
+  scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid,
+                          name = "15 Year Trend") +
+  geom_point(data = trends, aes(x = Longitude, y = Latitude, fill = estimate),
+             size = 3, shape = 21)
+```
+
+Now I need to calculate the same trend for these same years in these same locations for my example simulation run.
+
+```{r prevalence trend extraction, warning = F}
+# File paths of simulation output rasters
+file_paths <- example |> 
+  list.files(full.names = T) |> 
+  keep(\(x) any(str_detect(x, as.character(63:77))))
+  
+# Extract the number and season from the file paths
+data <- data.frame(
+  path = file_paths,
+  season = str_extract(file_paths, "summer|winter"),
+  number = as.integer(str_extract(file_paths, "[0-9]{2,}"))
+)
+
+# Convert the season to a factor with the desired order
+data$season <- factor(data$season, levels = c("winter", "summer"))
+
+# Sort the data frame by number and season
+sorted_data <- data[order(data$number, data$season), ]
+
+extracted <- sorted_data$path |> map(rast) |> split(sorted_data$number) |> 
+  map(function(l) {
+    sick_birds <- l[c(1:4, 9:12)] |> map(\(r) r[trends$region_cell]) |> 
+      Reduce(f = `+`, x = _)
+    healthy_birds <- l[c(5:8, 13:16)] |> map(\(r) r[trends$region_cell]) |> 
+      Reduce(f = `+`, x = _)
+    return(c(sick_birds = sick_birds,
+             healthy_birds = healthy_birds))
+  }) |> map(bind_cols) |> 
+  map2(2001:2015, \(x, y) cbind(x, Year = y)) |> 
+  map(\(df) cbind(df, region_cell = trends$region_cell)) |> 
+  bind_rows() |> 
+  split(f = trends$region_cell) |> 
+  discard(\(df) sum(df$sick_birds.lyr1, df$healthy_birds.lyr1)==0)
+
+map(extracted, \(df) glm(cbind(sick_birds.lyr1, healthy_birds.lyr1) ~ Year, 
+    family = binomial, data = df)) |> map(coef) |> head()
+```
+
+In this example simulation, the disease fizzled out before 2001, so all the Year slopes are effectively zero.
+
+# First Arrival: Mycoplasma
