@@ -11,6 +11,7 @@ library(tidyverse)
 library(vroom)
 library(here)
 library(mapdata)
+library(canadianmaps)
 library(cowplot)
 library(paletteer)
 map <- purrr::map
@@ -43,7 +44,7 @@ Now I am going to group by latitude and longitude and sum how many finches were 
 
 ```{r 1996 finch map}
 usa <- map_data("usa")
-canada <- map_data("worldHires", "Canada")
+data("REG")
 pfw1996 %>% group_by(LATITUDE, LONGITUDE) %>% 
   filter(Year==1996) %>% 
   summarize(Finches = if_else(sum(HOW_MANY)>0, "Present", "Absent")) %>% 
@@ -52,9 +53,9 @@ pfw1996 %>% group_by(LATITUDE, LONGITUDE) %>%
                                  aes(x=long, y = lat, group = group), 
                                  fill = "gray50", 
                                  color="black") +
-    geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+    geom_sf(data = REG, aes(geometry = geometry), 
                  fill = "gray50", color="black") + 
-    coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55)) +
+    coord_sf(xlim = c(-140, -50), ylim = c(25, 55)) +
   geom_point(aes(x = LONGITUDE, y = LATITUDE, color = Finches), alpha = 0.6) +
   scale_color_paletteer_d("nbapalettes::huskies") + theme_map() +
   ggtitle("House Finch Observations in 1996")
@@ -77,9 +78,9 @@ pfw1988 %>% group_by(LATITUDE, LONGITUDE) %>%
                aes(x=long, y = lat, group = group), 
                fill = "gray50", 
                color="black") +
-  geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
-               fill = "gray50", color="black") + 
-  coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55)) +
+    geom_sf(data = REG, aes(geometry = geometry), 
+                 fill = "gray50", color="black") + 
+  coord_sf(xlim = c(-140, -50), ylim = c(25, 55)) +
   geom_point(aes(x = LONGITUDE, y = LATITUDE, color = Finches), alpha = 0.6) +
   scale_color_paletteer_d("nbapalettes::huskies") + theme_map() +
   ggtitle("House Finch Observations in 1988")
@@ -92,10 +93,10 @@ The difference between the 1988 and 1996 maps is clear: the range has infilled i
 I want to compare abundance trends in FeederWatch against abundance trends from Breeding Bird Survey to see how well they correspond with each other.
 
 ```{r abundance trend comparison}
-routes <- read_csv(here("Data/Input/Routes.csv"), col_types = "iicciddiiii") %>% 
+routes <- read_csv(here("Data/Validation/FeederWatch/routes.csv"), col_types = "iicciddiiii") %>% 
   mutate(ID = str_c(CountryNum, StateNum, Route))
-weather <- vroom(here("Data/Input/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
-hofi <- here("Data/Input/States") %>% list.files(full.names = T) %>% 
+weather <- vroom(here("Data/Validation/FeederWatch/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
+hofi <- here("Data/Validation/FeederWatch/States") %>% list.files(full.names = T) %>% 
   map(vroom, col_types = "iiiciiciiiii") %>% 
   bind_rows() %>% 
   filter(AOU=="05190") %>% 
@@ -175,3 +176,5 @@ list(trends1, trends2, trends3, trends4) %>%
                           rescaler = scales::rescale_mid) +
   facet_grid(Dataset ~ Period)
 ```
+
+# 
