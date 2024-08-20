@@ -1,0 +1,28 @@
+#!/bin/bash -l
+### Job Name
+#PBS -N mgsim_round1
+### Charging account
+#PBS -A UCIE0003
+### Request one chunk of resources
+#PBS -l select=1:ncpus=36:mpiprocs=36:mem=350GB
+### Allow job to run up to 30 minutes
+#PBS -l walltime=12:00:00
+### Route the job to the casper queue
+#PBS -q casper
+### Join output and error streams into single file
+#PBS -j oe
+
+### Set temp to scratch
+
+export TMPDIR=${SCRATCH}/${USER}/temp && mkdir -p $TMPDIR
+
+# Load modules to match compile-time environment
+
+module --force purge
+module load ncarenv/23.10 gcc/13.2.0 conda/latest proj/9.2.1 ncarcompilers/1.0.0 geos/3.12.1 gdal/3.8.1 cuda/12.2.1 ucx/1.14.1
+
+### Activate env
+conda activate mgsim
+
+### Run script
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round1.R
