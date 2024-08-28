@@ -7,25 +7,44 @@ editor: visual
 
 ```{r setup}
 library(raster)
+library(mapdata)
 library(tidyverse)
 library(sf)
 library(qs)
 library(here)
 library(terra)
+library(cowplot)
+library(vroom)
+library(phenesse)
+library(paletteer)
+library(fasterize)
+NA_map <- map_data("world") |> filter(region %in% c("Canada", "Mexico", "USA"))
+wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433]],\n    CS[ellipsoidal,2],\n        AXIS[\"geodetic latitude (Lat)\",north,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        AXIS[\"geodetic longitude (Lon)\",east,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n    ID[\"EPSG\",4326]]"
 example <- here("Data/Output/epizootic_test/simulation1")
+basemap <- ggplot() +
+  geom_polygon(data = NA_map, 
+               aes(x=long, y = lat, group = group), 
+               fill = "gray80", 
+               color="transparent") +
+  theme_map() + xlim(-145, -55) + ylim(14.25, 72) +
+  coord_sf()
+region <- qread(here("Data/Input/finch_region.qs"))
+region_raster <- region$region_raster
+years <- c(1940:2016)
 ```
 
 # Goal
 
 I am testing out some possible validation metrics on an example simulation to see how the results look.
 
-# Prevalence Trends
+# Mycoplasma
+
+## Prevalence Trends
 
 Trends in MG prevalence from 2001 to 2015 are only available for the Northeast, and even then they are patchy, but it's much better than nothing.
 
 ```{r prevalence trends}
 hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
-region_raster <- qread(here("Data/Input/finch_region.qs")) |> _$region_raster
 rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
   sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
 +lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
@@ -33,7 +52,7 @@ rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |>
   cellFromXY(object = region_raster)
 trends <- hfds |> 
   mutate(region_cell = rasterized) |> 
-  filter(Year < 2016, Year > 2000) |> 
+  filter(Year < 2016, Year > 2000, region_cell %in% region$region_indices) |> 
   group_by(region_cell) |> 
   mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>% 
   filter(sumbirds > 0, sumyears == 15) %>% arrange(region_cell) %>%
@@ -48,7 +67,8 @@ trends <- hfds |>
   mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
          Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>% 
   identity()
-basemap + theme_map() +
+write_csv(trends, here("Data/Validation/prevalence_trends.csv"))
+basemap +
   scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
                           rescaler = scales::rescale_mid,
                           name = "15 Year Trend") +
@@ -98,4 +118,436 @@ map(extracted, \(df) glm(cbind(sick_birds.lyr1, healthy_birds.lyr1) ~ Year,
 
 In this example simulation, the disease fizzled out before 2001, so all the Year slopes are effectively zero.
 
-# First Arrival: Mycoplasma
+## First Arrival
+
+I will use the GRIWM formula for estimating first arrival based on sightings to estimate year of first arrival of MG for grid cells in the Northeast.
+
+First, I need to rasterize my sightings to the study region map.
+
+```{r rasterize MG sightings}
+sightings <- hfds |> mutate(region_cell = rasterized) |> 
+  filter(NBirdsSick > 0, region_cell %in% region$region_indices) |> 
+  group_by(region_cell) |> 
+  summarize(first_sighting = min(Year))
+sighting_raster <- region_raster
+values(sighting_raster) <- NA
+sighting_raster[sightings$region_cell] <- sightings$first_sighting
+plot(sighting_raster, xlim = c(0, Inf), ylim = c(0, Inf))
+```
+
+However, simply using the year of first sighting is not good enough. Observations are biased and flawed, so we need to use a statistical method to estimate the true first arrival date of the disease.
+
+```{r estimate first arrival}
+sightings <- hfds |> mutate(region_cell = rasterized) |> 
+  filter(NBirdsSick > 0, region_cell %in% region$region_indices) |> 
+  group_by(region_cell) |> 
+  group_split() |> 
+  discard(\(df) nrow(df) < 7)
+arrivals <- sightings |> 
+  map(\(s) weib_percentile_ci(s$Year, 250, 0.05, 100, parallelize = "multicore", ncpus = 8))
+mg_arrival <- sightings |>
+  map2(arrivals, \(x, y) mutate(x, first_arrival_low = y[2],
+                                first_arrival_high = y[3],
+                                first_arrival = y[1])) |>
+  bind_rows()
+write_csv(mg_arrival, here("Data/Validation/mycoplasma_first_arrival.csv"))
+basemap +
+  geom_point(data = mg_arrival |> group_by(region_cell) |>
+               summarize(first_arrival = first(first_arrival),
+                         LONGITUDE = first(LONGITUDE),
+                         LATITUDE = first(LATITUDE)),
+             aes(x = LONGITUDE, y = LATITUDE, col = first_arrival),
+             size = 2) +
+  scale_color_viridis_c()
+```
+
+TO BE COMPLETED LATER
+
+## Presence
+
+I don't really trust absence too much based on the House Finch Disease Survey because community science surveillance is far from exhaustive, but I do trust presences. As such, I want to find places where MG is consistently spotted for years on end and use these as validation markers.
+
+```{r mg presence}
+pres_hfds <- hfds |> mutate(region_cell = rasterized) |> 
+  filter(NBirdsSick > 0, region_cell %in% region$region_indices) |> 
+  group_by(region_cell, Year) |> 
+  summarize(total_sick = sum(NBirdsSick)) |> 
+  mutate(years_present = n()) |> 
+  filter(years_present > 10) |> 
+  group_by(region_cell) %>%
+  mutate(consecutive = all(diff(sort(Year)) == 1)) |> 
+  filter(consecutive) |> 
+  summarize(min_year = min(Year), max_year = max(Year)) |> 
+  rowwise() |> 
+  mutate(min_index = which(1994:2016 == min_year),
+         max_index = which(1994:2016 == max_year))
+write_csv(pres_hfds, here("Data/Validation/mycoplasma_presence.csv"))
+wgs_coordinates <- region$coordinates |> 
+  sf_project(from = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs", to = wgs84) |> 
+  cbind(region_cell = region$region_indices) |> 
+  _[which(region$region_indices %in% pres_hfds$region_cell),] |> 
+  as.data.frame() |> 
+  set_names(c("Longitude", "Latitude", "region_cell")) |> 
+  identity()
+basemap +
+  geom_point(data = right_join(wgs_coordinates, pres_hfds),
+             mapping = aes(x = Longitude, y = Latitude))
+```
+
+And here I will test out this metric on my example (it will do very badly):
+
+```{r test mg presence}
+# File paths of simulation output rasters
+file_paths <- example |> 
+  list.files(full.names = T)
+  
+# Extract the number and season from the file paths
+data <- data.frame(
+  path = file_paths,
+  season = str_extract(file_paths, "summer|winter"),
+  number = as.numeric(str_split_i(file_paths, "_", 3)),
+  infected = str_detect(file_paths, "I")
+) |> filter(infected)
+
+# Convert the season to a factor with the desired order
+data$season <- factor(data$season, levels = c("winter", "summer"))
+
+# Sort the data frame by number and season
+sorted_data <- data[order(data$number, data$season), ]
+
+example_infected <- sorted_data$path |> map(rast) |> 
+  split(sorted_data$number) |> map(rast) |> 
+  map(\(r) app(x = r, fun = sum)) |> rast()
+pres_hfds |> rowwise() |> group_split() |> 
+  map_int(function(df) {
+      penalty <- sum(example_infected[df$region_cell][df$min_index:df$max_index] == 0)
+    return(penalty)
+  }) |> 
+  sum()
+```
+
+# Haemorhous
+
+## Presence/Absence
+
+I have very good presence and absence data on the house finches for North America. I am going to pool them to find region cells where the finches are ALWAYS PRESENT and ones where they are ALWAYS ABSENT. I will check those locations in the simulations. For every time point and location where they are absent where they should be present, or present where they should be absent, the simulation gets a penalty point. The target here is zero.
+
+```{r presence absence}
+source(here("Scripts/convenience_functions.R"))
+pfw <- c("Data/Validation/FeederWatch/PFW_1988_1995_public.csv",
+         "Data/Validation/FeederWatch/PFW_1996_2000_public.csv",
+         "Data/Validation/FeederWatch/PFW_all_2001_2005_June2023_public.csv",
+         "Data/Validation/FeederWatch/PFW_all_2006_2010_June2023_public.csv",
+         "Data/Validation/FeederWatch/PFW_all_2011_2015_June2023_public.csv",
+         "Data/Validation/FeederWatch/PFW_all_2016_2020_June2023_public.csv") %>% 
+  map(here) |> 
+  map(vroom) |> 
+  bind_rows() |> 
+  ZeroFillPFW(SpeciesCodes = "houfin", rollup = F)
+rasterized_pfw <- pfw |> 
+  select("LONGITUDE", "LATITUDE") |> 
+  as.matrix() |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
+pfw_presabs <- pfw |> 
+  mutate(region_cell = rasterized_pfw) |> 
+  filter(!is.na(region_cell)) |> 
+  filter(Year < 2017) |> 
+  group_by(region_cell, Year) |> 
+  summarize(Finches = sum(HOW_MANY)>0)
+routes <- read_csv(here("Data/Validation/FeederWatch/routes.csv"), col_types = "iicciddiiii") %>% 
+  mutate(ID = str_c(CountryNum, StateNum, Route))
+weather <- vroom(here("Data/Validation/FeederWatch/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
+bbs_presabs <- here("Data/Validation/FeederWatch/States") %>% list.files(full.names = T) %>% 
+  map(vroom, col_types = "iiiciiciiiii") %>% 
+  bind_rows() %>% 
+  filter(Year<2017) %>% 
+  left_join(routes) %>% 
+  left_join(weather) %>% 
+  filter(QualityCurrentID==1) %>% 
+  mutate(ID = str_c(CountryNum, StateNum, Route)) %>% 
+  complete(ID, AOU, Year, fill = list(SpeciesTotal = 0)) %>% 
+  select(ID, Year, AOU, SpeciesTotal) %>% 
+  group_by(ID, Year) %>% 
+  mutate(sum = sum(SpeciesTotal)) %>% 
+  filter(sum>0) %>% 
+  filter(AOU=="05190") %>% 
+  left_join(routes) %>% 
+  mutate(Present = SpeciesTotal>0)
+rasterized_bbs <- bbs_presabs |> 
+  ungroup() |> 
+  select("Longitude", "Latitude") |> 
+  as.matrix() |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
+bbs_presabs$region_cell <- rasterized_bbs
+presabs <- bbs_presabs |> 
+  group_by(region_cell, Year) |> 
+  summarize(Finches = sum(Present)>0, .drop = F) |> 
+  bind_rows(pfw_presabs) |> 
+  summarize(years_present = sum(Finches),
+            total_years = n(),
+            min_year = min(Year),
+            max_year = max(Year)) |> 
+  filter(total_years > 29) |> 
+  mutate(always_present = years_present==total_years,
+         always_absent = years_present==0) |> 
+  filter(!is.na(region_cell)) |> 
+  filter(always_present | always_absent) |> 
+  rename(region_index = region_cell) |> 
+  filter(region_index %in% region$region_indices) |> 
+  rowwise() |> 
+  mutate(region_cell = which(region$region_indices == region_index))
+always_present_raster <- rast(region_raster)
+always_present_raster[always_present_raster %in% filter(presabs, always_present)$region_cell] <- 10000
+always_present_raster[always_present_raster<10000] <- NA
+always_present_raster <- always_present_raster > 0
+always_present_raster <- project(always_present_raster, wgs84)
+always_absent_raster <- rast(region_raster)
+always_absent_raster[always_absent_raster %in% filter(presabs, always_absent)$region_cell] <- 10000
+always_absent_raster[always_absent_raster<10000] <- NA
+always_absent_raster <- always_absent_raster > 0
+always_absent_raster <- project(always_absent_raster, wgs84)
+basemap + 
+  geom_spatraster(data = always_present_raster, aes(fill = layer)) +
+  scale_fill_paletteer_c("pals::cubicl", na.value = "transparent",
+                         guide = "none") +
+  ggtitle("Always Present From 1988 to 2016")
+basemap + 
+  geom_spatraster(data = always_absent_raster, aes(fill = layer)) +
+  scale_fill_paletteer_c("scico::bamako", na.value = "transparent",
+                         guide = "none") +
+  ggtitle("Always Absent From 1988 to 2016")
+presabs |> 
+  rowwise() |> 
+  mutate(min_index = which(years == min_year),
+         max_index = which(years == max_year)) |> 
+  write_csv(here("Data/Validation/haemorhous_presence_absence.csv"))
+```
+
+Now I will test this metric on my example simulation.
+
+```{r test presence absence}
+# File paths of simulation output rasters
+file_paths <- example |> 
+  list.files(full.names = T)
+  
+# Extract the number and season from the file paths
+data <- data.frame(
+  path = file_paths,
+  season = str_extract(file_paths, "summer|winter"),
+  number = as.numeric(str_split_i(file_paths, "_", 3))
+)
+
+# Convert the season to a factor with the desired order
+data$season <- factor(data$season, levels = c("winter", "summer"))
+
+# Sort the data frame by number and season
+sorted_data <- data[order(data$number, data$season), ]
+example_summary <- sorted_data$path |> map(rast) |> 
+  split(sorted_data$number) |> map(rast) |> 
+  map(\(r) app(x = r, fun = sum)) |> rast()
+presabs |> rowwise() |> group_split() |> 
+  map_int(function(df) {
+    if (df$always_absent) {
+      penalty <- sum(example_summary[df$region_index][df$min_index:df$max_index] > 0)
+    }
+    if (df$always_present) {
+      penalty <- sum(example_summary[df$region_index][df$min_index:df$max_index] == 0)
+    }
+    return(penalty)
+  }) |> 
+  sum()
+```
+
+## First Arrival
+
+As with first arrival of Mycoplasma, I can measure the first arrival of the house finch to certain areas as the range expands.
+
+```{r first arrival house finch}
+first_sighting <- bbs_presabs |> 
+  group_by(region_cell, Year) |> 
+  summarize(Finches = sum(Present)>0, 
+            Latitude = first(Latitude), 
+            Longitude = first(Longitude), .drop = F) |> 
+  bind_rows(pfw_presabs) |> 
+  mutate(n_obs = n()) |> 
+  filter(n_obs > 9) |> 
+  summarize(first_sighting = min(Year),
+            Latitude = first(Latitude), 
+            Longitude = first(Longitude)) |> 
+  filter(region_cell %in% region$region_indices) |> 
+  rowwise() |> 
+  mutate(region_index = which(region$region_indices == region_cell)) |> 
+  filter(Longitude > -98)
+basemap +
+  geom_point(data = first_sighting,
+             mapping = aes(Longitude, Latitude, col = first_sighting),
+             alpha = 0.3) +
+  scale_color_paletteer_c("pals::ocean.turbid")
+sightings <- bbs_presabs |> 
+  group_by(region_cell, Year) |> 
+  summarize(Finches = sum(Present)>0, 
+            Latitude = first(Latitude), 
+            Longitude = first(Longitude), .drop = F) |> 
+  bind_rows(pfw_presabs) |> 
+  filter(Longitude > -98) |> 
+  group_split() |> 
+  discard(\(df) nrow(df) < 10)
+arrivals <- sightings |> 
+  map(\(s) weib_percentile_ci(s$Year, 250, 0.05, 100, parallelize = "multicore", ncpus = 8))
+hm_arrival <- sightings |>
+  map2(arrivals, \(x, y) mutate(x, first_arrival_low = y[2],
+                                first_arrival_high = y[3],
+                                first_arrival = y[1])) |>
+  bind_rows()
+write_csv(hm_arrival, here("Data/Validation/haemorhous_first_arrival.csv"))
+```
+
+TO BE COMPLETED LATER
+
+## Abundance Trends
+
+I have house finch abundance trends from Christmas Bird Count data. Thanks, Audubon!
+
+```{r cbc map}
+bcr <- st_read("~/Documents/Very_Large_Data/Christmas Bird Count/BCR_Terrestrial/BCR_Terrestrial_master_International.shp")
+cbc <- vroom("~/Documents/Very_Large_Data/Christmas Bird Count/cbc_trends_abundance_indices_and_scaling_factors_v4.0_web_download_12Apr2022.csv",
+             col_types = "ccccidddddddd") %>% 
+  filter(ebird_com_name=="House Finch")
+cbc %>% 
+  filter(parameter=="RegressionTrend1993On", str_detect(stratum, "BCR")) %>% 
+  mutate(BCR = str_sub(stratum, 4, 5) %>% as.numeric()) %>% 
+  right_join(bcr) %>% 
+  ggplot() +
+  geom_sf(aes(geometry = geometry, fill = estimate_mean)) +
+  coord_sf(xlim = c(-128, -61), ylim = c(15, 54)) +
+  scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid,
+                         name = "Trend") +
+  theme_map() +
+  ggtitle("Trend from 1993 to Present")
+cbc %>% 
+  filter(parameter=="RegressionTrend1970On", str_detect(stratum, "BCR")) %>% 
+  mutate(BCR = str_sub(stratum, 4, 5) %>% as.numeric()) %>% 
+  right_join(bcr) %>% 
+  ggplot() +
+  geom_sf(aes(geometry = geometry, fill = estimate_mean)) +
+  coord_sf(xlim = c(-128, -61), ylim = c(15, 54)) +
+  scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid,
+                         name = "Trend") +
+  theme_map() +
+  ggtitle("Trend from 1970 to Present")
+trend1993 <- cbc %>% 
+  filter(parameter=="RegressionTrend1993On", str_detect(stratum, "BCR")) %>% 
+  mutate(BCR = str_sub(stratum, 4, 5) %>% as.numeric()) %>% 
+  filter(BCR!=31)
+trend1970 <- cbc %>% 
+  filter(parameter=="RegressionTrend1970On", str_detect(stratum, "BCR")) %>% 
+  mutate(BCR = str_sub(stratum, 4, 5) %>% as.numeric()) %>% 
+  filter(BCR!=31)
+write_csv(trend1993, here("Data/Validation/abundance_trend_1993on.csv"))
+write_csv(trend1970, here("Data/Validation/abundance_trend_1970on.csv"))
+```
+
+We see two important trends here: the decline of finches in the Northeast after the introduction of MG, and the increase of finches in the Great Plains from 1970 on as they fill their potential niche there as an invasive species. To proceed, I need to rasterize these Audubon ecoregions to my study region grid.
+
+```{r rasterize bcr}
+bcr_raster <- bcr |> 
+  st_transform("+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  fasterize(region_raster, 'BCR') |> 
+  rast()
+plot(bcr_raster)
+```
+
+Let's test this out on my example simulation.
+
+```{r test abundance trends}
+# Penalty function
+abundance_trend_penalty <- function(percent_change, trend_upper, trend_lower) {
+  if (any(is.na(c(trend_upper, trend_lower)))) {
+    stop("The trend inputs must not be NA")
+  }
+  if (is.na(percent_change)) {
+    penalty <- 20
+  } else if (percent_change < trend_lower) {
+    penalty <- trend_lower - percent_change
+  } else if (percent_change > trend_upper) {
+    penalty <- percent_change - trend_upper
+  } else {
+    penalty <- 0
+  }
+  return(penalty)
+}
+# File paths of simulation output rasters
+file_paths <- example |> 
+  list.files(full.names = T)
+  
+# Extract the number and season from the file paths
+data <- data.frame(
+  path = file_paths,
+  season = str_extract(file_paths, "summer|winter"),
+  number = as.numeric(str_split_i(file_paths, "_", 3))
+)
+
+# Convert the season to a factor with the desired order
+data$season <- factor(data$season, levels = c("winter", "summer"))
+
+# Sort the data frame by number and season
+sorted_data <- data[order(data$number, data$season), ]
+
+example_abundance <- sorted_data$path |> map(rast) |> 
+  split(sorted_data$number) |> map(rast) |> 
+  map(\(r) app(x = r, fun = sum)) |> rast()
+
+example1970 <- example_abundance[region$region_indices] |> 
+  mutate(bcr = extract(bcr_raster, region$coordinates)) |> 
+  pivot_longer(1:77, values_to = "Abundance", names_to = "Timepoint",
+               names_transform = as.integer) |> 
+  mutate(Year = years[Timepoint]) |> 
+  filter(!is.na(bcr), Year %in% 1970:2016) |> 
+  group_by(bcr) |> 
+  nest() |> 
+  mutate(model = map(data, \(df) lm(Abundance ~ Year, data = df))) |> 
+  mutate(tidy = map(model, tidy)) |> 
+  unnest(tidy) |> 
+  filter(term == "Year")
+baseline <- map_dbl(example1970$model, \(m) predict(m, newdata = data.frame(Year = 1970)))
+example1970$percent_change <- (example1970$estimate / baseline) * 100
+penalty1970 <- example1970 |> select(BCR = bcr, percent_change) |> 
+  right_join(trend1970) |> 
+  mutate(penalty = abundance_trend_penalty(percent_change, estimate_ucl, estimate_lcl)) |> 
+  pull(penalty) |> 
+  sum()
+example1993 <- example_abundance[region$region_indices] |> 
+  mutate(BCR = extract(bcr_raster, region$coordinates)$layer) |> 
+  pivot_longer(1:77, values_to = "Abundance", names_to = "Timepoint",
+               names_transform = as.integer) |> 
+  mutate(Year = years[Timepoint]) |> 
+  filter(Year %in% 1993:2016, !is.na(BCR)) |> 
+  group_by(BCR) |> 
+  nest() |> 
+  mutate(model = map(data, \(df) lm(Abundance ~ Year, data = df))) |> 
+  mutate(tidy = map(model, tidy)) |> 
+  unnest(tidy) |> 
+  filter(term == "Year")
+baseline <- map_dbl(example1993$model, \(m) predict(m, newdata = data.frame(Year = 1993)))
+example1993$percent_change <- (example1993$estimate / baseline) * 100
+penalty1993 <- example1993 |> select(BCR, percent_change) |> 
+  right_join(trend1993) |> 
+  mutate(penalty = abundance_trend_penalty(percent_change, estimate_ucl, estimate_lcl)) |> 
+  pull(penalty) |> 
+  sum()
+c(penalty1993 = penalty1993, penalty1970 = penalty1970)
+```
+
+A high penalty because the simulation did not have sufficient change since 1970.

@@ -1,0 +1,118 @@
+---
+title: "Round 1 Simulation Report"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(here)
+library(paletteer)
+library(furrr)
+library(terra)
+results_dir <- here("Data/Output/Round1") |> list.dirs() |> 
+  gtools::mixedsort() |> _[-1]
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv")) |> 
+  slice(results_dir |> str_sub(67) |> as.integer())
+plan(multisession)
+```
+
+# Validation
+
+Here I will score the simulations against various validation datasets and see how they fare.
+
+## DC 1994
+
+The first and most important validation is whether there are house finches in Washington DC in 1994. If this check is not passed, then the simulation terminates because the disease cannot be introduced there, which is when the disease did in fact start. This validation is the initial filter.
+
+```{r dc}
+# Are birds in DC?
+dc <- results_dir |> map(list.files) |> map(length) |> map_lgl(\(x) x > 212)
+# Graph
+round1_priors |> 
+  mutate(dc = dc) |> 
+  ggplot(aes(x = "", y = dc, fill = dc)) +
+  geom_col() +
+  coord_polar(theta = "y") +
+  theme_void() +
+  scale_fill_paletteer_d("PrettyCols::Light", name = "Birds in DC?")
+```
+
+## Prevalence Trends
+
+Here I compare trends in prevalence in the Northeast against observed patterns in Project FeederWatch.
+
+```{r prevalence trends}
+# Function to filter file paths based on the second number
+filter_paths <- function(file_paths) {
+  # Use str_extract to capture the last number before the underscore
+  last_numbers <- as.numeric(str_extract(file_paths, "(?<=/)(\\d+)(?=_)"))
+  
+  # Filter paths where the last number is between 63 and 77
+  filtered_paths <- file_paths[last_numbers >= 63 & last_numbers <= 77]
+  
+  return(filtered_paths)
+}
+
+# Validation data
+mg_trends <- here("Data/Validation/prevalence_trends.csv") |> read_csv()
+
+# Put file paths in the right order
+file_paths <- results_dir[dc] |> 
+  future_map(list.files, full.names = T) |> 
+  future_map(filter_paths)
+data_list <- map(file_paths, \(fp) data.frame(
+  path = fp,
+  season = str_extract(fp, "summer|winter"),
+  number = as.integer(str_extract(fp, "(?<=/)(\\d+)(?=_)")),
+  infected = str_detect(fp, "I")
+) |> 
+  mutate(season = factor(season, levels = c("winter", "summer"))) |> 
+  arrange(number, season))
+simulation_id <- results_dir[dc] |> str_sub(67) |> as.integer()
+
+process_single_number <- function(df, number) {
+  df %>%
+    filter(number == !!number) %>%
+    group_split(infected) %>%
+    map(\(subset_df) pull(subset_df, path)) %>%
+    map(rast) |> 
+    map(\(r) r[mg_trends$region_cell]) |> 
+    map(\(df) Reduce(`+`, df)) |> 
+    map_int(sum) |> 
+    `length<-`(2) |>
+    replace_na(0) |> 
+    setNames(c("healthy", "sick"))
+}
+
+sick_healthy_sums <- function(df_list) {
+  df_list |> 
+    future_map(\(df) map_dfr(63:77, process_single_number, df = df)) |> 
+    imap(\(df, i) mutate(df, index = 63:77, sim = simulation_id[i])) |> 
+    bind_rows()   
+}
+
+sick_healthy <- sick_healthy_sums(data_list[1:50])
+  
+  sorted_data$path |> map(rast) |> split(sorted_data$number) |> 
+  map(function(l) {
+    sick_birds <- l[c(1:4, 9:12)] |> map(\(r) r[trends$region_cell]) |> 
+      Reduce(f = `+`, x = _)
+    healthy_birds <- l[c(5:8, 13:16)] |> map(\(r) r[trends$region_cell]) |> 
+      Reduce(f = `+`, x = _)
+    return(c(sick_birds = sick_birds,
+             healthy_birds = healthy_birds))
+  }) |> map(bind_cols) |> 
+  map2(2001:2015, \(x, y) cbind(x, Year = y)) |> 
+  map(\(df) cbind(df, region_cell = trends$region_cell)) |> 
+  bind_rows() |> 
+  split(f = trends$region_cell) |> 
+  discard(\(df) sum(df$sick_birds.lyr1, df$healthy_birds.lyr1)==0) |> 
+  map(\(df) glm(cbind(sick_birds.lyr1, healthy_birds.lyr1) ~ Year, 
+    family = binomial, data = df))
+```
+
+# Posteriors
+
+# Top Models
