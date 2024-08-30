@@ -11,7 +11,7 @@ library(here)
 library(doParallel)
 i_am("mgsim/Scripts/simulation_round1.R")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- "/glade/work/pilowskyj/Round1"
+results_dir <- here("Data/Output/Round1.2")
 set_trust_promises(TRUE)
 random_seed <- 90
 n_sims <- 10000
@@ -288,7 +288,8 @@ sim$add_process(
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
-        overwrite = TRUE
+        overwrite = TRUE,
+        raster = FALSE
       )
     } else {
       save_species(
@@ -296,7 +297,8 @@ sim$add_process(
         traits = c("Sj_abundance", "Sa_abundance"),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
-        overwrite = TRUE
+        overwrite = TRUE,
+        raster = FALSE
       )
     }
   },
@@ -313,7 +315,8 @@ sim$add_process(
                   "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
         prefix = paste0(self$get_current_time_step(), "_", "summer_"),
         path = self$globals$results_dir,
-        overwrite = TRUE
+        overwrite = TRUE,
+        raster = FALSE
       )
     } else {
       save_species(
@@ -321,7 +324,8 @@ sim$add_process(
         traits = c("Sj_abundance", "Sa_abundance"),
         prefix = paste0(self$get_current_time_step(), "_summer_"),
         path = self$globals$results_dir,
-        overwrite = TRUE
+        overwrite = TRUE,
+        raster = FALSE
       )
     }
   },
@@ -511,7 +515,7 @@ sim$add_process(
 )
 
 #### Set up parallel threading ####
-numCores <- 36
+numCores <- 2
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
@@ -521,7 +525,7 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data,
+  sample_data = sample_data[9999:10000,],
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,

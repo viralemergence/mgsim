@@ -20,7 +20,7 @@ library(paletteer)
 library(fasterize)
 NA_map <- map_data("world") |> filter(region %in% c("Canada", "Mexico", "USA"))
 wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433]],\n    CS[ellipsoidal,2],\n        AXIS[\"geodetic latitude (Lat)\",north,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        AXIS[\"geodetic longitude (Lon)\",east,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n    ID[\"EPSG\",4326]]"
-example <- here("Data/Output/epizootic_test/simulation1")
+# example <- here("Data/Output/epizootic_test/simulation1")
 basemap <- ggplot() +
   geom_polygon(data = NA_map, 
                aes(x=long, y = lat, group = group), 
@@ -78,7 +78,7 @@ basemap +
 
 Now I need to calculate the same trend for these same years in these same locations for my example simulation run.
 
-```{r prevalence trend extraction, warning = F}
+```{r prevalence trend extraction, warning = F, eval=FALSE}
 # File paths of simulation output rasters
 file_paths <- example |> 
   list.files(full.names = T) |> 
@@ -144,7 +144,7 @@ sightings <- hfds |> mutate(region_cell = rasterized) |>
   group_split() |> 
   discard(\(df) nrow(df) < 7)
 arrivals <- sightings |> 
-  map(\(s) weib_percentile_ci(s$Year, 250, 0.05, 100, parallelize = "multicore", ncpus = 8))
+  map(\(s) weib_percentile_ci(s$Year, 250, 0.05, 100, parallelize = "multicore", ncpus = 4))
 mg_arrival <- sightings |>
   map2(arrivals, \(x, y) mutate(x, first_arrival_low = y[2],
                                 first_arrival_high = y[3],
@@ -198,7 +198,7 @@ basemap +
 
 And here I will test out this metric on my example (it will do very badly):
 
-```{r test mg presence}
+```{r test mg presence, eval = FALSE}
 # File paths of simulation output rasters
 file_paths <- example |> 
   list.files(full.names = T)
@@ -333,7 +333,7 @@ presabs |>
 
 Now I will test this metric on my example simulation.
 
-```{r test presence absence}
+```{r test presence absence, eval = FALSE}
 # File paths of simulation output rasters
 file_paths <- example |> 
   list.files(full.names = T)
@@ -471,7 +471,7 @@ plot(bcr_raster)
 
 Let's test this out on my example simulation.
 
-```{r test abundance trends}
+```{r test abundance trends, eval=FALSE}
 # Penalty function
 abundance_trend_penalty <- function(percent_change, trend_upper, trend_lower) {
   if (any(is.na(c(trend_upper, trend_lower)))) {
