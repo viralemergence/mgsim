@@ -1,6 +1,6 @@
 #!/bin/bash -l
 ### Job Name
-#PBS -N mgsim_round1.5
+#PBS -N raster_to_qs
 ### Charging account
 #PBS -A UCIE0003
 ### Request one chunk of resources
@@ -25,4 +25,4 @@ module load ncarenv/23.10 gcc/13.2.0 conda/latest proj/9.2.1 ncarcompilers/1.0.0
 conda activate mgsim
 
 ### Run script
-Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round1.R
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/raster_to_qs.R
