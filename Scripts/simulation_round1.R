@@ -11,7 +11,7 @@ library(here)
 library(doParallel)
 i_am("mgsim/Scripts/simulation_round1.R")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- here("Data/Output/Round1.2")
+results_dir <- here("mgsim/Data/Output/Round1.2")
 set_trust_promises(TRUE)
 random_seed <- 90
 n_sims <- 10000

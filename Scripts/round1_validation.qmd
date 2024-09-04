@@ -11,7 +11,15 @@ library(here)
 library(paletteer)
 library(furrr)
 library(qs)
+library(broom)
 library(abind)
+library(foreach)
+library(doParallel)
+i_am("Scripts/round1_validation.qmd")
+# Register parallel backend with doParallel
+num_cores <- parallel::detectCores() - 1  # Leave one core free
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
 results_dir <- here("Data/Output/Round1_matrix") |> list.dirs() |> 
   gtools::mixedsort() |> _[-1]
 round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv")) |> 
@@ -45,7 +53,7 @@ round1_priors |>
 
 Here I compare trends in prevalence in the Northeast against observed patterns in Project FeederWatch.
 
-```{r prevalence trends}
+```{r prevalence trends, eval = FALSE}
 # Function to filter file paths based on the second number
 filter_paths <- function(file_paths) {
   # Use str_extract to capture the last number before the underscore
@@ -62,8 +70,8 @@ mg_trends <- here("Data/Validation/prevalence_trends.csv") |> read_csv()
 
 # Put file paths in the right order
 file_paths <- results_dir[dc] |> 
-  future_map(list.files, full.names = T) |> 
-  future_map(filter_paths)
+  map(list.files, full.names = T) |> 
+  map(filter_paths)
 data_list <- map(file_paths, \(fp) data.frame(
   path = fp,
   season = str_extract(fp, "summer|winter"),
@@ -122,81 +130,266 @@ hist(prevalence_trend)
 
 This is wildly all over the place... probably not the best validation metric.
 
-## Presence
+## Mycoplasma Presence
 
 Here I take sites that have consistent presence of the disease over many years and see if the simulations can replicate this persistence.
 
 ```{r mg presence}
+# Load the presence/absence data
 pres_hfds <- read_csv(here("Data/Validation/mycoplasma_presence.csv"))
+
 # Max penalty for simulations with no sick birds
 max_penalty <- pres_hfds |> 
   rowwise() |> 
   mutate(range = length(min_index:max_index)) |> 
-  pull(range) |> sum()
-
-# Function to add missing years
-fill_missing_years <- function(df, start_year = 1994, end_year = 2016, missing_path = here("Data/Validation/dummy_result.qs")) {
-  # Full sequence of years
-  all_years <- seq(start_year, end_year)
-  
-  # Identify missing years
-  missing_years <- setdiff(all_years, df$Year)
-  
-  # If there are no missing years, return the dataframe as is
-  if (length(missing_years) == 0) {
-    return(df)
-  }
-  
-  # Create a dataframe for the missing years
-  missing_df <- data.frame(Year = missing_years, path = missing_path)
-  
-  # Combine the original dataframe with the missing years dataframe
-  df_filled <- bind_rows(df, missing_df)
-  
-  # Order by Year
-  df_filled <- df_filled[order(df_filled$Year), ]
-  
-  return(df_filled)
-}
-
-# Function to convert region cell to row/col
-convert_flat_to_2d <- function(flat_index, nrows) {
-  x <- (flat_index - 1) %% nrows + 1
-  y <- (flat_index - 1) %/% nrows + 1
-  return(c(x, y))
-}
+  pull(range) |> 
+  sum()
 
 # Extract the file paths for infected birds
 infected_list <- results_dir[dc] |> 
-  future_map(list.files, full.names = T) |>  
-  map(\(p) data.frame(
-  path = p,
-  index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
-  infected = str_detect(p, "I")
-) |> filter(infected) |> arrange(index) |> 
+  lapply(list.files, full.names = TRUE) |>  
+  lapply(function(p) data.frame(
+    path = p,
+    index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+    infected = str_detect(p, "I")
+  ) |> 
+  filter(infected) |> 
+  arrange(index) |> 
   left_join(year_lookup, by = join_by(index)) |> 
   filter(Year %in% 1994:2016))
-no_infection <- map_lgl(infected_list, \(d) nrow(d) == 0)
 
+no_infection <- sapply(infected_list, function(d) nrow(d) == 0)
+
+# Pre-allocate the penalty vector
 mg_presence_penalty <- rep(NA, length(infected_list))
 mg_presence_penalty[no_infection] <- max_penalty
 
-mg_presence_metric <- infected_list |> 
-  discard(\(d) nrow(d) == 0) |> 
-  map(fill_missing_years) |> 
-  map(\(df) group_split(df, Year)) |> 
-  map_depth(2, pull, var = "path") |> 
-  map_depth(2, as.list) |> 
-  map_depth(3, qread) |> 
-  map(\(l) map(l, \(m) Reduce(`+`, m))) |> 
-  future_map(abind) |> 
-  map(function(sim) {
-    pres_hfds |> 
-      rowwise() |> 
-      mutate(sick = map(\(m) m[]))
+# Parallel processing with foreach
+mg_presence_metric <- foreach(df = infected_list[!no_infection], .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
+  # Fill missing years and group by Year
+  df_filled <- fill_missing_years(df) |> group_split(Year)
+  
+  # Process each year group
+  sim_array <- map(df_filled, function(year_df) {
+    # Load only the necessary files for this year's paths
+    paths <- year_df |> pull(path)
+    files <- lapply(paths, qread)  # Read files in this chunk
+    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+    
+    # Create the array for this chunk
+    array(combined_files, dim = c(106, 161, 1))
+  }) |> abind()
+  
+  # Calculate the metric for this simulation
+  pres_hfds |>
+    rowwise() |>
+    mutate(
+      rowcol = list(convert_flat_to_2d(region_cell, 106)),
+      sick = sum(sim_array[rowcol[1], rowcol[2], min_index:max_index]),
+      none_sick = sick == 0
+    ) |>
+    pull(none_sick) |>
+    sum()
+}
+
+# Assign metrics to the penalty vector
+mg_presence_penalty[!no_infection] <- mg_presence_metric
+hist(mg_presence_metric)
+```
+
+This is looking to be an excellent filter.
+
+## Haemorhous Presence/Absence
+
+Here I test the simulations at locations where, according to my observation data, the finches are either present for long periods of time or absent for long periods of time.
+
+```{r presence absence}
+# Load the presence/absence data
+presabs <- here("Data/Validation/haemorhous_presence_absence.csv") |> 
+  read_csv()
+
+# Gather relevant data
+presence_list <- results_dir[dc] |> 
+  lapply(list.files, full.names = TRUE) |>  
+  lapply(function(p) {
+    data.frame(
+      path = p,
+      index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+      infected = str_detect(p, "I")
+    ) |> 
+    arrange(index) |> 
+    left_join(year_lookup, by = join_by(index))
   })
+
+# Parallel processing with foreach
+presabs_metric <- foreach(plist = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
+  # Apply fill_missing_years and group by Year
+  plist_filled <- plist |> fill_missing_years() |> group_split(Year)
+  
+  # Initialize an empty list to store results for this presence_list
+  sim_array_results <- vector("list", length(plist_filled))
+  
+  # Process each grouped data frame separately to manage memory
+  for (i in seq_along(plist_filled)) {
+    df <- plist_filled[[i]]
+    
+    # Load only the necessary files for this chunk
+    paths <- df$path
+    files <- lapply(paths, qread)  # Read files in this chunk
+    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+    
+    # Create the array for this chunk and store it
+    sim_array_results[[i]] <- array(combined_files, dim = c(106, 161, 1))
+  }
+  
+  # Combine all the arrays for the current presence_list
+  sim_array <- abind(sim_array_results)
+  
+  # Calculate the metric for this presence_list
+  penalty <- presabs |>
+    rowwise() |>
+    mutate(
+      rowcol = list(convert_flat_to_2d(region_cell, 106)),
+      occupancy = sum(sim_array[rowcol[1], rowcol[2], min_index:max_index] > 0),
+      penalty = if_else(
+        always_present,
+        length(min_index:max_index) - occupancy,
+        occupancy
+      )
+    ) |>
+    pull(penalty) |>
+    sum()
+  
+  return(penalty)
+}
+```
+
+## Haemorhous Trends
+
+I have information on trends in house finch abundance across North America. I just need to compare the trends in the simulations in the conservation regions of interest against the observed ones from Christmas Bird Count data.
+
+```{r abundance trend}
+# Read in trend data
+trend1993 <- read_csv(here("Data/Validation/abundance_trend_1993on.csv"))
+trend1970 <- read_csv(here("Data/Validation/abundance_trend_1970on.csv"))
+# and conservation regions
+bcr <- here("Data/Validation/bird_conservation_regions.qs") |> qread()
+
+# Penalty function
+abundance_trend_penalty <- function(percent_change, trend_upper, trend_lower) {
+  if (any(is.na(c(trend_upper, trend_lower)))) {
+    stop("The trend inputs must not be NA")
+  }
+  if (is.na(percent_change)) {
+    penalty <- 20
+  } else if (percent_change < trend_lower) {
+    penalty <- trend_lower - percent_change
+  } else if (percent_change > trend_upper) {
+    penalty <- percent_change - trend_upper
+  } else {
+    penalty <- 0
+  }
+  return(penalty)
+}
+
+# Gather relevant data
+abundance_list <- results_dir[dc] |> 
+  lapply(list.files, full.names = TRUE) |>  
+  lapply(function(p) {
+    data.frame(
+      path = p,
+      index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+      infected = str_detect(p, "I")
+    ) |> 
+    arrange(index) |> 
+    left_join(year_lookup, by = join_by(index)) |> 
+    filter(Year %in% 1970:2016)
+  })
+
+trend_metric <- foreach(
+  alist = abundance_list,
+  .combine = c,
+  .packages = c("dplyr", "purrr", "qs", "abind")
+) %dopar% {
+  
+  # Preprocess data and fill missing years
+  alist_filled <- alist |> fill_missing_years() |> group_split(Year)
+  
+  # Preallocate a 3D array for sim_array results
+  sim_array_results <- array(0, dim = c(106, 161, length(alist_filled)))
+  
+  # Process each year chunk to manage memory and avoid redundant computations
+  for (i in seq_along(alist_filled)) {
+    df <- alist_filled[[i]]
+    
+    # Read files only once per chunk
+    paths <- df$path
+    files <- lapply(paths, qread)
+    combined_files <- Reduce(`+`, files)  # Combine directly
+    
+    # Fill the preallocated array
+    sim_array_results[, , i] <- combined_files
+  }
+  
+  # Function to calculate trend metrics
+  calculate_trend_metrics <- function(year_range, baseline_year) {
+    abund <- map_dfr(5:37, function(int_val) {
+      positions <- which(bcr == int_val, arr.ind = TRUE)
+      subset_array <- sim_array[positions[, 1], positions[, 2], , drop = F]
+      data.frame(
+        Abundance = colSums(subset_array, dims = 2),
+        bcr = rep(int_val),
+        Year = c(1970:2016)
+      )
+    })
+    
+    trend_by_bcr <- abund |>
+      filter(Year %in% year_range) |>
+      group_by(bcr) |>
+      nest() |>
+      mutate(model = map(data, \(df) lm(Abundance ~ Year, data = df))) |>
+      mutate(tidy = map(model, tidy)) |>
+      unnest(tidy) |>
+      filter(term == "Year")
+    
+    baseline <- map_dbl(trend_by_bcr$model, \(m) predict(m, newdata = data.frame(Year = baseline_year)))
+    trend_by_bcr$percent_change <- (trend_by_bcr$estimate / baseline) * 100
+    
+    penalty <- trend_by_bcr |> 
+      select(BCR = bcr, percent_change) |>
+      right_join(if (baseline_year == 1970) trend1970 else trend1993) |>
+      mutate(penalty = abundance_trend_penalty(percent_change, estimate_ucl, estimate_lcl)) |>
+      pull(penalty) |>
+      sum()
+    
+    return(penalty)
+  }
+  
+  # Calculate penalties for both 1970 and 1993
+  penalty1970 <- calculate_trend_metrics(1970:2016, 1970)
+  penalty1993 <- calculate_trend_metrics(1993:2016, 1993)
+  
+  # Return the penalties
+  c(penalty1993 = penalty1993, penalty1970 = penalty1970)
+}
+
 ```
 
 # Posteriors
+
+First of all, I find it interesting to consider what filtering for presence of birds in DC does to the posteriors, since it's our first filter.
+
+```{r}
+round1_priors |> 
+  mutate(dc = dc) |> 
+  select(-mortality_Sa_summer, -mortality_Ra_summer) |> 
+  pivot_longer(1:45, names_to = "Prior", values_to = "Value") |> 
+  ggplot(aes(x = Value, group = dc, fill = dc)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~Prior, scales = "free") +
+  scale_fill_paletteer_d("PrettyCols::Light", name = "Birds in DC?")
+```
+
+## 
 
 # Top Models
