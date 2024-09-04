@@ -8,11 +8,10 @@ library(poems)
 library(qs)
 library(terra)
 library(here)
-library(doFuture)
-library(future.batchtools)
+library(doParallel)
 i_am("mgsim/Scripts/simulation_round1.R")
-data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- "/glade/work/pilowskyj/Round1"
+data_dir <- here("mgsim/Data/Input")
+results_dir <- here("mgsim/Data/Output/Round1")
 random_seed <- 90
 n_sims <- 10000
 region <- data_dir |> file.path("finch_region.qs") |> qread()
@@ -511,8 +510,8 @@ sim$add_process(
 )
 
 #### Set up parallel threading ####
-registerDoFuture()
-plan(batchtools_torque)
+cl <- makeCluster(2)
+registerDoParallel(cl)
 
 #### Simulate ####
 sim_manager <- metaRangeParallel$new(
@@ -520,7 +519,7 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data,
+  sample_data = sample_data[1:2,],
   register_parallel = FALSE,
   results_dir = results_dir,
   seed = random_seed,
@@ -528,3 +527,4 @@ sim_manager <- metaRangeParallel$new(
 )
 
 sim_log <- sim_manager$run()
+stopCluster(cl)
