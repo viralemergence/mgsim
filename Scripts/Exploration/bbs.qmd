@@ -7,25 +7,28 @@ editor: visual
 
 ```{r setup, include = FALSE, message = FALSE}
 library(mapdata)
-library(tidyverse)
 library(cowplot)
 library(paletteer)
 library(vroom)
 library(here)
 library(gganimate)
+library(canadianmaps)
+library(tidyverse)
+usa <- map_data("usa")
+data("REG")
 map <- purrr::map
 i_am("Scripts/Exploration/bbs.qmd")
-routes <- read_csv(here("Data/Input/Routes.csv"), col_types = "iicciddiiii") %>% 
+routes <- read_csv(here("Data/Validation/FeederWatch/routes.csv"), col_types = "iicciddiiii") %>% 
   mutate(ID = str_c(CountryNum, StateNum, Route))
-weather <- vroom(here("Data/Input/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
-hofi <- here("Data/Input/States") %>% list.files(full.names = T) %>% 
+weather <- vroom(here("Data/Validation/FeederWatch/Weather.zip"), col_types = "iiiciiiidiiiciiiicccii")
+hofi <- here("Data/Validation/FeederWatch/States") %>% list.files(full.names = T) %>% 
   map(vroom, col_types = "iiiciiciiiii") %>% 
   bind_rows() %>% 
   filter(AOU=="05190") %>% 
   left_join(routes) %>% 
   left_join(weather) %>% 
   filter(QualityCurrentID==1)
-presabs <- here("Data/Input/States") %>% list.files(full.names = T) %>% 
+presabs <- here("Data/Validation/FeederWatch/States") %>% list.files(full.names = T) %>% 
   map(vroom, col_types = "iiiciiciiiii") %>% 
   bind_rows() %>% 
   filter(Year<2020) %>% 
@@ -41,16 +44,14 @@ presabs <- here("Data/Input/States") %>% list.files(full.names = T) %>%
   filter(AOU=="05190") %>% 
   left_join(routes) %>% 
   mutate(Present = SpeciesTotal>0)
-usa <- map_data("usa")
-canada <- map_data("worldHires", "Canada")
 NA_map <- ggplot() +
   geom_polygon(data = usa, 
                aes(x=long, y = lat, group = group), 
                fill = "gray50", 
                color="black") +
-  geom_polygon(data = canada, aes(x=long, y = lat, group = group), 
+  geom_sf(data = REG, 
                fill = "gray50", color="black") + 
-  coord_quickmap(xlim = c(-140, -50), ylim = c(25, 55))
+  coord_sf(xlim = c(-140, -50), ylim = c(25, 55))
 gc()
 ```
 

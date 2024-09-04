@@ -1,0 +1,202 @@
+---
+title: "Round 1 Simulation Report"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(here)
+library(paletteer)
+library(furrr)
+library(qs)
+library(abind)
+results_dir <- here("Data/Output/Round1_matrix") |> list.dirs() |> 
+  gtools::mixedsort() |> _[-1]
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv")) |> 
+  slice(results_dir |> str_sub(74) |> as.integer())
+year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
+plan(multisession)
+```
+
+# Validation
+
+Here I will score the simulations against various validation datasets and see how they fare.
+
+## DC 1994
+
+The first and most important validation is whether there are house finches in Washington DC in 1994. If this check is not passed, then the simulation terminates because the disease cannot be introduced there, which is when the disease did in fact start. This validation is the initial filter.
+
+```{r dc}
+# Are birds in DC?
+dc <- results_dir |> map(list.files) |> map(length) |> map_lgl(\(x) x > 212)
+# Graph
+round1_priors |> 
+  mutate(dc = dc) |> 
+  ggplot(aes(x = "", y = dc, fill = dc)) +
+  geom_col() +
+  coord_polar(theta = "y") +
+  theme_void() +
+  scale_fill_paletteer_d("PrettyCols::Light", name = "Birds in DC?")
+```
+
+## Prevalence Trends
+
+Here I compare trends in prevalence in the Northeast against observed patterns in Project FeederWatch.
+
+```{r prevalence trends}
+# Function to filter file paths based on the second number
+filter_paths <- function(file_paths) {
+  # Use str_extract to capture the last number before the underscore
+  last_numbers <- as.numeric(str_extract(file_paths, "(?<=/)(\\d+)(?=_)"))
+  
+  # Filter paths where the last number is between 63 and 77
+  filtered_paths <- file_paths[last_numbers >= 63 & last_numbers <= 77]
+  
+  return(filtered_paths)
+}
+
+# Validation data
+mg_trends <- here("Data/Validation/prevalence_trends.csv") |> read_csv()
+
+# Put file paths in the right order
+file_paths <- results_dir[dc] |> 
+  future_map(list.files, full.names = T) |> 
+  future_map(filter_paths)
+data_list <- map(file_paths, \(fp) data.frame(
+  path = fp,
+  season = str_extract(fp, "summer|winter"),
+  number = as.integer(str_extract(fp, "(?<=/)(\\d+)(?=_)")),
+  infected = str_detect(fp, "I")
+) |> 
+  mutate(season = factor(season, levels = c("winter", "summer"))) |> 
+  arrange(number, season))
+simulation_id <- results_dir[dc] |> str_sub(74) |> as.integer()
+
+process_single_number <- function(df, number) {
+  df %>%
+    filter(number == !!number) %>%
+    group_split(infected) %>%
+    map(\(subset_df) pull(subset_df, path)) %>%
+    map(\(l) map(l, qread)) |> 
+    map(\(l) map(l, \(m) m[mg_trends$region_cell])) |> 
+    map(\(df) Reduce(`+`, df)) |> 
+    setNames(c("healthy", "sick")) |> 
+    bind_cols() |> 
+    mutate(index = number, region_cell = mg_trends$region_cell)
+}
+
+sick_healthy_sums <- function(df_list) {
+  df_list |> 
+    future_map(\(df) map_dfr(63:77, process_single_number, df = df)) |> 
+    imap(\(df, i) mutate(df, sim = simulation_id[i])) |> 
+    bind_rows()   
+}
+
+rmse <- function(predicted, observed) {
+  sqrt(mean(observed - predicted)^2)
+}
+
+sick_healthy <- sick_healthy_sums(data_list)
+
+prevalence_trend_metric <- function(df) {
+  prevalence_metrics <- df |> 
+  left_join(year_lookup, by = join_by(index)) %>%
+  group_by(region_cell) |> 
+  filter(sum(healthy) > 0 && sum(sick) > 0) |> 
+  nest() |> 
+  mutate(model = map(data, \(df) glm(cbind(sick, healthy) ~ Year, 
+    family = binomial, data = df))) |> 
+  mutate(Year_slope = map_dbl(model, \(m) coef(m)[2])) |> 
+  left_join(mg_trends, by = join_by(region_cell)) |> 
+  ungroup() |> 
+  select(predicted = Year_slope, observed = estimate)
+
+  lift(rmse)(prevalence_metrics)
+}
+
+prevalence_trend <- sick_healthy |> group_split(sim) |> future_map_dbl(prevalence_trend_metric)
+hist(prevalence_trend)
+```
+
+This is wildly all over the place... probably not the best validation metric.
+
+## Presence
+
+Here I take sites that have consistent presence of the disease over many years and see if the simulations can replicate this persistence.
+
+```{r mg presence}
+pres_hfds <- read_csv(here("Data/Validation/mycoplasma_presence.csv"))
+# Max penalty for simulations with no sick birds
+max_penalty <- pres_hfds |> 
+  rowwise() |> 
+  mutate(range = length(min_index:max_index)) |> 
+  pull(range) |> sum()
+
+# Function to add missing years
+fill_missing_years <- function(df, start_year = 1994, end_year = 2016, missing_path = here("Data/Validation/dummy_result.qs")) {
+  # Full sequence of years
+  all_years <- seq(start_year, end_year)
+  
+  # Identify missing years
+  missing_years <- setdiff(all_years, df$Year)
+  
+  # If there are no missing years, return the dataframe as is
+  if (length(missing_years) == 0) {
+    return(df)
+  }
+  
+  # Create a dataframe for the missing years
+  missing_df <- data.frame(Year = missing_years, path = missing_path)
+  
+  # Combine the original dataframe with the missing years dataframe
+  df_filled <- bind_rows(df, missing_df)
+  
+  # Order by Year
+  df_filled <- df_filled[order(df_filled$Year), ]
+  
+  return(df_filled)
+}
+
+# Function to convert region cell to row/col
+convert_flat_to_2d <- function(flat_index, nrows) {
+  x <- (flat_index - 1) %% nrows + 1
+  y <- (flat_index - 1) %/% nrows + 1
+  return(c(x, y))
+}
+
+# Extract the file paths for infected birds
+infected_list <- results_dir[dc] |> 
+  future_map(list.files, full.names = T) |>  
+  map(\(p) data.frame(
+  path = p,
+  index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+  infected = str_detect(p, "I")
+) |> filter(infected) |> arrange(index) |> 
+  left_join(year_lookup, by = join_by(index)) |> 
+  filter(Year %in% 1994:2016))
+no_infection <- map_lgl(infected_list, \(d) nrow(d) == 0)
+
+mg_presence_penalty <- rep(NA, length(infected_list))
+mg_presence_penalty[no_infection] <- max_penalty
+
+mg_presence_metric <- infected_list |> 
+  discard(\(d) nrow(d) == 0) |> 
+  map(fill_missing_years) |> 
+  map(\(df) group_split(df, Year)) |> 
+  map_depth(2, pull, var = "path") |> 
+  map_depth(2, as.list) |> 
+  map_depth(3, qread) |> 
+  map(\(l) map(l, \(m) Reduce(`+`, m))) |> 
+  future_map(abind) |> 
+  map(function(sim) {
+    pres_hfds |> 
+      rowwise() |> 
+      mutate(sick = map(\(m) m[]))
+  })
+```
+
+# Posteriors
+
+# Top Models

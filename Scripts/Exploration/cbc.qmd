@@ -5,7 +5,7 @@ format: pdf
 editor: visual
 ---
 
-## About CBC data
+# About CBC data
 
 Christmas Bird Count data is yearly citizen science data, though it is somewhat messier than the Breeding Bird Survey because the routes are not consistent: counting circles come and go as birdwatchers please. Helpfully, Audubon provides weighted abundance indices and trends aggregated to different regions.
 
@@ -20,8 +20,8 @@ library(paletteer)
 library(sf)
 map <- purrr::map
 i_am("Scripts/Exploration/cbc.qmd")
-bcr <- st_read("~/Documents/Very Large Data/cbc_v4_download/BCR_Terrestrial/BCR_Terrestrial_master_International.shp")
-cbc <- vroom("~/Documents/Very Large Data/cbc_v4_download/cbc_trends_abundance_indices_and_scaling_factors_v4.0_web_download_12Apr2022.csv",
+bcr <- st_read("~/Documents/Very_Large_Data/Christmas Bird Count/BCR_Terrestrial/BCR_Terrestrial_master_International.shp")
+cbc <- vroom("~/Documents/Very_Large_Data/Christmas Bird Count/cbc_trends_abundance_indices_and_scaling_factors_v4.0_web_download_12Apr2022.csv",
              col_types = "ccccidddddddd") %>% 
   filter(ebird_com_name=="House Finch")
 ```
@@ -55,7 +55,21 @@ cbc %>%
   scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
                           rescaler = scales::rescale_mid,
                          name = "Trend") +
-  theme_map()
+  theme_map() +
+  ggtitle("Trend from 1993 to Present")
+cbc %>% 
+  filter(parameter=="RegressionTrend1970On", str_detect(stratum, "BCR")) %>% 
+  mutate(BCR = str_sub(stratum, 4, 5) %>% as.numeric()) %>% 
+  filter(BCR!=31) %>% 
+  right_join(bcr) %>% 
+  ggplot() +
+  geom_sf(aes(geometry = geometry, fill = estimate_mean)) +
+  coord_sf(xlim = c(-128, -61), ylim = c(15, 54)) +
+  scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 
+                          rescaler = scales::rescale_mid,
+                         name = "Trend") +
+  theme_map() +
+  ggtitle("Trend from 1970 to Present")
 ```
 
 The impact of the disease in the Northeast is very clear.
