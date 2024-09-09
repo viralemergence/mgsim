@@ -20,7 +20,7 @@ library(paletteer)
 library(fasterize)
 NA_map <- map_data("world") |> filter(region %in% c("Canada", "Mexico", "USA"))
 wgs84 <- "GEOGCRS[\"WGS 84\",\n    DATUM[\"World Geodetic System 1984\",\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433]],\n    CS[ellipsoidal,2],\n        AXIS[\"geodetic latitude (Lat)\",north,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        AXIS[\"geodetic longitude (Lon)\",east,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n    ID[\"EPSG\",4326]]"
-# example <- here("Data/Output/epizootic_test/simulation1")
+example <- here("Data/Output/epizootic_test/simulation1")
 basemap <- ggplot() +
   geom_polygon(data = NA_map, 
                aes(x=long, y = lat, group = group), 
@@ -138,13 +138,19 @@ plot(sighting_raster, xlim = c(0, Inf), ylim = c(0, Inf))
 However, simply using the year of first sighting is not good enough. Observations are biased and flawed, so we need to use a statistical method to estimate the true first arrival date of the disease.
 
 ```{r estimate first arrival}
+hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
+rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
 sightings <- hfds |> mutate(region_cell = rasterized) |> 
   filter(NBirdsSick > 0, region_cell %in% region$region_indices) |> 
   group_by(region_cell) |> 
   group_split() |> 
-  discard(\(df) nrow(df) < 7)
+  discard(\(df) nrow(df) < 10)
 arrivals <- sightings |> 
-  map(\(s) weib_percentile_ci(s$Year, 250, 0.05, 100, parallelize = "multicore", ncpus = 4))
+  map(\(s) weib_percentile_ci(s$Year, 250, 0.05, 100, parallelize = "snow", ncpus = 8))
 mg_arrival <- sightings |>
   map2(arrivals, \(x, y) mutate(x, first_arrival_low = y[2],
                                 first_arrival_high = y[3],
@@ -226,6 +232,30 @@ pres_hfds |> rowwise() |> group_split() |>
     return(penalty)
   }) |> 
   sum()
+```
+
+## Spatiotemporal Prevalence
+
+From the literature, I have extracted data from studies that give upper and lower ranges of prevalence of MG in house finches at various times and places. I will exact a penalty for simulations that fail to simulate within the range of prevalence.
+
+Important considerations: prevalence and penalty should likely be calculated on the logit scale. Further, there are some cases where I have confirmation of zero prevalence, in which case penalty should increase linearly upward from zero instead of falling with in an uncertainty range.
+
+```{r spatiotemporal prevalence}
+prevalence <- here("Data/Validation/House finch Mycoplasma literature - Prevalence.csv") |> 
+  read_csv() |> 
+  select(DOI, Latitude, Longitude, Year, Season, `Overall Prevalence`, 
+         `Confidence Limit`) |> 
+  filter(!is.na(`Confidence Limit`) | `Overall Prevalence` == 0) |> 
+  pivot_wider(names_from = `Confidence Limit`, values_from = `Overall Prevalence`) |> 
+  slice(-c(6,22)) |> 
+  rename(Zero = `NA`)
+rasterized_prev <- as.matrix(prevalence[, c("Longitude", "Latitude")]) |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
+prevalence$region_cell <- rasterized_prev
+write_csv(prevalence, here("Data/Validation/mycoplasma_point_prevalence.csv"))
 ```
 
 # Haemorhous
