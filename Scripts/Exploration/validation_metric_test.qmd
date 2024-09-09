@@ -234,6 +234,30 @@ pres_hfds |> rowwise() |> group_split() |>
   sum()
 ```
 
+## Spatiotemporal Prevalence
+
+From the literature, I have extracted data from studies that give upper and lower ranges of prevalence of MG in house finches at various times and places. I will exact a penalty for simulations that fail to simulate within the range of prevalence.
+
+Important considerations: prevalence and penalty should likely be calculated on the logit scale. Further, there are some cases where I have confirmation of zero prevalence, in which case penalty should increase linearly upward from zero instead of falling with in an uncertainty range.
+
+```{r spatiotemporal prevalence}
+prevalence <- here("Data/Validation/House finch Mycoplasma literature - Prevalence.csv") |> 
+  read_csv() |> 
+  select(DOI, Latitude, Longitude, Year, Season, `Overall Prevalence`, 
+         `Confidence Limit`) |> 
+  filter(!is.na(`Confidence Limit`) | `Overall Prevalence` == 0) |> 
+  pivot_wider(names_from = `Confidence Limit`, values_from = `Overall Prevalence`) |> 
+  slice(-c(6,22)) |> 
+  rename(Zero = `NA`)
+rasterized_prev <- as.matrix(prevalence[, c("Longitude", "Latitude")]) |> 
+  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++no_defs") |> 
+  cellFromXY(object = region_raster)
+prevalence$region_cell <- rasterized_prev
+write_csv(prevalence, here("Data/Validation/mycoplasma_point_prevalence.csv"))
+```
+
 # Haemorhous
 
 ## Presence/Absence
