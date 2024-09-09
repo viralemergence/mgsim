@@ -11,7 +11,9 @@ library(here)
 library(doParallel)
 i_am("mgsim/Scripts/simulation_round1.R")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- here("Data/Output/Round1.2")
+results_dir <- "/glade/work/pilowskyj/Round1.2"
+incomplete_sims <- read.delim("/glade/work/pilowskyj/Round1.1/incomplete_simulations.txt", sep = "\n") |>
+	_[-c(1002:1003),]
 set_trust_promises(TRUE)
 random_seed <- 90
 n_sims <- 10000
@@ -515,7 +517,7 @@ sim$add_process(
 )
 
 #### Set up parallel threading ####
-numCores <- 2
+numCores <- 36
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
@@ -525,7 +527,7 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data[9999:10000,],
+  sample_data = sample_data[incomplete_sims,],
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,
