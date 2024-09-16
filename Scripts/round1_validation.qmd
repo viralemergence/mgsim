@@ -24,7 +24,8 @@ results_dir <- "glade/work/pilowskyj/Round1_matrix" |> list.dirs() |>
 round1_priors <- read_csv(here("mgsim/Data_minimal/Input/sample_data_round1.csv"))
 year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
 fill_missing_years <- function(df, start_year, end_year) {
-  missing_path <- here("Data_minimal/Validation/dummy_result.qs")
+  # Use NA or a special marker to indicate missing/zero years instead of using a file path
+  missing_marker <- NA_character_
   
   # Full sequence of years
   all_years <- seq(start_year, end_year)
@@ -44,7 +45,7 @@ fill_missing_years <- function(df, start_year, end_year) {
   create_missing_year_rows <- function(year) {
     template <- template_year
     template$Year <- year
-    template$path <- missing_path
+    template$path <- missing_marker  # Mark the missing years with NA or another marker
     return(template)
   }
   
@@ -64,6 +65,18 @@ convert_flat_to_2d <- function(flat_index, nrows) {
   row <- (flat_index - 1) %% nrows + 1
   col <- (flat_index - 1) %/% nrows + 1
   return(c(row, col))
+}
+
+# Define an array of zeroes to use for "crashed" simulations
+zero_array <- array(0, dim = c(106, 161, 1))
+
+# Function to either read the file or return the zero array
+read_or_zero <- function(path) {
+  if (is.na(path)) {  # Check if path is NA (missing year)
+    return(zero_array)
+  } else {
+    return(qread(path))  # Otherwise, read the file
+  }
 }
 ```
 
@@ -212,7 +225,7 @@ mg_presence_metric <- foreach(df = infected_list[!no_infection], .combine = c, .
   sim_array <- map(df_filled, function(year_df) {
     # Load only the necessary files for this year's paths
     paths <- year_df |> pull(path)
-    files <- lapply(paths, qread)  # Read files in this chunk
+    files <- lapply(paths, read_or_zero)  # Read files in this chunk
     combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
     
     # Create the array for this chunk
@@ -243,57 +256,57 @@ Here I test the simulations at locations where, according to my observation data
 
 ```{r presence absence}
 # Load the presence/absence data
-presabs <- here("Data/Validation/haemorhous_presence_absence.csv") |> 
+presabs <- here("Data/Validation/haemorhous_presence_absence.csv") |>
   read_csv()
 
 # Gather relevant data
-presence_list <- results_dir[dc] |> 
-  lapply(list.files, full.names = TRUE) |>  
+presence_list <- results_dir[dc] |>
+  lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
       path = p,
       index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
       infected = str_detect(p, "I")
-    ) |> 
-    arrange(index) |> 
-    left_join(year_lookup, by = join_by(index))
+    ) |>
+      arrange(index) |>
+      left_join(year_lookup, by = join_by(index))
   })
 
-# Parallel processing with foreach
-presabs_metric <- foreach(plist = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
-  # Apply fill_missing_years and group by Year
+# Calculating whether simulations have presence/absence in the right locations and years
+presabs_metric <- foreach(
+  plist = presence_list,
+  .combine = c,
+  .packages = c("dplyr", "purrr", "qs", "abind")
+) %dopar% {
+  # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
   plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
   
-  # Initialize an empty list to store results for this presence_list
-  sim_array_results <- vector("list", length(plist_filled))
+  # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
+  sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
   
-  # Process each grouped data frame separately to manage memory
+  # Adding together the matrices for all age classes and disease compartments for each year
   for (i in seq_along(plist_filled)) {
     df <- plist_filled[[i]]
     
-    # Load only the necessary files for this chunk
-    paths <- df$path
-    files <- lapply(paths, qread)  # Read files in this chunk
-    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+    combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
     
-    # Create the array for this chunk and store it
-    sim_array_results[[i]] <- array(combined_files, dim = c(106, 161, 1))
+    sim_array[, , i] <- combined_files
   }
   
-  # Combine all the arrays for the current presence_list
-  sim_array <- abind(sim_array_results)
-  
-  # Calculate the metric for this presence_list
+  # Simulations are penalized for each year they have presences in places/times where there should be absence, and vice versa
   penalty <- presabs |>
-    rowwise() |>
     mutate(
-      rowcol = list(convert_flat_to_2d(region_cell, 106)),
-      occupancy = sum(sim_array[rowcol[1], rowcol[2], min_index:max_index] > 0),
-      penalty = if_else(
-        always_present,
-        length(min_index:max_index) - occupancy,
-        occupancy
-      )
+      rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
+      occupancy = pmap_dbl(list(rowcol, min_index, max_index), function(rc, min_i, max_i) {
+        sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
+      }),
+      penalty = pmap_dbl(list(always_present, occupancy, min_index, max_index), function(always_present_val, occ, min_i, max_i) {
+        if (always_present_val) {
+          length(min_i:max_i) - occ
+        } else {
+          occ
+        }
+      })
     ) |>
     pull(penalty) |>
     sum()
@@ -362,8 +375,8 @@ trend_metric <- foreach(
     
     # Read files only once per chunk
     paths <- df$path
-    files <- lapply(paths, qread)
-    combined_files <- Reduce(`+`, files)  # Combine directly
+    files <- lapply(paths, read_or_zero)
+    combined_files <- Reduce(`+`, files)
     
     # Fill the preallocated array
     sim_array_results[, , i] <- combined_files
@@ -479,8 +492,8 @@ point_prevalence_metric <- foreach(plist = prevalence_list,
     
     # Read files only once per chunk
     paths <- df$path
-    infected <- lapply(paths[1:4], qread) |> Reduce(f = `+`, x = _)
-    total <- lapply(paths, qread) |> Reduce(f = `+`, x = _)
+    infected <- lapply(paths[1:4], read_or_zero) |> Reduce(f = `+`, x = _)
+    total <- lapply(paths, read_or_zero) |> Reduce(f = `+`, x = _)
     prev <- infected / total
     
     # Fill the preallocated array
@@ -548,7 +561,7 @@ mg_arrival_metric <- foreach(df = infected_list[!no_infection], .combine = c, .p
   sim_array <- map(df_filled, function(year_df) {
     # Load only the necessary files for this year's paths
     paths <- year_df |> pull(path)
-    files <- lapply(paths, qread)  # Read files in this chunk
+    files <- lapply(paths, read_or_zero)  # Read files in this chunk
     combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
     
     # Create the array for this chunk
@@ -617,7 +630,7 @@ hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dp
   sim_array <- map(df_filled, function(year_df) {
     # Load only the necessary files for this year's paths
     paths <- year_df |> pull(path)
-    files <- lapply(paths, qread)  # Read files in this chunk
+    files <- lapply(paths, read_or_zero)  # Read files in this chunk
     combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
     
     # Create the array for this chunk
