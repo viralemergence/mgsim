@@ -2,7 +2,7 @@
 ## Project code
 #PBS -A UCIE0003
 ## Job name
-#PBS -N mgsim_round1.5
+#PBS -N round1_validation
 ## Queue
 #PBS -q main
 ## Output log format
@@ -19,11 +19,17 @@ export TMPDIR=${SCRATCH}/${USER}/temp && mkdir -p $TMPDIR
 
 # Load modules to match compile-time environment
 module --force purge
-module load ncarenv/23.06 intel/2023.0.0 ncarcompilers/1.0.0 netcdf/4.9.2 proj/8.2.1 openmpi/main conda/latest geos/3.9.1 hdf5/1.12.2
+module load ncarenv/23.09 intel/2024.2.1 craype/2.7.31 ncarcompilers/1.0.0 gcc-toolchain/13.2.0 cray-mpich/8.1.29 geos/3.12.1 proj/9.2.1 conda/latest
 
 # Activate conda environment
 conda activate mgsim
 
+# Set up MPI environment
+export MPICH_SINGLE_HOST_ENABLED=0
+export MPICH_DPB_DIR=/glade/derecho/scratch/$USER/dpm
+
 # Run script
-Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round1.R
+mpiexec -n 1 --job-aware --single-node-vni --network def_tles=0 --universe-size=128 Rscript -e 'library(knitr); knit("/glade/u/home/pilowskyj/mgsim/Scripts/round1_validation.qmd")'
+
+
 

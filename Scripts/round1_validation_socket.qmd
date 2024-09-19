@@ -14,15 +14,15 @@ library(ggplot2)
 library(here)
 library(qs)
 library(broom)
-library(tidyr)
 library(abind)
 library(foreach)
-library(doMPI)
-i_am("mgsim/Scripts/round1_validation.qmd")
-# Register parallel backend with doMPI
-num_cores <- 128
-cl <- startMPIcluster(count = num_cores)
-registerDoMPI(cl)
+library(tidyr)
+library(doParallel)
+i_am("mgsim/Scripts/round1_validation_socket.qmd")
+# Register parallel backend
+num_cores <- 125
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
 results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix; find $(pwd) -maxdepth 1 -type d", intern = TRUE) |>
   _[-1] |> discard(\(string) str_detect(string, "txt")) |> gtools::mixedsort()
 round1_priors <- read_csv(here("mgsim/Data_minimal/Input/sample_data_round1.csv"))
@@ -267,40 +267,41 @@ presence_list <- results_dir[dc] |>
   })
 
 # Parallel processing with foreach
-presabs_metric <- foreach(plist = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
+presabs_metric <- foreach(
+  plist = presence_list,
+  .combine = c,
+  .packages = c("dplyr", "purrr", "qs", "abind")
+) %dopar% {
   # Apply fill_missing_years and group by Year
   plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
   
-  # Initialize an empty list to store results for this presence_list
-  sim_array_results <- vector("list", length(plist_filled))
+  # Pre-allocate a 3D array for results rather than a list
+  sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
   
-  # Process each grouped data frame separately to manage memory
+  # Process each grouped dataframe separately
   for (i in seq_along(plist_filled)) {
     df <- plist_filled[[i]]
     
-    # Load only the necessary files for this chunk
-    paths <- df$path
-    files <- lapply(paths, qread)  # Read files in this chunk
-    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+    combined_files <- Reduce(`+`, lapply(df$path, qread))
     
-    # Create the array for this chunk and store it
-    sim_array_results[[i]] <- array(combined_files, dim = c(106, 161, 1))
+    # Fill the pre-allocated array directly
+    sim_array[, , i] <- combined_files
   }
-  
-  # Combine all the arrays for the current presence_list
-  sim_array <- abind(sim_array_results)
   
   # Calculate the metric for this presence_list
   penalty <- presabs |>
-    rowwise() |>
     mutate(
-      rowcol = list(convert_flat_to_2d(region_cell, 106)),
-      occupancy = sum(sim_array[rowcol[1], rowcol[2], min_index:max_index] > 0),
-      penalty = if_else(
-        always_present,
-        length(min_index:max_index) - occupancy,
-        occupancy
-      )
+      rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
+      occupancy = pmap_dbl(list(rowcol, min_index, max_index), function(rc, min_i, max_i) {
+        sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
+      }),
+      penalty = pmap_dbl(list(always_present, occupancy, min_index, max_index), function(always_present_val, occ, min_i, max_i) {
+        if (always_present_val) {
+          length(min_i:max_i) - occ
+        } else {
+          occ
+        }
+      })
     ) |>
     pull(penalty) |>
     sum()
@@ -318,7 +319,7 @@ I have information on trends in house finch abundance across North America. I ju
 trend1993 <- read_csv(here("mgsim/Data_minimal/Validation/abundance_trend_1993on.csv"))
 trend1970 <- read_csv(here("mgsim/Data_minimal/Validation/abundance_trend_1970on.csv"))
 # and conservation regions
-bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs") |> qread()
+bcr <- here("mgim/Data_minimal/Validation/bird_conservation_regions.qs") |> qread()
 
 # Penalty function
 abundance_trend_penalty <- function(percent_change, trend_upper, trend_lower) {
@@ -644,7 +645,7 @@ hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dp
   
   return(penalty)
 }
-closeCluster(cl)
+stopCluster(cl)
 ```
 
 # Posteriors
