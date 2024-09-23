@@ -35,11 +35,12 @@ The first and most important validation is whether there are house finches in Wa
 
 ```{r dc}
 # Are birds in DC?
-dc <- results_dir |> 
-  map(\(path) system(paste0("cd /glade/work/pilowskyj/Round1_matrix/", path, "; ls -f"), 
-                     intern = T)) |> 
-  map(length) |> 
-  map_lgl(\(x) x > 214)
+# dc <- results_dir |> 
+#  map(\(path) system(paste0("cd /glade/work/pilowskyj/Round1_matrix/", path, "; ls -f"), 
+#                     intern = T)) |> 
+#  map(length) |> 
+#  map_lgl(\(x) x > 214)
+dc <- read_csv("/glade/u/home/pilowskyj/mgsim/Data_minimal/Validation/dc.csv") |> pull(dc)
 # Graph
 round1_priors |> 
   mutate(dc = dc) |> 
@@ -523,7 +524,7 @@ hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dp
   
   return(penalty)
 }
-closeCluster(cl)
+stopCluster(cl)
 ```
 
 # Posteriors

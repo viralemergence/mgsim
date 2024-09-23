@@ -7,18 +7,14 @@ library(foreach)
 i_am("mgsim/Scripts/round1_validation.qmd")
 source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
 # Register parallel backend with doParallel
-num_cores <- 125
+num_cores <- 120
 cl <- makeCluster(num_cores)
 registerDoParallel(cl)
 results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix; ls -f", intern = T) |>
   gtools::mixedsort() |> _[-c(1:2)]
 round1_priors <- read_csv(here("mgsim/Data_minimal/Input/sample_data_round1.csv"))
 year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
-dc <- results_dir |>
-  map(\(path) system(paste0("cd /glade/work/pilowskyj/Round1_matrix/", path, "; ls -f"),
-                     intern = T)) |>
-  map(length) |>
-  map_lgl(\(x) x > 214)
+dc <- read_csv("/glade/u/home/pilowskyj/mgsim/Data_minimal/Validation/dc.csv") |> _$dc
 # Load the presence/absence data
 presabs <- here("mgsim/Data_minimal/Validation/haemorhous_presence_absence.csv") |>
   read_csv()
