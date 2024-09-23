@@ -6,69 +6,23 @@ editor: visual
 ---
 
 ```{r setup}
-library(dplyr)
-library(stringr)
-library(purrr)
-library(readr)
 library(ggplot2)
+library(stringr)
 library(here)
-library(qs)
-library(broom)
-library(tidyr)
-library(abind)
+library(paletteer)
+library(readr)
+library(doParallel)
 library(foreach)
-library(doMPI)
 i_am("mgsim/Scripts/round1_validation.qmd")
-# Register parallel backend with doMPI
-num_cores <- 128
-cl <- startMPIcluster(count = num_cores)
-registerDoMPI(cl)
-results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix; find $(pwd) -maxdepth 1 -type d", intern = TRUE) |>
-  _[-1] |> discard(\(string) str_detect(string, "txt")) |> gtools::mixedsort()
+source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
+# Register parallel backend with doParallel
+num_cores <- 125  # Leave one core free
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix; ls -f", intern = T) |>  
+  gtools::mixedsort() |> _[-c(1:2)]
 round1_priors <- read_csv(here("mgsim/Data_minimal/Input/sample_data_round1.csv"))
 year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
-fill_missing_years <- function(df, start_year, end_year) {
-  missing_path <- "/glade/u/home/pilowskyj/mgsim/Data_minimal/Validation/dummy_result.qs"
-  
-  # Full sequence of years
-  all_years <- seq(start_year, end_year)
-  
-  # Identify missing years
-  missing_years <- setdiff(all_years, df$Year)
-  
-  # If there are no missing years, return the dataframe as is
-  if (length(missing_years) == 0) {
-    return(df)
-  }
-  
-  # Identify a template year that is present in the data
-  template_year <- df[df$Year == min(df$Year), ]  # Assuming the first year as the template
-  
-  # Function to create rows for a missing year based on the template
-  create_missing_year_rows <- function(year) {
-    template <- template_year
-    template$Year <- year
-    template$path <- missing_path
-    return(template)
-  }
-  
-  # Create dataframes for each missing year
-  missing_dfs <- lapply(missing_years, create_missing_year_rows)
-  
-  # Combine the original dataframe with the missing years dataframes
-  df_filled <- bind_rows(c(list(df), missing_dfs))
-  
-  # Order by Year (and any other columns if needed)
-  df_filled <- df_filled[order(df_filled$Year), ]
-  
-  return(df_filled)
-}
-
-convert_flat_to_2d <- function(flat_index, nrows) {
-  row <- (flat_index - 1) %% nrows + 1
-  col <- (flat_index - 1) %/% nrows + 1
-  return(c(row, col))
-}
 ```
 
 # Validation
@@ -82,7 +36,7 @@ The first and most important validation is whether there are house finches in Wa
 ```{r dc}
 # Are birds in DC?
 dc <- results_dir |> 
-  map(\(path) system(paste0("cd ", path, "; ls -f"), 
+  map(\(path) system(paste0("cd /glade/work/pilowskyj/Round1_matrix/", path, "; ls -f"), 
                      intern = T)) |> 
   map(length) |> 
   map_lgl(\(x) x > 214)
@@ -193,10 +147,11 @@ max_penalty <- pres_hfds |>
 
 # Extract the file paths for infected birds
 infected_list <- results_dir[dc] |> 
-  lapply(list.files, full.names = TRUE) |>  
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  map(list.files, full.names = TRUE) |>  
   lapply(function(p) data.frame(
     path = p,
-    index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+    index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
     infected = str_detect(p, "I")
   ) |> 
   filter(infected) |> 
@@ -211,31 +166,36 @@ mg_presence_penalty <- rep(NA, length(infected_list))
 mg_presence_penalty[no_infection] <- max_penalty
 
 # Parallel processing with foreach
-mg_presence_metric <- foreach(df = infected_list[!no_infection], .combine = c, .packages = c("dplyr", "purrr", "qs", "abind", "here")) %dopar% {
+mg_presence_metric <- foreach(df = infected_list[!no_infection], .combine = c, .packages = c("dplyr", "purrr", "qs", "here")) %dopar% {
   # Fill missing years and group by Year
   df_filled <- fill_missing_years(df, 1994, 2016) |> group_split(Year)
   
-  # Process each year group
-  sim_array <- map(df_filled, function(year_df) {
-    # Load only the necessary files for this year's paths
-    paths <- year_df |> pull(path)
-    files <- lapply(paths, qread)  # Read files in this chunk
-    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+  # Pre-allocate a 3D array for the simulation (106x161xyears)
+  sim_array <- array(0, dim = c(106, 161, length(df_filled)))
+  
+  # Efficiently sum matrices into the 3D array, one slice per year
+  for (i in seq_along(df_filled)) {
+    year_df <- df_filled[[i]]
     
-    # Create the array for this chunk
-    array(combined_files, dim = c(106, 161, 1))
-  }) |> abind()
+    # Load and sum the matrices for all files in this year
+    combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
+    
+    # Assign the combined matrix to the appropriate slice
+    sim_array[, , i] <- combined_files
+  }
   
   # Calculate the metric for this simulation
-  pres_hfds |>
-    rowwise() |>
+  metric <- pres_hfds |> 
+    rowwise() |> 
     mutate(
       rowcol = list(convert_flat_to_2d(region_cell, 106)),
-      sick = sum(sim_array[rowcol[1], rowcol[2], min_index:max_index]),
+      sick = sum(sim_array[rowcol[[1]], rowcol[[2]], min_index:max_index]),
       none_sick = sick == 0
-    ) |>
-    pull(none_sick) |>
+    ) |> 
+    pull(none_sick) |> 
     sum()
+  
+  return(metric)
 }
 
 # Assign metrics to the penalty vector
@@ -251,56 +211,57 @@ Here I test the simulations at locations where, according to my observation data
 ```{r presence absence}
 # Load the presence/absence data
 presabs <- here("mgsim/Data_minimal/Validation/haemorhous_presence_absence.csv") |> 
-  read_csv()
+		read_csv()
 
 # Gather relevant data
-presence_list <- results_dir[dc] |> 
-  lapply(list.files, full.names = TRUE) |>  
+presence_list <- results_dir[dc] |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
       path = p,
-      index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+      index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
       infected = str_detect(p, "I")
-    ) |> 
-    arrange(index) |> 
-    left_join(year_lookup, by = join_by(index))
+    ) |>
+      arrange(index) |>
+      left_join(year_lookup, by = join_by(index))
   })
 
-# Parallel processing with foreach
-presabs_metric <- foreach(plist = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
-  # Apply fill_missing_years and group by Year
+# Calculating whether simulations have presence/absence in the right locations and years
+presabs_metric <- foreach(
+  plist = presence_list,
+  .combine = c,
+  .packages = c("dplyr", "purrr", "qs")
+) %dopar% {
+  # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
   plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
   
-  # Initialize an empty list to store results for this presence_list
-  sim_array_results <- vector("list", length(plist_filled))
+  # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
+  sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
   
-  # Process each grouped data frame separately to manage memory
+  # Adding together the matrices for all age classes and disease compartments for each year
   for (i in seq_along(plist_filled)) {
     df <- plist_filled[[i]]
     
-    # Load only the necessary files for this chunk
-    paths <- df$path
-    files <- lapply(paths, qread)  # Read files in this chunk
-    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+    combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
     
-    # Create the array for this chunk and store it
-    sim_array_results[[i]] <- array(combined_files, dim = c(106, 161, 1))
+    sim_array[, , i] <- combined_files
   }
   
-  # Combine all the arrays for the current presence_list
-  sim_array <- abind(sim_array_results)
-  
-  # Calculate the metric for this presence_list
+  # Simulations are penalized for each year they have presences in places/times where there should be absence, and vice versa
   penalty <- presabs |>
-    rowwise() |>
     mutate(
-      rowcol = list(convert_flat_to_2d(region_cell, 106)),
-      occupancy = sum(sim_array[rowcol[1], rowcol[2], min_index:max_index] > 0),
-      penalty = if_else(
-        always_present,
-        length(min_index:max_index) - occupancy,
-        occupancy
-      )
+      rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
+      occupancy = pmap_dbl(list(rowcol, min_index, max_index), function(rc, min_i, max_i) {
+        sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
+      }),
+      penalty = pmap_dbl(list(always_present, occupancy, min_index, max_index), function(always_present_val, occ, min_i, max_i) {
+        if (always_present_val) {
+          length(min_i:max_i) - occ
+        } else {
+          occ
+        }
+      })
     ) |>
     pull(penalty) |>
     sum()
@@ -320,30 +281,14 @@ trend1970 <- read_csv(here("mgsim/Data_minimal/Validation/abundance_trend_1970on
 # and conservation regions
 bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs") |> qread()
 
-# Penalty function
-abundance_trend_penalty <- function(percent_change, trend_upper, trend_lower) {
-  if (any(is.na(c(trend_upper, trend_lower)))) {
-    stop("The trend inputs must not be NA")
-  }
-  if (is.na(percent_change)) {
-    penalty <- 20
-  } else if (percent_change < trend_lower) {
-    penalty <- trend_lower - percent_change
-  } else if (percent_change > trend_upper) {
-    penalty <- percent_change - trend_upper
-  } else {
-    penalty <- 0
-  }
-  return(penalty)
-}
-
 # Gather relevant data
 abundance_list <- results_dir[dc] |> 
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
   lapply(list.files, full.names = TRUE) |>  
   lapply(function(p) {
     data.frame(
       path = p,
-      index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+      index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
       infected = str_detect(p, "I")
     ) |> 
     arrange(index) |> 
@@ -354,7 +299,7 @@ abundance_list <- results_dir[dc] |>
 trend_metric <- foreach(
   alist = abundance_list,
   .combine = c,
-  .packages = c("dplyr", "purrr", "qs", "tidyr", "broom")
+  .packages = c("dplyr", "purrr", "qs", "tidyr", "broom", "Rcpp")
 ) %dopar% {
   
   # Preprocess data and fill missing years
@@ -363,53 +308,22 @@ trend_metric <- foreach(
   # Preallocate a 3D array for sim_array results
   sim_array_results <- array(0, dim = c(106, 161, length(alist_filled)))
   
-  # Process each year chunk to manage memory and avoid redundant computations
+  # Process each year chunk
   for (i in seq_along(alist_filled)) {
     df <- alist_filled[[i]]
     
-    # Read files only once per chunk
+    # Read and combine files
     paths <- df$path
-    files <- lapply(paths, qread)
-    combined_files <- Reduce(`+`, files)  # Combine directly
+    files <- lapply(paths, read_or_zero)
+    combined_files <- Reduce(`+`, files)
     
-    # Fill the preallocated array
+    # Fill the array
     sim_array_results[, , i] <- combined_files
   }
-  
-  # Function to calculate trend metrics
-  calculate_trend_metrics <- function(year_range, baseline_year) {
-    abund <- map_dfr(5:37, function(int_val) {
-      positions <- which(bcr == int_val, arr.ind = TRUE)
-      subset_array <- sim_array_results[positions[, 1], positions[, 2], , drop = F]
-      data.frame(
-        Abundance = colSums(subset_array, dims = 2),
-        bcr = rep(int_val),
-        Year = c(1970:2016)
-      )
-    })
-    
-    trend_by_bcr <- abund |>
-      filter(Year %in% year_range) |>
-      group_by(bcr) |>
-      nest() |>
-      mutate(model = map(data, \(df) lm(Abundance ~ Year, data = df))) |>
-      mutate(tidy = map(model, tidy)) |>
-      unnest(tidy) |>
-      filter(term == "Year")
-    
-    baseline <- map_dbl(trend_by_bcr$model, \(m) predict(m, newdata = data.frame(Year = baseline_year)))
-    trend_by_bcr$percent_change <- (trend_by_bcr$estimate / baseline) * 100
-    
-    penalty <- trend_by_bcr |> 
-      select(BCR = bcr, percent_change) |>
-      right_join(if (baseline_year == 1970) trend1970 else trend1993) |>
-      mutate(penalty = abundance_trend_penalty(percent_change, estimate_ucl, estimate_lcl)) |>
-      pull(penalty) |>
-      sum()
-    
-    return(penalty)
-  }
-  
+
+  # Flatten sim_array_results for use in C++
+  flat_sim_array <- as.vector(sim_array_results)
+
   # Calculate penalties for both 1970 and 1993
   penalty1970 <- calculate_trend_metrics(1970:2016, 1970)
   penalty1993 <- calculate_trend_metrics(1993:2016, 1993)
@@ -436,30 +350,12 @@ prevalence <- here("mgsim/Data_minimal/Validation/mycoplasma_point_prevalence.cs
                          summer_indices[index - 55],
                          winter_indices[index - 55]))
 
-# Penalty function
-prevalence_penalty <- function(prevalence, lower, upper, zero) {
-  if (is.na(prevalence)) {
-    return(0.25)
-  }
-  
-  if (!is.na(zero)) {
-    penalty <- plogis(prevalence) - plogis(0)
-  } else if (prevalence < lower) {
-    penalty <- plogis(lower) - plogis(prevalence)
-  } else if (prevalence > upper) {
-    penalty <- plogis(prevalence) - plogis(upper)
-  } else {
-    penalty <- 0
-  }
-  
-  return(penalty)
-}
-
 prevalence_list <- results_dir[dc] |> 
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
   lapply(list.files, full.names = TRUE) |>  
   lapply(function(p) data.frame(
     path = p,
-    index = as.numeric(str_split_i(p, "/", 10) |> str_split_i("_", 1)),
+    index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
     season = str_extract(p, "summer|winter"),
     infected = str_detect(p, "I")
   ) |> 
@@ -486,8 +382,8 @@ point_prevalence_metric <- foreach(plist = prevalence_list,
     
     # Read files only once per chunk
     paths <- df$path
-    infected <- lapply(paths[1:4], qread) |> Reduce(f = `+`, x = _)
-    total <- lapply(paths, qread) |> Reduce(f = `+`, x = _)
+    infected <- lapply(paths[1:4], read_or_zero) |> Reduce(f = `+`, x = _)
+    total <- lapply(paths, read_or_zero) |> Reduce(f = `+`, x = _)
     prev <- infected / total
     
     # Fill the preallocated array
@@ -528,51 +424,45 @@ mg_arrival <- here("mgsim/Data_minimal/Validation/mycoplasma_first_arrival.csv")
 mg_arrival_penalty <- rep(NA, length(infected_list))
 mg_arrival_penalty[no_infection] <- 54
 
-# Penalty function
-mg_arrival_function <- function(observed, low, high) {
-  
-  if (is.na(observed)) {
-    return(54)
-  }
-  
-  if (observed < low) {
-    penalty <- low - observed
-  } else if (observed > high) {
-    penalty <- observed - high
-  } else {
-    penalty <- 0
-  }
-  
-  return(penalty)
-}
-
 # Parallel processing with foreach
-mg_arrival_metric <- foreach(df = infected_list[!no_infection], .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
+mg_arrival_metric <- foreach(
+  df = infected_list[!no_infection],
+  .combine = c,
+  .packages = c("dplyr", "purrr", "qs")
+) %dopar% {
   # Fill missing years and group by Year
   df_filled <- fill_missing_years(df, 1994, 2016) |> group_split(Year)
   
-  # Process each year group
-  sim_array <- map(df_filled, function(year_df) {
-    # Load only the necessary files for this year's paths
-    paths <- year_df |> pull(path)
-    files <- lapply(paths, qread)  # Read files in this chunk
-    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+  # Pre-allocate a 3D array for the simulation (106x161xyears)
+  sim_array <- array(0, dim = c(106, 161, length(df_filled)))
+  
+  # Efficiently sum matrices into the 3D array, one slice per year
+  for (i in seq_along(df_filled)) {
+    year_df <- df_filled[[i]]
     
-    # Create the array for this chunk
-    array(combined_files, dim = c(106, 161, 1))
-  }) |> abind()
-  
-  arrival_index <- mg_arrival$region_cell |> map(convert_flat_to_2d, 106) |> 
-    map(\(v) sim_array[v[1], v[2], ] > 0) |> map(which) |> 
-    map_int(\(v) if_else(length(v)==0, NA, min(v)))
-  
-  penalty <- mg_arrival |> 
-    mutate(arrival_index = arrival_index) |> 
-    rowwise() |> 
-    mutate(penalty = mg_arrival_function(arrival_index, index_low, index_high)) |> 
-    pull(penalty) |> 
+    # Sum the matrices for all files in this year
+    combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
+    
+    # Assign the summed matrix to the appropriate slice
+    sim_array[, , i] <- combined_files
+  }
+
+    arrival_index <- map(mg_arrival$region_cell, ~ convert_flat_to_2d(.x, 106)) |>
+    map_int(function(rc) {
+presences <- which(sim_array[rc[1], rc[2], ] > 0)
+      if (length(presences) == 0)
+ NA_integer_
+else
+ min(presences, na.rm = TRUE)
+    })
+
+  penalty <- mg_arrival |>
+    mutate(arrival_index = arrival_index) |>
+    rowwise() |>
+    mutate(penalty = mg_arrival_function(arrival_index, index_low, index_high)) |>
+    pull(penalty) |>
     sum()
-  
+
   return(penalty)
 }
 
@@ -597,44 +487,33 @@ hm_arrival <- here("mgsim/Data_minimal/Validation/haemorhous_first_arrival.csv")
   left_join(year_lookup, by = c("first_arrival_low" = "Year"),
             suffix = c("_high", "_low"))
 
-# Penalty function
-hm_arrival_function <- function(observed, low, high) {
-  
-  if (is.na(observed)) {
-    return(76)
-  }
-  
-  if (observed < low) {
-    penalty <- low - observed
-  } else if (observed > high) {
-    penalty <- observed - high
-  } else {
-    penalty <- 0
-  }
-  
-  return(penalty)
-}
-
-# Parallel processing with foreach
-hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs", "abind")) %dopar% {
+# Penalize simulations that have first arrival of finches at the wrong timestep.
+hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs")) %dopar% {
   # Fill missing years and group by Year
   df_filled <- fill_missing_years(df, 1940, 2016) |> group_split(Year)
   
-  # Process each year group
-  sim_array <- map(df_filled, function(year_df) {
-    # Load only the necessary files for this year's paths
-    paths <- year_df |> pull(path)
-    files <- lapply(paths, qread)  # Read files in this chunk
-    combined_files <- lapply(files, function(f) Reduce(`+`, f))  # Combine the data
+  # Pre-allocate a 3D array for the simulation (106x161xyears)
+  sim_array <- array(0, dim = c(106, 161, length(df_filled)))
+  
+  # Efficiently sum matrices into the 3D array, one slice per year
+  for (i in seq_along(df_filled)) {
+    year_df <- df_filled[[i]]
     
-    # Create the array for this chunk
-    array(combined_files, dim = c(106, 161, 1))
-  }) |> abind()
+    # Sum the matrices for all files in this year
+    combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
+    
+    # Assign the summed matrix to the appropriate slice
+    sim_array[, , i] <- combined_files
+  }
   
-  arrival_index <- hm_arrival$region_cell |> map(convert_flat_to_2d, 106) |> 
-    map(\(v) sim_array[v[1], v[2], ] > 0) |> map(which) |> 
-    map_int(\(v) if_else(length(v)==0, NA, min(v)))
+  # Compute the arrival index for each region
+  arrival_index <- map(hm_arrival$region_cell, ~ convert_flat_to_2d(.x, 106)) |> 
+    map_int(function(rc) {
+      presences <- which(sim_array[rc[1], rc[2], ] > 0)
+      if (length(presences) == 0) NA_integer_ else min(presences, na.rm = TRUE)
+    })
   
+  # Calculate penalties based on the arrival index
   penalty <- hm_arrival |> 
     mutate(arrival_index = arrival_index) |> 
     rowwise() |> 
