@@ -16,7 +16,7 @@ library(foreach)
 i_am("mgsim/Scripts/round1_validation.qmd")
 source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
 # Register parallel backend with doParallel
-num_cores <- 120  # Leave one core free
+num_cores <- 60
 cl <- makeCluster(num_cores, type="FORK", outfile="")
 registerDoParallel(cl)
 results_dir <- system("cd /glade/derecho/scratch/pilowskyj/Round1; ls -f", intern = T) |>  

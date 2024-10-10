@@ -66,24 +66,15 @@ read_or_zero <- function(path) {
 }
 
 ##### Helper function to sum abundances at BCR indices for house finch trends #####
-cppFunction('
-NumericVector sum_positions(NumericVector sim_array, IntegerMatrix positions, int n_years, int n_rows, int n_cols) {
-    // Create a vector to store the total abundance for each year
-    NumericVector total_abundance(n_years);
-
-    // Traverse the positions matrix and sum over the relevant parts of the array
-    for (int k = 0; k < n_years; k++) {
-        double sum = 0.0;
-        for (int i = 0; i < positions.nrow(); i++) {
-            int row = positions(i, 0) - 1;  // Adjust for zero-indexing in C++
-            int col = positions(i, 1) - 1;
-            sum += sim_array(row + col * n_rows + k * n_rows * n_cols);  // Index into the 3D array
-        }
-        total_abundance[k] = sum;
-    }
-    return total_abundance;
+sum_positions <- function(sim_array, positions, n_years, n_rows, n_cols) {
+  # Calculate indices for all years
+  indices <- positions[, 1] + (positions[, 2] - 1) * n_rows + rep(0:(n_years - 1), each = nrow(positions)) * n_rows * n_cols
+  
+  # Sum the relevant parts of the array for each year
+  total_abundance <- tapply(sim_array[indices], rep(1:n_years, each = nrow(positions)), sum)
+  
+  return(total_abundance)
 }
-')
 
 ##### Penalty function for house finch trends #####
 abundance_trend_penalty <- function(percent_change, trend_upper, trend_lower) {
@@ -116,12 +107,10 @@ calculate_trend_metrics <- function(year_range, baseline_year) {
   # Track index for filling preallocated data frame
   row_index <- 1
 
-  # Efficient subsetting and summing using C++ with Rcpp
   for (int_val in 5:37) {
     positions <- which(bcr == int_val, arr.ind = TRUE)
 
     if (nrow(positions) > 0) {
-      # Call the C++ function for summation
       total_abundance <- sum_positions(flat_sim_array, positions, n_years, 106, 161)
 
       # Fill the preallocated result
