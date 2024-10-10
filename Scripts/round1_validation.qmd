@@ -210,65 +210,66 @@ This is looking to be an excellent filter.
 Here I test the simulations at locations where, according to my observation data, the finches are either present for long periods of time or absent for long periods of time.
 
 ```{r presence absence}
-# Load the presence/absence data
-presabs <- here("mgsim/Data_minimal/Validation/haemorhous_presence_absence.csv") |> 
-		read_csv()
+# # Load the presence/absence data
+# presabs <- here("mgsim/Data_minimal/Validation/haemorhous_presence_absence.csv") |> 
+# 		read_csv()
 
-# Gather relevant data
-presence_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/derecho/scratch/pilowskyj/Round1/", f)) |>
-  lapply(list.files, full.names = TRUE) |>
-  lapply(function(p) {
-    data.frame(
-      path = p,
-      index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
-      infected = str_detect(p, "I")
-    ) |>
-      arrange(index) |>
-      left_join(year_lookup, by = join_by(index))
-  })
+# # Gather relevant data
+# presence_list <- results_dir[dc] |>
+#   map(\(f) paste0("/glade/derecho/scratch/pilowskyj/Round1/", f)) |>
+#   lapply(list.files, full.names = TRUE) |>
+#   lapply(function(p) {
+#     data.frame(
+#       path = p,
+#       index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
+#       infected = str_detect(p, "I")
+#     ) |>
+#       arrange(index) |>
+#       left_join(year_lookup, by = join_by(index))
+#   })
 
-# Calculating whether simulations have presence/absence in the right locations and years
-presabs_metric <- foreach(
-  plist = presence_list,
-  .combine = c,
-  .packages = c("dplyr", "purrr", "qs")
-) %dopar% {
-  # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
-  plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
+# # Calculating whether simulations have presence/absence in the right locations and years
+# presabs_metric <- foreach(
+#   plist = presence_list,
+#   .combine = c,
+#   .packages = c("dplyr", "purrr", "qs")
+# ) %dopar% {
+#   # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
+#   plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
   
-  # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
-  sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
+#   # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
+#   sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
   
-  # Adding together the matrices for all age classes and disease compartments for each year
-  for (i in seq_along(plist_filled)) {
-    df <- plist_filled[[i]]
+#   # Adding together the matrices for all age classes and disease compartments for each year
+#   for (i in seq_along(plist_filled)) {
+#     df <- plist_filled[[i]]
     
-    combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
+#     combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
     
-    sim_array[, , i] <- combined_files
-  }
+#     sim_array[, , i] <- combined_files
+#   }
   
-  # Simulations are penalized for each year they have presences in places/times where there should be absence, and vice versa
-  penalty <- presabs |>
-    mutate(
-      rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
-      occupancy = pmap_dbl(list(rowcol, min_index, max_index), function(rc, min_i, max_i) {
-        sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
-      }),
-      penalty = pmap_dbl(list(always_present, occupancy, min_index, max_index), function(always_present_val, occ, min_i, max_i) {
-        if (always_present_val) {
-          length(min_i:max_i) - occ
-        } else {
-          occ
-        }
-      })
-    ) |>
-    pull(penalty) |>
-    sum()
+#   # Simulations are penalized for each year they have presences in places/times where there should be absence, and vice versa
+#   penalty <- presabs |>
+#     mutate(
+#       rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
+#       occupancy = pmap_dbl(list(rowcol, min_index, max_index), function(rc, min_i, max_i) {
+#         sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
+#       }),
+#       penalty = pmap_dbl(list(always_present, occupancy, min_index, max_index), function(always_present_val, occ, min_i, max_i) {
+#         if (always_present_val) {
+#           length(min_i:max_i) - occ
+#         } else {
+#           occ
+#         }
+#       })
+#     ) |>
+#     pull(penalty) |>
+#     sum()
   
-  return(penalty)
-}
+#   return(penalty)
+# }
+presabs_metric <- here("mgsim/Data_minimal/Validation/presabs.csv")
 ```
 
 ## Haemorhous Trends
