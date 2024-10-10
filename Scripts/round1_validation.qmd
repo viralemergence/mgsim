@@ -16,10 +16,10 @@ library(foreach)
 i_am("mgsim/Scripts/round1_validation.qmd")
 source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
 # Register parallel backend with doParallel
-num_cores <- 125  # Leave one core free
-cl <- makeCluster(num_cores)
+num_cores <- 120  # Leave one core free
+cl <- makeCluster(num_cores, type="FORK", outfile="")
 registerDoParallel(cl)
-results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix; ls -f", intern = T) |>  
+results_dir <- system("cd /glade/derecho/scratch/pilowskyj/Round1; ls -f", intern = T) |>  
   gtools::mixedsort() |> _[-c(1:2)]
 round1_priors <- read_csv(here("mgsim/Data_minimal/Input/sample_data_round1.csv"))
 year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
@@ -148,11 +148,11 @@ max_penalty <- pres_hfds |>
 
 # Extract the file paths for infected birds
 infected_list <- results_dir[dc] |> 
-  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  map(\(f) paste0("/glade/derecho/scratch/pilowskyj/Round1/", f)) |>
   map(list.files, full.names = TRUE) |>  
   lapply(function(p) data.frame(
     path = p,
-    index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
+    index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
     infected = str_detect(p, "I")
   ) |> 
   filter(infected) |> 
@@ -216,12 +216,12 @@ presabs <- here("mgsim/Data_minimal/Validation/haemorhous_presence_absence.csv")
 
 # Gather relevant data
 presence_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  map(\(f) paste0("/glade/derecho/scratch/pilowskyj/Round1/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
       path = p,
-      index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
+      index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
       infected = str_detect(p, "I")
     ) |>
       arrange(index) |>
@@ -284,12 +284,12 @@ bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs") |> qre
 
 # Gather relevant data
 abundance_list <- results_dir[dc] |> 
-  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  map(\(f) paste0("/glade/derecho/scratch/pilowskyj/Round1/", f)) |>
   lapply(list.files, full.names = TRUE) |>  
   lapply(function(p) {
     data.frame(
       path = p,
-      index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
+      index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
       infected = str_detect(p, "I")
     ) |> 
     arrange(index) |> 
@@ -352,11 +352,11 @@ prevalence <- here("mgsim/Data_minimal/Validation/mycoplasma_point_prevalence.cs
                          winter_indices[index - 55]))
 
 prevalence_list <- results_dir[dc] |> 
-  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  map(\(f) paste0("/glade/derecho/scratch/pilowskyj/Round1/", f)) |>
   lapply(list.files, full.names = TRUE) |>  
   lapply(function(p) data.frame(
     path = p,
-    index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
+    index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
     season = str_extract(p, "summer|winter"),
     infected = str_detect(p, "I")
   ) |> 
