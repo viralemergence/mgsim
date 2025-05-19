@@ -453,10 +453,6 @@ These are parameters specific to the disease phase of the model, governing trans
 
 I have a significant amount of data out of the Cornell Lab of Ornithology on winter transmission rates that I can use to build a prior.
 
-sion))
-
-(var2 \<- sd(beta_Sa_winter\$Daily_Transmission) \^ 2)
-
 ```{r transmission rate adult winter}
 beta_Sa_winter <- bind_rows(
   filter(transmission, Month %in% c(9:12, 1:2)),
