@@ -19,28 +19,40 @@ fill_missing_years <- function(df, start_year, end_year) {
 
   # If there are no missing years, return the dataframe as is
   if (length(missing_years) == 0) {
-    return(df)
+    df_filled <- df
+  } else {
+    # Identify a template year that is present in the data
+    template_year <- df[df$Year == min(df$Year), ] # Assuming the first year as the template
+
+    # Function to create rows for a missing year based on the template
+    create_missing_year_rows <- function(year) {
+      template <- template_year
+      template$Year <- year
+      template$path <- missing_marker
+      return(template)
+    }
+
+    # Create dataframes for each missing year
+    missing_dfs <- lapply(missing_years, create_missing_year_rows)
+
+    # Combine the original dataframe with the missing years dataframes
+    df_filled <- bind_rows(c(list(df), missing_dfs))
+
+    # Order by Year (and any other columns if needed)
+    df_filled <- df_filled[order(df_filled$Year), ]
   }
 
-  # Identify a template year that is present in the data
-  template_year <- df[df$Year == min(df$Year), ]  # Assuming the first year as the template
-
-  # Function to create rows for a missing year based on the template
-  create_missing_year_rows <- function(year) {
-    template <- template_year
-    template$Year <- year
-    template$path <- missing_marker  # Mark the missing years with NA or another marker
-    return(template)
+  # Handle seasons if the column exists
+  if ("season" %in% names(df_filled)) {
+    if (!("summer" %in% df_filled$season)) {
+      # Add summer season
+      summer_copy <- df_filled |>
+        mutate(season = "summer", path = missing_marker)
+      df_complete <- bind_rows(df_filled, summer_copy) |>
+        mutate(season = factor(season, levels = c("winter", "summer")))
+      return(df_complete)
+    }
   }
-
-  # Create dataframes for each missing year
-  missing_dfs <- lapply(missing_years, create_missing_year_rows)
-
-  # Combine the original dataframe with the missing years dataframes
-  df_filled <- bind_rows(c(list(df), missing_dfs))
-
-  # Order by Year (and any other columns if needed)
-  df_filled <- df_filled[order(df_filled$Year), ]
 
   return(df_filled)
 }
@@ -58,21 +70,28 @@ convert_flat_to_2d <- function(flat_index, nrows) {
 zero_array <- array(0, dim = c(106, 161, 1))
 
 read_or_zero <- function(path) {
-  if (is.na(path)) {  # Check if path is NA (missing year)
+  if (is.na(path)) {
+    # Check if path is NA (missing year)
     return(zero_array)
   } else {
-    return(qread(path))  # Otherwise, read the file
+    return(qread(path)) # Otherwise, read the file
   }
 }
 
 ##### Helper function to sum abundances at BCR indices for house finch trends #####
 sum_positions <- function(sim_array, positions, n_years, n_rows, n_cols) {
   # Calculate indices for all years
-  indices <- positions[, 1] + (positions[, 2] - 1) * n_rows + rep(0:(n_years - 1), each = nrow(positions)) * n_rows * n_cols
-  
+  indices <- positions[, 1] +
+    (positions[, 2] - 1) * n_rows +
+    rep(0:(n_years - 1), each = nrow(positions)) * n_rows * n_cols
+
   # Sum the relevant parts of the array for each year
-  total_abundance <- tapply(sim_array[indices], rep(1:n_years, each = nrow(positions)), sum)
-  
+  total_abundance <- tapply(
+    sim_array[indices],
+    rep(1:n_years, each = nrow(positions)),
+    sum
+  )
+
   return(total_abundance)
 }
 
@@ -111,7 +130,13 @@ calculate_trend_metrics <- function(year_range, baseline_year) {
     positions <- which(bcr == int_val, arr.ind = TRUE)
 
     if (nrow(positions) > 0) {
-      total_abundance <- sum_positions(flat_sim_array, positions, n_years, 106, 161)
+      total_abundance <- sum_positions(
+        flat_sim_array,
+        positions,
+        n_years,
+        106,
+        161
+      )
 
       # Fill the preallocated result
       results[row_index:(row_index + n_years - 1), ] <- data.frame(
@@ -120,7 +145,7 @@ calculate_trend_metrics <- function(year_range, baseline_year) {
         Year = 1970:2016
       )
 
-      row_index <- row_index + n_years  # Update index for next BCR
+      row_index <- row_index + n_years # Update index for next BCR
     }
   }
 
@@ -136,13 +161,25 @@ calculate_trend_metrics <- function(year_range, baseline_year) {
     unnest(tidy) |>
     filter(term == "Year")
 
-  baseline <- map_dbl(trend_by_bcr$model, \(m) predict(m, newdata = data.frame(Year = baseline_year)))
+  baseline <- map_dbl(
+    trend_by_bcr$model,
+    \(m) predict(m, newdata = data.frame(Year = baseline_year))
+  )
   trend_by_bcr$percent_change <- (trend_by_bcr$estimate / baseline) * 100
 
   penalty <- trend_by_bcr |>
     select(BCR = bcr, percent_change) |>
-    right_join(if (baseline_year == 1970) trend1970 else trend1993, by = "BCR") |>
-    mutate(penalty = abundance_trend_penalty(percent_change, estimate_ucl, estimate_lcl)) |>
+    right_join(
+      if (baseline_year == 1970) trend1970 else trend1993,
+      by = "BCR"
+    ) |>
+    mutate(
+      penalty = abundance_trend_penalty(
+        percent_change,
+        estimate_ucl,
+        estimate_lcl
+      )
+    ) |>
     pull(penalty) |>
     sum()
 
@@ -151,7 +188,6 @@ calculate_trend_metrics <- function(year_range, baseline_year) {
 
 ##### Penalty function for house finch arrival dates #####
 hm_arrival_function <- function(observed, low, high) {
-
   if (is.na(observed)) {
     return(76)
   }
@@ -170,7 +206,6 @@ hm_arrival_function <- function(observed, low, high) {
 ##### Penalty function for Mycoplasma arrival dates #####
 # Penalty function
 mg_arrival_function <- function(observed, low, high) {
-
   if (is.na(observed)) {
     return(54)
   }

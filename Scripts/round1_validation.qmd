@@ -16,7 +16,7 @@ library(foreach)
 i_am("mgsim/Scripts/round1_validation.qmd")
 source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
 # Register parallel backend with doParallel
-num_cores <- 30
+num_cores <- 120
 cl <- makeCluster(num_cores, type="FORK", outfile="")
 registerDoParallel(cl)
 results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix/; ls -f", intern = T) |>  
@@ -196,6 +196,7 @@ mg_presence_metric <- foreach(df = infected_list[!no_infection], .combine = c, .
     pull(none_sick) |> 
     sum()
   
+  gc()
   return(metric)
 }
 
@@ -330,8 +331,8 @@ trend_metric <- foreach(
   penalty1970 <- calculate_trend_metrics(1970:2016, 1970)
   penalty1993 <- calculate_trend_metrics(1993:2016, 1993)
   
-  # Return the penalties
-  c(penalty1993 = penalty1993, penalty1970 = penalty1970)
+  gc()
+  return(c(penalty1993 = penalty1993, penalty1970 = penalty1970))
 }
 
 ```
@@ -402,6 +403,7 @@ point_prevalence_metric <- foreach(plist = prevalence_list,
     pull(penalty) |>
     sum()
   
+  gc()
   return(penalty)
   
 }
@@ -464,7 +466,8 @@ else
     mutate(penalty = mg_arrival_function(arrival_index, index_low, index_high)) |>
     pull(penalty) |>
     sum()
-
+  
+  gc()
   return(penalty)
 }
 
@@ -478,6 +481,19 @@ hist(mg_arrival_penalty)
 I have data on the year of first arrival of the house finch in its invasive range, estimated from Breeding Bird Survey and Project FeederWatch. I will compare first arrival dates in my simulations against these observed estimates.
 
 ```{r hm first arrival}
+presence_list <- results_dir[dc] |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
+  lapply(list.files, full.names = TRUE) |>
+  lapply(function(p) {
+    data.frame(
+      path = p,
+      index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
+      infected = str_detect(p, "I")
+    ) |>
+      arrange(index) |>
+      left_join(year_lookup, by = join_by(index))
+  })
+
 hm_arrival <- here("mgsim/Data_minimal/Validation/haemorhous_first_arrival.csv") |> 
   read_csv() |> 
   filter(region_cell != 6075) |> 
@@ -523,6 +539,7 @@ hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dp
     pull(penalty) |> 
     sum()
   
+  gc()
   return(penalty)
 }
 stopCluster(cl)
