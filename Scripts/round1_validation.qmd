@@ -9,7 +9,6 @@ editor: visual
 library(ggplot2)
 library(stringr)
 library(here)
-library(paletteer)
 library(readr)
 library(doParallel)
 library(foreach)
@@ -564,8 +563,7 @@ round1_priors |>
   pivot_longer(1:45, names_to = "Prior", values_to = "Value") |> 
   ggplot(aes(x = Value, group = dc, fill = dc)) +
   geom_density(alpha = 0.5) +
-  facet_wrap(~Prior, scales = "free") +
-  scale_fill_paletteer_d("PrettyCols::Light", name = "Birds in DC?")
+  facet_wrap(~Prior, scales = "free")
 ```
 
 ## 
