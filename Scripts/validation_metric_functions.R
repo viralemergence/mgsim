@@ -43,14 +43,30 @@ fill_missing_years <- function(df, start_year, end_year) {
   }
 
   # Handle seasons if the column exists
+  # Handle seasons if the column exists
   if ("season" %in% names(df_filled)) {
-    if (!("summer" %in% df_filled$season)) {
-      # Add summer season
-      summer_copy <- df_filled |>
-        mutate(season = "summer", path = missing_marker)
-      df_complete <- bind_rows(df_filled, summer_copy) |>
+    # Find all years that have winter but not summer
+    years_with_seasons <- df_filled %>%
+      group_by(Year) %>%
+      summarize(has_summer = "summer" %in% season)
+
+    years_missing_summer <- years_with_seasons$Year[
+      !years_with_seasons$has_summer
+    ]
+
+    if (length(years_missing_summer) > 0) {
+      # For each year with missing summer, create summer entries
+      summer_dfs <- lapply(years_missing_summer, function(yr) {
+        winter_rows <- df_filled %>% filter(Year == yr, season == "winter")
+        winter_rows$season <- "summer"
+        winter_rows$path <- missing_marker
+        return(winter_rows)
+      })
+
+      # Combine with original data
+      df_filled <- bind_rows(df_filled, bind_rows(summer_dfs)) %>%
+        arrange(Year, season) %>%
         mutate(season = factor(season, levels = c("winter", "summer")))
-      return(df_complete)
     }
   }
 

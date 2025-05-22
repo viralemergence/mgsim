@@ -31,12 +31,12 @@ presabs <- here(
 
 # Gather relevant data
 presence_list <- results_dir[dc] |>
-  map(\(f) paste0("cd /glade/work/pilowskyj/Round1_matrix/", f)) |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
       path = p,
-      index = as.numeric(str_split_i(p, "/", 8) |> str_split_i("_", 1)),
+      index = as.numeric(str_split_i(p, "/", 7) |> str_split_i("_", 1)),
       infected = str_detect(p, "I")
     ) |>
       arrange(index) |>
