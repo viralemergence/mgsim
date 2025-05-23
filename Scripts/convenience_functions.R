@@ -169,17 +169,27 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE){
 
 
 #' Unpack the contents of a closure into the global environment
-#' 
-#' Sometimes for debugging purposes you need to unpack a closure like a 
-#' suitcase. 
-#' 
+#'
+#' Sometimes for debugging purposes you need to unpack a closure like a
+#' suitcase.
+#'
 #' @param closure The closure to be unpacked.
 #' @return Invisibly copies objects into the global environment.
 unpack_closure <- function(closure) {
   closure_env <- environment(closure)
   vars <- ls(envir = closure_env)
-  
+
   for (var in vars) {
     assign(var, get(var, envir = closure_env), envir = .GlobalEnv)
   }
+}
+
+## Write simulation numbers to a Globus transfer file
+write_globus_transfer <- function(source_dir, dest_dir, sim_numbers,
+                                  filename) {
+  instructions <- map_chr(sim_numbers, function(n) {
+    paste0(source_dir, "/simulation", n, " ", dest_dir, "/simulation", n)
+  }) |>
+    paste(collapse = "\n")
+  write(instructions, filename)
 }

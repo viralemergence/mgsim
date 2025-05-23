@@ -1,0 +1,122 @@
+---
+title: "mgsim: Round 1 Analysis"
+author: "July Pilowsky"
+format: html
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(tidyplots)
+library(paletteer)
+library(here)
+library(cowplot)
+library(GGally)
+library(abc)
+round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")) |> 
+  mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
+round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
+round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+```
+
+# 1. How well did the simulations perform?
+
+Our validation metrics are as follows:
+
+1.  **Are there finches in Washington DC in 1994?** This is crucial because this is the time and place where the *Mycoplasma gallisepticum* outbreak first occurred. If there are no finches there, there can't be an outbreak. All the subsequent metrics are conditioned on whether the simulation meets this criterion. All simulations that fail are excluded.
+2.  ***Mycoplasma*** **presence.** There are locations where Project FeederWatch spotted infected finches every year for years on end. This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.
+3.  ***Haemorhous*** **presence/absence.** From many years of Breeding Bird Survey and Christmas Bird Count data, we know of places in North America where the house finch is *always* observed and *never* observed. A lower score means the simulation can accurately replicate the sites where house finches are always or never present.
+4.  ***Haemorhous*** **population trends.** For bird conservation regions throughout North America, Audubon has records of population trends in *Haemorhous* population size. I used two metrics: population trend since 1970, and population trend since 1993. A lower score means that the population trends in the simulation are more accurate.
+5.  **Point prevalence**. I have data from studies done on *Mycoplasma* all over North America with prevalence of the disease that they found at a specific point in space and time, with uncertainty around these estimates. I assigned a penalty for the simulated prevalence falling outside this estimated range of prevalence.
+6.  **First arrival of *Mycoplasma***. I estimated the first arrival of the *Mycoplasma* outbreak to different parts of the Northeast based on Project FeederWatch sightings, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range.
+7.  **First arrival of *Haemorhous*.** I estimated the first arrival of the house finch in parts of its invasive range based on sightings from the Breeding Bird Survey, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range.
+
+## 1.a. Presence in Washington, D.C.
+
+First of all, let's look at the performance on the "presence of finches in DC" metric, since everything else depends on that.
+
+```{r dc}
+round1_priors |> 
+  mutate(dc = round1_metrics$dc) |> 
+  select(-mortality_Sa_summer, -mortality_Ra_summer) |> 
+  pivot_longer(1:45, names_to = "Prior", values_to = "Value") |> 
+  ggplot(aes(x = Value, group = dc, fill = dc)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~Prior, scales = "free") +
+  scale_fill_paletteer_d("PrettyCols::Light", name = "Birds in DC?")
+```
+
+About half of the simulations (4876) succeeded on this metric. The main determinants of whether the simulations succeeded on this metric had to do with density-dependent controls on dispersal. The simulations with birds in DC maximized the range of population densities at which dispersal would occur.
+
+## 1.b. Other Validation Metrics
+
+Now, let's look at the performance on the other seven validation metrics. What I'm looking for here are metrics that are *good filters*: not all the simulations succeed, but not all of them fail horribly, either. This helps us choose which simulations are the best.
+
+```{r performance histogram}
+round1_metrics_dc <- round1_metrics |> 
+  filter(dc) |> 
+  select(-index, -dc, -hm_trend)
+quantiles <- round1_metrics_dc |> 
+  map_dbl(\(x) quantile(x, prob = c(0.01), na.rm = T))
+labels <- c("Mycoplasma presence", "Finch pres/abs", 
+            "Point prevalence", "Mycoplasma arrival", "Finch arrival",
+            "Finch trend from 1970", "Finch trend from 1993")
+plotlist <- pmap(list(round1_metrics_dc, quantiles, labels), function(x, y, z) {
+  ggplot(data = NULL, aes(x = x)) + 
+    geom_histogram() + 
+    geom_vline(xintercept = y, color = "blue") +
+    xlab(z)
+})
+plot_grid(plotlist = plotlist)
+```
+
+Here I've added a blue line representing the top 1% of scores. This is tricky, because some of these metrics are poor filters: almost all simulations do well on them. Though perhaps they look better once extreme outliers are removed:
+
+```{r remove outliers}
+plotlist2 <- pmap(list(round1_metrics_dc |> 
+                         filter(if_all(everything(), \(x) x < quantile(x, 0.99, na.rm=T))), quantiles, labels), function(x, y, z) {
+  ggplot(data = NULL, aes(x = x)) + 
+    geom_histogram() + 
+    geom_vline(xintercept = y, color = "blue") +
+    xlab(z)
+})
+plot_grid(plotlist = plotlist2)
+```
+
+Mycoplasma presence remains a poor filter, as does presence and absence of house finches. Another issue is that the performance on finch presence/absence, Mycoplasma arrival, and finch arrival is very poor. I think the best thing I can do at this point is to try ABC on different combinations of validation metrics, choose top models, and check if:
+
+1.  the same top models are chosen by different validation metrics.
+2.  whether the ensemble of the top models chosen produces a result that I know to be accurate based on the natural history of the house finch and the conjunctivitis outbreak.
+
+# 2. Validation metric combinations
+
+You can't reasonably use seven validation metrics at once. Generally, three is considered the ideal number. Choosing a good combination of three validation metrics can be very challenging.
+
+## 2.a. Correlation
+
+It is important to know which validation metrics are correlated, because you want three that are uncorrelated to one another for maximum effectiveness in choosing models that perform well at multiple functions.
+
+```{r correlation}
+ggpairs(round1_metrics_dc |> filter(if_all(everything(), \(x) x < quantile(x, 0.99, na.rm=T))))
+```
+
+Point prevalence appears to be negatively correlated with Mycoplasma presence, positively correlated with finch presence/absence, positively correlated with population trend from 1993 on, and positively correlated with arrival of Mycoplasma. I will say I would strongly prefer point prevalence over Mycoplasma presence or finch presence/absence because it's a better filter. Finch presence/absence is also highly correlated with population trend from 1993 on, and population trend from 1993 is a better filter also.
+
+## 2.b. Point prevalence & finch population size trends
+
+I want to try out the combination of point prevalence and the two population size trend metrics. I'm interested in these because they're all good filters and performance is pretty good on all three. First, I run Approximate Bayesian Computation:
+
+```{r point prevalence hm trend abc}
+abc50 <- abc(param = round1_priors[round1_metrics$dc,], 
+             sumstat = round1_metrics_dc[, c(3, 6, 7)],
+              target = rep(0, 3), 
+             tol = 0.005, 
+             method = "neuralnet")
+head(abc50$ss, 10)
+selected_samples <- round1_priors %>% 
+  rowid_to_column("sample") |> 
+  semi_join(abc50$unadj.values, copy = TRUE) %>% 
+  pull(sample)
+selected_samples
+```
