@@ -553,10 +553,10 @@ stopCluster(cl)
 summary_metrics <- data.frame(index = 1:10000, dc = dc)
 summary_metrics$mg_presence[dc] <- mg_presence_penalty
 summary_metrics$hm_presabs[dc] <- presabs_metric
-summary_metrics$hm_trend[dc] <- trend_metric
+summary_metrics$hm_trend <- c(trend_metric, rep(NA_real_, 10000-length(trend_metric)))
 summary_metrics$point_prevalence[dc] <- point_prevalence_metric
 summary_metrics$mg_arrival[dc] <- mg_arrival_penalty
-summary_metrics$hm_arrival[dc] <- hm_arrival_penalty
+summary_metrics$hm_arrival[dc] <- hm_arrival_metric
 write_csv(summary_metrics, here("mgsim/Data_minimal/Validation/round1_validation_metrics.csv"))
 round1_priors |> 
   mutate(dc = dc) |> 
