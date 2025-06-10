@@ -1,35 +1,45 @@
-animate_sim <- function(path, region, burn_in, years) {
+library(gganimate)
+library(sp)
+library(sf)
+library(data.table)
 
-  sim <- qread(path)
+animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
+
   if (burn_in > 0) {
-    arr <- sim$abundance[, burn_in:ncol(sim$abundance),]
+    arr <- array[, burn_in:ncol(array),]
   } else {
-    arr <- sim$abundance
+    arr <- array
   }
-  season <- c(0, 0.5)
+  coords <- region$region_raster |> coordinates()
   # Create a data.frame with the correct x, y, z coordinates
-  df <- expand.grid(Population = 1:dim(arr)[1], y = 1:dim(arr)[2],
+  df <- expand.grid(y = 1:dim(arr)[2], x = 1:dim(arr)[1],
                     z = 1:dim(arr)[3])
 
   # Convert the data.frame to a data.table
   dt <- as.data.table(df)
 
   # Add the corresponding values from the array
-  dt[, Abundance := arr[cbind(Population, y, z)]]
-  dt$Year <- years[dt$y]
-  dt$Season <- season[dt$z]
-  dt$x <- region$coordinates[df$Population, 1]
-  dt$y <- region$coordinates[df$Population, 2]
+  dt[, Abundance := arr[cbind(x, y, z)]]
+  dt$Year <- years[round(dt$z/2) + 1]
+  dt$Season <- if_else(dt$z %% 2 == 0, 0, 0.5)
+  dt$x <- rep(coords[, 1], 154)
+  dt$y <- rep(coords[, 2], 154)
   dt$Time <- dt$Year + dt$Season
+  dt$Abundance <- if_else(dt$Abundance == 0, NA_real_, dt$Abundance)
+
+  # Create a basemap
+  basemap <- rnaturalearth::ne_coastline() |>
+    st_transform(st_crs(region$region_raster)) |>
+    st_crop(st_bbox(region$region_raster))
 
   # Plot the data
   anim <- ggplot() +
     geom_sf(data = basemap) +
     geom_tile(data = dt, mapping = aes(x, y, fill = Abundance)) +
-    scale_fill_viridis_c(labels = scales::label_comma()) +
+    scale_fill_viridis_c(labels = scales::label_comma(), na.value = "transparent") +
     transition_time(Time) +
-    labs(title = "Year: {frame_time}") +
+    labs(title = "Year: {round(frame_time)}") +
     theme_void()
 
-  return(animate(anim, nframes = length(unique(dt$Time))))
+  return(gganimate::animate(anim, nframes = length(unique(dt$Time)), fps = 4))
 }

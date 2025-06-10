@@ -377,8 +377,8 @@ basemap <- rnaturalearth::ne_coastline() |>
   st_transform(crs(region$region_raster)) |> 
   st_crop(st_bbox(region$region_raster))
 source(here::here("Scripts/animate_sim.R"))
-animate_sim(file.path(results_dir, "sample_1_results.qs"),
-            region, 5, 1940:1993)
+animate_sim(qread(file.path(results_dir, "sample_1_results.qs"))$abundance,
+            region, burn_in = 5, years = 1940:1993)
 ```
 
 # Finch + MG simulation

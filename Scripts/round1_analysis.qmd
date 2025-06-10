@@ -3,16 +3,25 @@ title: "mgsim: Round 1 Analysis"
 author: "July Pilowsky"
 format: html
 editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
 ---
 
-```{r setup}
-library(tidyverse)
+```{r setup, message = FALSE}
 library(tidyplots)
 library(paletteer)
 library(here)
 library(cowplot)
 library(GGally)
 library(abc)
+library(tidyverse)
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+source(here("Scripts/animate_sim.R"))
+set_trust_promises(TRUE)
+region <- qread(here("Data/Input/finch_region.qs"))
 round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")) |> 
   mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
 round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
@@ -20,7 +29,21 @@ round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2
 round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
 ```
 
-# 1. How well did the simulations perform?
+# 1. What is the motivation and methodology of this research?
+
+## 1.a. Motivation
+
+The motivation here is to show the utility and promise of my R package, `epizootic`, for building process-explicit models of disease outbreaks in wildlife. I'm using the *Mycoplasma* outbreak in house finches as a case study to show what we can learn from using `epizootic` to reconstruct the outbreak and narrow the prior distributions for aspects of the outbreak that are difficult to observe.
+
+## 1.b. Methods
+
+I simulated the house finch system from 1940 to 2016 (which was as late as my climate and land use data went.) I started in 1940 with the release of house finches in New York because of the scientific consensus that the invasion biology of the house finch is essential to understanding the outbreak. The disease is introduced to the system in Washington D.C. in early 1994, just how it happened in real life.
+
+The simulations include the demography of the house finch, dispersal (both demography and dispersal include density dependence), the epidemiological dynamics of the disease, and seasonality. The prior distributions for these were drawn from the extensive literature on this system. The simulations also include changes in climate and land use, including the house finch's preferences in climate and land use types, as determined by a species distribution model. The simulations have a daily step but data are only recorded on a seasonal basis.
+
+I ran 10,000 simulations based on stratified sampling of the prior distributions. I collected a variety of data to validate the simulations, all non-overlapping with the data used to parameterize the simulations. In this document, I use these validation metrics to select top-performing simulations and make scientific inferences based on ensembles of top-performing models.
+
+# 2. How well did the simulations perform?
 
 Our validation metrics are as follows:
 
@@ -32,7 +55,7 @@ Our validation metrics are as follows:
 6.  **First arrival of *Mycoplasma***. I estimated the first arrival of the *Mycoplasma* outbreak to different parts of the Northeast based on Project FeederWatch sightings, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range.
 7.  **First arrival of *Haemorhous*.** I estimated the first arrival of the house finch in parts of its invasive range based on sightings from the Breeding Bird Survey, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range.
 
-## 1.a. Presence in Washington, D.C.
+## 2.a. Presence in Washington, D.C.
 
 First of all, let's look at the performance on the "presence of finches in DC" metric, since everything else depends on that.
 
@@ -49,11 +72,11 @@ round1_priors |>
 
 About half of the simulations (4876) succeeded on this metric. The main determinants of whether the simulations succeeded on this metric had to do with density-dependent controls on dispersal. The simulations with birds in DC maximized the range of population densities at which dispersal would occur.
 
-## 1.b. Other Validation Metrics
+## 2.b. Other Validation Metrics
 
 Now, let's look at the performance on the other seven validation metrics. What I'm looking for here are metrics that are *good filters*: not all the simulations succeed, but not all of them fail horribly, either. This helps us choose which simulations are the best.
 
-```{r performance histogram}
+```{r performance histogram, message = F}
 round1_metrics_dc <- round1_metrics |> 
   filter(dc) |> 
   select(-index, -dc, -hm_trend)
@@ -73,7 +96,7 @@ plot_grid(plotlist = plotlist)
 
 Here I've added a blue line representing the top 1% of scores. This is tricky, because some of these metrics are poor filters: almost all simulations do well on them. Though perhaps they look better once extreme outliers are removed:
 
-```{r remove outliers}
+```{r remove outliers, message = F}
 plotlist2 <- pmap(list(round1_metrics_dc |> 
                          filter(if_all(everything(), \(x) x < quantile(x, 0.99, na.rm=T))), quantiles, labels), function(x, y, z) {
   ggplot(data = NULL, aes(x = x)) + 
@@ -89,11 +112,11 @@ Mycoplasma presence remains a poor filter, as does presence and absence of house
 1.  the same top models are chosen by different validation metrics.
 2.  whether the ensemble of the top models chosen produces a result that I know to be accurate based on the natural history of the house finch and the conjunctivitis outbreak.
 
-# 2. Validation metric combinations
+# 3. Which simulations scored the best on validation metrics?
 
 You can't reasonably use seven validation metrics at once. Generally, three is considered the ideal number. Choosing a good combination of three validation metrics can be very challenging.
 
-## 2.a. Correlation
+## 3.a. Correlation
 
 It is important to know which validation metrics are correlated, because you want three that are uncorrelated to one another for maximum effectiveness in choosing models that perform well at multiple functions.
 
@@ -103,20 +126,120 @@ ggpairs(round1_metrics_dc |> filter(if_all(everything(), \(x) x < quantile(x, 0.
 
 Point prevalence appears to be negatively correlated with Mycoplasma presence, positively correlated with finch presence/absence, positively correlated with population trend from 1993 on, and positively correlated with arrival of Mycoplasma. I will say I would strongly prefer point prevalence over Mycoplasma presence or finch presence/absence because it's a better filter. Finch presence/absence is also highly correlated with population trend from 1993 on, and population trend from 1993 is a better filter also.
 
-## 2.b. Point prevalence & finch population size trends
+## 3.b. Point prevalence & finch population size trends
 
 I want to try out the combination of point prevalence and the two population size trend metrics. I'm interested in these because they're all good filters and performance is pretty good on all three. First, I run Approximate Bayesian Computation:
 
-```{r point prevalence hm trend abc}
-abc50 <- abc(param = round1_priors[round1_metrics$dc,], 
+```{r point prevalence hm trend abc, warning=F, message=F}
+abc49 <- abc(param = round1_priors[round1_metrics$dc,], 
              sumstat = round1_metrics_dc[, c(3, 6, 7)],
               target = rep(0, 3), 
-             tol = 0.005, 
+             tol = 0.01, 
              method = "neuralnet")
-head(abc50$ss, 10)
+head(abc49$ss, 10)
 selected_samples <- round1_priors %>% 
   rowid_to_column("sample") |> 
-  semi_join(abc50$unadj.values, copy = TRUE) %>% 
+  semi_join(abc49$unadj.values, copy = TRUE) %>% 
   pull(sample)
-selected_samples
+write_sftp_transfer("/glade/work/pilowskyj/Round1_matrix", 
+                      "/Users/caryinstitute/Documents/mgsim/Data/Output/Round1_matrix", 
+                      selected_samples, 
+                      here("Scripts/Globus/abc1.txt"))
+ensemble_sa <- ensemble_mean(selected_samples, abc49$weights, "Sa", here("Data/Output/Round1_matrix"))
+animate_sim(ensemble_sa, region)
 ```
+
+This is an animation of susceptible adults during the study period. Now let's have a look at recovered adults to get a sense of the outbreak:
+
+```{r recovered animation}
+ensemble_ra <- ensemble_mean(selected_samples, abc49$weights, "Ra", here("Data/Output/Round1_matrix"))
+animate_sim(ensemble_ra, region)
+```
+
+The "flickering" you observe in this animation is due to seasonality. The number of house finches drops every winter due to higher mortality, so the colors change pretty intensely season to season.
+
+Let's examine the posterior distributions that result from this round of ABC.
+
+```{r 3 factor abc posteriors}
+plot_abc_posteriors(abc49, round1_priors)
+```
+
+Low disease-induced mortality is very strongly selected for. This may be a real phenomenon, as symptomatic birds are more likely to be detected, and they're likely more vulnerable to mortality than asymptomatic cases.
+
+## 3.c. Mycoplasma presence & finch arrival
+
+I used a function called `abctools::selectsumm` that essentially uses cross-validation to find which statistics can most refine the posterior distributions. This method selected Mycoplasma presence and first arrival of house finches as the best combination of variables.
+
+```{r mg presence and hm arrival, warning=F, message=F}
+abc49 <- abc(param = round1_priors[round1_metrics$dc,], 
+             sumstat = round1_metrics_dc[c(1, 5)],
+              target = rep(0, 2), 
+             tol = 0.01, 
+             method = "neuralnet")
+head(abc49$ss, 10)
+selected_samples <- round1_priors %>% 
+  rowid_to_column("sample") |> 
+  semi_join(abc49$unadj.values, copy = TRUE) %>% 
+  pull(sample)
+write_sftp_transfer("/glade/work/pilowskyj/Round1_matrix", 
+                      "/Users/caryinstitute/Documents/mgsim/Data/Output/Round1_matrix", 
+                      selected_samples, 
+                      here("Scripts/Globus/abc2.txt"))
+ensemble_sa <- ensemble_mean(selected_samples, abc49$weights, "Sa", here("Data/Output/Round1_matrix"))
+animate_sim(ensemble_sa, region)
+```
+
+```{r recovered optimized}
+ensemble_ra <- ensemble_mean(selected_samples, abc49$weights, "Ra", here("Data/Output/Round1_matrix"))
+animate_sim(ensemble_ra, region)
+```
+
+This ensemble seems to have slower dispersal than the others, with the house finch range expanding more slowly, and the disease spreading more slowly as well.
+
+```{r optimized abc}
+plot_abc_posteriors(abc49, round1_priors)
+```
+
+This validation dataset selects for rather low transmission rates all things considered.
+
+## 3.d. Everything!
+
+I read a bunch of papers about the curse of dimensionality and overfitting with excessive summary statistics, and they suggested that the neural net method of ABC optimization may be able to compensate for these issues. So I'm trying all seven here.
+
+```{r everything, warning=F, message=F}
+abc49 <- abc(param = round1_priors[round1_metrics$dc,], 
+             sumstat = round1_metrics_dc,
+              target = rep(0, 7), 
+             tol = 0.01, 
+             method = "neuralnet")
+head(abc49$ss, 10)
+selected_samples <- round1_priors %>% 
+  rowid_to_column("sample") |> 
+  semi_join(abc49$unadj.values, copy = TRUE) %>% 
+  pull(sample)
+write_sftp_transfer("/glade/work/pilowskyj/Round1_matrix", 
+                      "/Users/caryinstitute/Documents/mgsim/Data/Output/Round1_matrix", 
+                      selected_samples, 
+                      here("Scripts/Globus/abc3.txt"))
+ensemble_sa <- ensemble_mean(selected_samples, abc49$weights, "Sa", here("Data/Output/Round1_matrix"))
+animate_sim(ensemble_sa, region)
+```
+
+This run looks similar to others but with lower abundance and higher seasonality. But let's look at recovered adults to get a sense of the outbreak:
+
+```{r recovered everything}
+ensemble_ra <- ensemble_mean(selected_samples[-24], abc49$weights[-24], "Ra", here("Data/Output/Round1_matrix"))
+animate_sim(ensemble_ra, region)
+```
+
+The infection spreads more slowly in this simulation, and it isn't as evenly distributed across the landscape. It replicates the pattern of more intense infection in the east, which is great. It also hits the West at about the times that are reported from the literature.
+
+```{r everything posteriors}
+plot_abc_posteriors(abc49, round1_priors)
+```
+
+# 4. Conclusions
+
+What I find very exciting in these results is that they are able to give us insight into aspects of the *Mycoplasma* outbreak that are unobservable / unknowable by any other method. For one, they give us dynamic maps of the expansion of the house finch's range, and of the geographic expansion of house finch conjunctivitis, that are unaffected by observer bias (birdwatchers' observations cluster heavily in certain parts of the country). For another, the posterior distributions provide estimates of quantities like the number of house finches that were initially released in New York, and the number of house finches that were initially infected with *Mycoplasma* in early 1994.
+
+I'm trying to work out which of these sets of validation metrics do the best job reconstructing the range expansion of the house finch and the spread of *Mycoplasma* in the house finch. Thus far, I think the best performance is in the set I selected based on my own judgment as a scientist, in section 3b above, but I'm open to other opinions. Almost certainly I will want to perform a second round of simulations using the posterior distributions from this round as priors.
