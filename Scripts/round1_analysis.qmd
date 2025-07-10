@@ -136,6 +136,7 @@ abc49 <- abc(param = round1_priors[round1_metrics$dc,],
               target = rep(0, 3), 
              tol = 0.01, 
              method = "neuralnet")
+qsave(abc49, here("Data/Validation/abc_round1.qs"))
 head(abc49$ss, 10)
 selected_samples <- round1_priors %>% 
   rowid_to_column("sample") |> 
