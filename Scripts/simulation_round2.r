@@ -11,14 +11,20 @@ library(here)
 library(doParallel)
 i_am("mgsim/Scripts/simulation_round2.r")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- "/glade/work/pilowskyj/Round2"
+results_dir <- "/glade/work/pilowskyj/Round2" # production
+# results_dir <- here("mgsim/Data/Output/Round2") # testing
 set_trust_promises(TRUE)
 random_seed <- 90
-n_sims <- 10000
+n_sims <- 10000 # production
+# n_sims <- 10 # testing
 region <- data_dir |> file.path("finch_region.qs") |> qread()
 
 #### Create sample data frame ####
-sample_data <- read_csv(file.path(data_dir, "sample_data_round2.csv"))
+sample_data <- read_csv(file.path(data_dir, "sample_data_round2.csv")) |>
+  mutate(
+    mortality_Sa_summer = rep(1, n()),
+    mortality_Ra_summer = rep(1, n())
+  )
 
 #### Create initial abundance generator ####
 abundance_gen <- Generator$new(
@@ -57,11 +63,11 @@ abundance_gen$add_function_template(
   param = "Sa_abundance",
   function_def = function(params) {
     hs_matrix <- params$hs_raster |>
-                 raster::mask(params$mask_raster, updatevalue = 0) |>
-                 as.array() |>
-                 _[,,1] |>
-                 base::`*`(params$density_max) |>
-                 round()
+      raster::mask(params$mask_raster, updatevalue = 0) |>
+      as.array() |>
+      _[,, 1] |>
+      base::`*`(params$density_max) |>
+      round()
     hs_matrix[38, 118] <- params$initial_release
     return(hs_matrix)
   },
@@ -69,14 +75,15 @@ abundance_gen$add_function_template(
 )
 
 system.time({
-  test_capacity <- abundance_gen$generate(input_values = list(density_max = 186000,
-                                                             initial_release = 50))
+  test_capacity <- abundance_gen$generate(
+    input_values = list(density_max = 186000, initial_release = 50)
+  )
 })
 
 #### Create dispersal generators ####
 b_lookup <- data.frame(d_max = -Inf, b = 0:904)
 for (i in 2:904) {
-  b_lookup$d_max[i] <- which.max(exp(-1*(1:1501)/b_lookup$b[i]) <= 0.19)
+  b_lookup$d_max[i] <- which.max(exp(-1 * (1:1501) / b_lookup$b[i]) <= 0.19)
 }
 b_lookup$d_max[905] <- 1501
 
@@ -91,11 +98,12 @@ adult_dispersal_gen <- DispersalGenerator$new(
   distance_scale = 1000, # km
   dispersal_function_data = b_lookup,
   decimals = 3,
-  inputs = c("dispersal_p_adult",
-             "dispersal_r_adult"),
-  attribute_aliases = list(dispersal_r_adult = "dispersal_max_distance",
-                           dispersal_p_adult = "dispersal_proportion",
-                           dispersal_adult = "dispersal_data")
+  inputs = c("dispersal_p_adult", "dispersal_r_adult"),
+  attribute_aliases = list(
+    dispersal_r_adult = "dispersal_max_distance",
+    dispersal_p_adult = "dispersal_proportion",
+    dispersal_adult = "dispersal_data"
+  )
 )
 adult_dispersal_gen$distance_data <- distance_data
 
@@ -105,12 +113,13 @@ juvenile_dispersal_gen <- DispersalGenerator$new(
   distance_scale = 1000, # km
   dispersal_function_data = b_lookup,
   decimals = 3,
-  inputs = c("dispersal_p_juv",
-             "dispersal_r_juv"),
-  attribute_aliases = list(dispersal_r_juv = "dispersal_max_distance",
-                 dispersal_p_juv = "dispersal_proportion",
-                 dispersal_source_n_k_cutoff = "dispersal_source_n_k$cutoff",
-                 dispersal_juv = "dispersal_data")
+  inputs = c("dispersal_p_juv", "dispersal_r_juv"),
+  attribute_aliases = list(
+    dispersal_r_juv = "dispersal_max_distance",
+    dispersal_p_juv = "dispersal_proportion",
+    dispersal_source_n_k_cutoff = "dispersal_source_n_k$cutoff",
+    dispersal_juv = "dispersal_data"
+  )
 )
 juvenile_dispersal_gen$distance_data <- distance_data
 
@@ -120,14 +129,20 @@ adult_dispersal_data <- adult_dispersal_gen$generate(
     dispersal_p_adult = 0.5,
     dispersal_r_adult = 300
   )
-) |> _$dispersal_data
+) |>
+  _$dispersal_data
 head(adult_dispersal_data[[1]])
 
 #### Create simulation object ####
 # Creates the environment
-landscape <- c(file.path(data_dir, "breeding_season_length.tif"),
-  file.path(data_dir, "habitat_suitability_v3.tif")) |> map(rast) |>
-  map(\(x) x[[1:77]]) |> map_at(1, round) |> sds()
+landscape <- c(
+  file.path(data_dir, "breeding_season_length.tif"),
+  file.path(data_dir, "habitat_suitability_v3.tif")
+) |>
+  map(rast) |>
+  map(\(x) x[[1:77]]) |>
+  map_at(1, round) |>
+  sds()
 names(landscape) <- c("breeding_season_length", "habitat_suitability")
 # Create the object
 sim <- create_simulation(
@@ -170,9 +185,19 @@ sim$add_process(
   process_name = "activate_disease",
   process_fun = function() {
     if (self$get_current_time_step() == 54) {
-      if (self$house_finch$traits$Sa_abundance[44, 113] >= self$house_finch$traits$infected_t1) {
-        self$house_finch$traits$Sa_abundance[44, 113] <- self$house_finch$traits$Sa_abundance[44, 113] - self$house_finch$traits$infected_t1
-        self$house_finch$traits$I1a_abundance[44, 113] <- self$house_finch$traits$infected_t1
+      if (
+        self$house_finch$traits$Sa_abundance[44, 113] >=
+          self$house_finch$traits$infected_t1
+      ) {
+        self$house_finch$traits$Sa_abundance[
+          44,
+          113
+        ] <- self$house_finch$traits$Sa_abundance[44, 113] -
+          self$house_finch$traits$infected_t1
+        self$house_finch$traits$I1a_abundance[
+          44,
+          113
+        ] <- self$house_finch$traits$infected_t1
       } else {
         self$exit()
       }
@@ -196,8 +221,16 @@ sim$add_process(
     if (self$get_current_time_step() > 54) {
       save_species(
         x = self$house_finch,
-        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
-                  "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
+        traits = c(
+          "Sj_abundance",
+          "Sa_abundance",
+          "I1j_abundance",
+          "I1a_abundance",
+          "Rj_abundance",
+          "Ra_abundance",
+          "I2j_abundance",
+          "I2a_abundance"
+        ),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
         overwrite = TRUE,
@@ -219,12 +252,19 @@ sim$add_process(
 sim$add_process(
   process_name = "save_abundance_summer",
   process_fun = function() {
-
     if (self$get_current_time_step() > 54) {
       save_species(
         x = self$house_finch,
-        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
-                  "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
+        traits = c(
+          "Sj_abundance",
+          "Sa_abundance",
+          "I1j_abundance",
+          "I1a_abundance",
+          "Rj_abundance",
+          "Ra_abundance",
+          "I2j_abundance",
+          "I2a_abundance"
+        ),
         prefix = paste0(self$get_current_time_step(), "_", "summer_"),
         path = self$globals$results_dir,
         overwrite = TRUE,
@@ -255,31 +295,41 @@ sim$add_process(
       time_steps = 77,
       populations = 6355,
       demographic_stochasticity = TRUE,
-      dispersal = list(self$traits$dispersal1,
-                       self$traits$dispersal2),
+      dispersal = list(self$traits$dispersal1, self$traits$dispersal2),
       dispersal_type = "stages",
-      dispersal_source_n_k = list(cutoff = self$traits$dispersal_source_n_k_cutoff,
-                                  threshold = self$traits$dispersal_source_n_k_threshold),
+      dispersal_source_n_k = list(
+        cutoff = self$traits$dispersal_source_n_k_cutoff,
+        threshold = self$traits$dispersal_source_n_k_threshold
+      ),
       dispersal_target_k = NULL,
       dispersal_target_n = NULL,
-      dispersal_target_n_k = list(cutoff = self$traits$dispersal_target_n_k_cutoff,
-                                  threshold = self$traits$dispersal_target_n_k_threshold),
+      dispersal_target_n_k = list(
+        cutoff = self$traits$dispersal_target_n_k_cutoff,
+        threshold = self$traits$dispersal_target_n_k_threshold
+      ),
       stages = 2,
       compartments = 4,
       simulator = SimulatorReference$new()
     )
 
-    segment_abundance <- matrix(c(self$traits$Sj_abundance[self$traits$index_matrix],
-                                  self$traits$Sa_abundance[self$traits$index_matrix],
-                                  self$traits$I1j_abundance[self$traits$index_matrix],
-                                  self$traits$I1a_abundance[self$traits$index_matrix],
-                                  self$traits$Rj_abundance[self$traits$index_matrix],
-                                  self$traits$Ra_abundance[self$traits$index_matrix],
-                                  self$traits$I2j_abundance[self$traits$index_matrix],
-                                  self$traits$I2a_abundance[self$traits$index_matrix]),
-                                nrow = 8, byrow = TRUE)
+    segment_abundance <- matrix(
+      c(
+        self$traits$Sj_abundance[self$traits$index_matrix],
+        self$traits$Sa_abundance[self$traits$index_matrix],
+        self$traits$I1j_abundance[self$traits$index_matrix],
+        self$traits$I1a_abundance[self$traits$index_matrix],
+        self$traits$Rj_abundance[self$traits$index_matrix],
+        self$traits$Ra_abundance[self$traits$index_matrix],
+        self$traits$I2j_abundance[self$traits$index_matrix],
+        self$traits$I2a_abundance[self$traits$index_matrix]
+      ),
+      nrow = 8,
+      byrow = TRUE
+    )
 
-    carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[self$traits$index_matrix]
+    carrying_capacity <- round(
+      self$traits$density_max * self$sim$environment$current$habitat_suitability
+    )[self$traits$index_matrix]
 
     transformed <- dispersal_fun(
       r = 1,
@@ -306,13 +356,17 @@ sim$add_process(
   species = "house_finch",
   process_name = "transition",
   process_fun = function() {
-    self$traits$Sa_abundance <- self$traits$Sa_abundance + self$traits$Sj_abundance
+    self$traits$Sa_abundance <- self$traits$Sa_abundance +
+      self$traits$Sj_abundance
     self$traits$Sj_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
-    self$traits$I1a_abundance <- self$traits$I1a_abundance + self$traits$I1j_abundance
+    self$traits$I1a_abundance <- self$traits$I1a_abundance +
+      self$traits$I1j_abundance
     self$traits$I1j_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
-    self$traits$Ra_abundance <- self$traits$Ra_abundance + self$traits$Rj_abundance
+    self$traits$Ra_abundance <- self$traits$Ra_abundance +
+      self$traits$Rj_abundance
     self$traits$Rj_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
-    self$traits$I2a_abundance <- self$traits$I2a_abundance + self$traits$I2j_abundance
+    self$traits$I2a_abundance <- self$traits$I2a_abundance +
+      self$traits$I2j_abundance
     self$traits$I2j_abundance <- matrix(rep(0), nrow = 106, ncol = 161)
   },
   execution_priority = 6
@@ -360,14 +414,46 @@ sim$add_process(
     if (sum(population_new, na.rm = T) == 0) {
       sim$exit()
     } else {
-      self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
-      self$traits$Sa_abundance <- matrix(population_new[2, ], nrow = 106, ncol = 161)
-      self$traits$I1j_abundance <- matrix(population_new[3, ], nrow = 106, ncol = 161)
-      self$traits$I1a_abundance <- matrix(population_new[4, ], nrow = 106, ncol = 161)
-      self$traits$Rj_abundance <- matrix(population_new[5, ], nrow = 106, ncol = 161)
-      self$traits$Ra_abundance <- matrix(population_new[6, ], nrow = 106, ncol = 161)
-      self$traits$I2j_abundance <- matrix(population_new[7, ], nrow = 106, ncol = 161)
-      self$traits$I2a_abundance <- matrix(population_new[8, ], nrow = 106, ncol = 161)
+      self$traits$Sj_abundance <- matrix(
+        population_new[1, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$Sa_abundance <- matrix(
+        population_new[2, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I1j_abundance <- matrix(
+        population_new[3, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I1a_abundance <- matrix(
+        population_new[4, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$Rj_abundance <- matrix(
+        population_new[5, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$Ra_abundance <- matrix(
+        population_new[6, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I2j_abundance <- matrix(
+        population_new[7, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I2a_abundance <- matrix(
+        population_new[8, ],
+        nrow = 106,
+        ncol = 161
+      )
     }
   },
   execution_priority = 7
@@ -413,31 +499,63 @@ sim$add_process(
     if (sum(population_new, na.rm = T) == 0) {
       sim$exit()
     } else {
-      self$traits$Sj_abundance <- matrix(population_new[1, ], nrow = 106, ncol = 161)
-      self$traits$Sa_abundance <- matrix(population_new[2, ], nrow = 106, ncol = 161)
-      self$traits$I1j_abundance <- matrix(population_new[3, ], nrow = 106, ncol = 161)
-      self$traits$I1a_abundance <- matrix(population_new[4, ], nrow = 106, ncol = 161)
-      self$traits$Rj_abundance <- matrix(population_new[5, ], nrow = 106, ncol = 161)
-      self$traits$Ra_abundance <- matrix(population_new[6, ], nrow = 106, ncol = 161)
-      self$traits$I2j_abundance <- matrix(population_new[7, ], nrow = 106, ncol = 161)
-      self$traits$I2a_abundance <- matrix(population_new[8, ], nrow = 106, ncol = 161)
+      self$traits$Sj_abundance <- matrix(
+        population_new[1, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$Sa_abundance <- matrix(
+        population_new[2, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I1j_abundance <- matrix(
+        population_new[3, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I1a_abundance <- matrix(
+        population_new[4, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$Rj_abundance <- matrix(
+        population_new[5, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$Ra_abundance <- matrix(
+        population_new[6, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I2j_abundance <- matrix(
+        population_new[7, ],
+        nrow = 106,
+        ncol = 161
+      )
+      self$traits$I2a_abundance <- matrix(
+        population_new[8, ],
+        nrow = 106,
+        ncol = 161
+      )
     }
   },
   execution_priority = 4
 )
 
 #### Set up parallel threading ####
-numCores <- 36
+numCores <- 36 # production
+# numCores <- 2 # testing
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
 
 #### Simulate ####
 sim_manager <- metaRangeParallel$new(
   simulation_template = sim,
-  generators = list(juvenile_dispersal_gen,
-                    adult_dispersal_gen,
-                    abundance_gen),
-  sample_data = sample_data,
+  generators = list(juvenile_dispersal_gen, adult_dispersal_gen, abundance_gen),
+  # sample_data = sample_data[1:n_sims, ], # testing
+  sample_data = sample_data, # production
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,
