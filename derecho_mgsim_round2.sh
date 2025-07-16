@@ -27,4 +27,4 @@ module load ncarenv/23.09 craype/2.7.23 gcc/13.2.0 hdf5/1.14.3 cray-mpich/8.1.27
 conda activate mgsim
 
 ### Run script
-Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round2.R
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round2.r

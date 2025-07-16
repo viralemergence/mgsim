@@ -9,7 +9,7 @@ library(qs)
 library(terra)
 library(here)
 library(doParallel)
-i_am("mgsim/Scripts/simulation_round2.R")
+i_am("mgsim/Scripts/simulation_round2.r")
 data_dir <- here("mgsim/Data_minimal/Input")
 results_dir <- "/glade/work/pilowskyj/Round2"
 set_trust_promises(TRUE)
@@ -437,7 +437,7 @@ sim_manager <- metaRangeParallel$new(
   generators = list(juvenile_dispersal_gen,
                     adult_dispersal_gen,
                     abundance_gen),
-  sample_data = sample_data[incomplete_sims,],
+  sample_data = sample_data,
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,
