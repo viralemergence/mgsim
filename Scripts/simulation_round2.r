@@ -545,7 +545,7 @@ sim$add_process(
 )
 
 #### Set up parallel threading ####
-numCores <- 36 # production
+numCores <- 62 # production
 # numCores <- 2 # testing
 cl <- makeCluster(numCores)
 registerDoParallel(cl)

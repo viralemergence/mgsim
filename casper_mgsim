@@ -1,12 +1,12 @@
 #!/bin/bash -l
 ### Job Name
-#PBS -N mgsim_round1.5
+#PBS -N mgsim_round2
 ### Charging account
 #PBS -A UCIE0003
 ### Request one chunk of resources
-#PBS -l select=1:ncpus=36:mpiprocs=36:mem=350GB
-### Allow job to run up to 30 minutes
-#PBS -l walltime=4:00:00
+#PBS -l select=1:ncpus=62:cpu_type=genoa:mem=1480GB
+### Allow job to run up to 12 hours
+#PBS -l walltime=12:00:00
 ### Route the job to the casper queue
 #PBS -q casper
 ### Join output and error streams into single file
@@ -25,4 +25,4 @@ module load ncarenv/23.10 gcc/13.2.0 conda/latest proj/9.2.1 ncarcompilers/1.0.0
 conda activate mgsim
 
 ### Run script
-Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round1.R
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round2.r
