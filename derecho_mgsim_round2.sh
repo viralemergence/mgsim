@@ -12,7 +12,7 @@
 ## How long do I want on the nodes
 #PBS -l walltime=12:00:00
 ## Computational allocation
-#PBS -l select=1:ncpus=128:mpiprocs=128
+#PBS -l select=1:ncpus=27:mpiprocs=27:mem=235gb
 
 ### Set temp to scratch
 export TMPDIR=${SCRATCH}/${USER}/temp && mkdir -p $TMPDIR
