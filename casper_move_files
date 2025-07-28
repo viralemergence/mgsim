@@ -1,0 +1,28 @@
+#!/bin/bash -l
+### Job Name
+#PBS -N move_files
+### Charging account
+#PBS -A UCIE0003
+### Request one chunk of resources
+#PBS -l select=1:ncpus=36:mpiprocs=36:mem=350GB
+### Allow job to run up to 30 minutes
+#PBS -l walltime=6:00:00
+### Route the job to the casper queue
+#PBS -q casper
+### Join output and error streams into single file
+#PBS -j oe
+
+### Set temp to scratch
+
+export TMPDIR=${SCRATCH}/${USER}/temp && mkdir -p $TMPDIR
+
+# Load modules to match compile-time environment
+
+module --force purge
+module load ncarenv/23.10 gcc/13.2.0 openmpi/5.0.0 mpifileutils/0.11.1
+
+# Run script
+mpirun -np 36 dsync /glade/work/pilowskyj/Round1_matrix /glade/derecho/scratch/pilowskyj/Round1
+
+
+
