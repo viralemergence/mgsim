@@ -233,7 +233,7 @@ sim$add_process(
         ),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
-        overwrite = TRUE,
+        overwrite = "skip",
         raster = FALSE
       )
     } else {
@@ -242,7 +242,7 @@ sim$add_process(
         traits = c("Sj_abundance", "Sa_abundance"),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
-        overwrite = TRUE,
+        overwrite = "skip",
         raster = FALSE
       )
     }
@@ -267,7 +267,7 @@ sim$add_process(
         ),
         prefix = paste0(self$get_current_time_step(), "_", "summer_"),
         path = self$globals$results_dir,
-        overwrite = TRUE,
+        overwrite = "skip",
         raster = FALSE
       )
     } else {
@@ -276,7 +276,7 @@ sim$add_process(
         traits = c("Sj_abundance", "Sa_abundance"),
         prefix = paste0(self$get_current_time_step(), "_summer_"),
         path = self$globals$results_dir,
-        overwrite = TRUE,
+        overwrite = "skip",
         raster = FALSE
       )
     }
