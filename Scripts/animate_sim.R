@@ -4,23 +4,21 @@ library(sf)
 library(data.table)
 
 animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
-
   if (burn_in > 0) {
-    arr <- array[, burn_in:ncol(array),]
+    arr <- array[, burn_in:ncol(array), ]
   } else {
     arr <- array
   }
   coords <- region$region_raster |> coordinates()
   # Create a data.frame with the correct x, y, z coordinates
-  df <- expand.grid(y = 1:dim(arr)[2], x = 1:dim(arr)[1],
-                    z = 1:dim(arr)[3])
+  df <- expand.grid(y = 1:dim(arr)[2], x = 1:dim(arr)[1], z = 1:dim(arr)[3])
 
   # Convert the data.frame to a data.table
   dt <- as.data.table(df)
 
   # Add the corresponding values from the array
   dt[, Abundance := arr[cbind(x, y, z)]]
-  dt$Year <- years[round(dt$z/2) + 1]
+  dt$Year <- years[round(dt$z / 2) + 1]
   dt$Season <- if_else(dt$z %% 2 == 0, 0, 0.5)
   dt$x <- rep(coords[, 1], 154)
   dt$y <- rep(coords[, 2], 154)
@@ -36,10 +34,18 @@ animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
   anim <- ggplot() +
     geom_sf(data = basemap) +
     geom_tile(data = dt, mapping = aes(x, y, fill = Abundance)) +
-    scale_fill_viridis_c(labels = scales::label_comma(), na.value = "transparent") +
+    scale_fill_viridis_c(
+      labels = scales::label_comma(),
+      na.value = "transparent"
+    ) +
     transition_time(Time) +
     labs(title = "Year: {round(frame_time)}") +
     theme_void()
 
-  return(gganimate::animate(anim, nframes = length(unique(dt$Time)), fps = 4))
+  return(gganimate::animate(
+    anim,
+    nframes = length(unique(dt$Time)),
+    fps = 4,
+    render = gifski_renderer()
+  ))
 }
