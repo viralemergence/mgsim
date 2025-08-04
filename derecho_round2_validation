@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #PBS -A UCIE0003
-#PBS -N round2_validation
+#PBS -N round2b_validation
 #PBS -q main
 #PBS -j oe
 #PBS -m abe
@@ -18,4 +18,4 @@ module load ncarenv/23.06 intel/2023.0.0 ncarcompilers/1.0.0 netcdf/4.9.2 proj/8
 conda activate mgsim
 
 # Run script
-Rscript -e 'library(knitr); knit("/glade/u/home/pilowskyj/mgsim/Scripts/round2_validation.qmd")'
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/round2b_validation.R

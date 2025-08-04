@@ -1,6 +1,6 @@
 #!/bin/bash -l
 ### Job Name
-#PBS -N mgsim_round2
+#PBS -N mgsim_round2b
 ### Charging account
 #PBS -A UCIE0003
 ### Request one chunk of resources
@@ -25,4 +25,4 @@ module load ncarenv/23.10 gcc/13.2.0 conda/latest proj/9.2.1 ncarcompilers/1.0.0
 conda activate mgsim
 
 ### Run script
-Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round2.r
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/simulation_round2b.r
