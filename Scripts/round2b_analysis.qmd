@@ -1,0 +1,121 @@
+---
+title: "mgsim: Round 2b Analysis"
+author: "July Pilowsky"
+format: html
+editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
+---
+
+```{r setup, message = FALSE, echo = FALSE}
+library(tidyplots)
+library(paletteer)
+library(here)
+library(cowplot)
+library(GGally)
+library(abc)
+library(tidyverse)
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+source(here("Scripts/animate_sim.R"))
+set_trust_promises(TRUE)
+region <- qread(here("Data/Input/finch_region.qs"))
+round2_metrics <- read_csv(here("Data/Validation/round2b_validation_metrics.csv"))
+round2_metrics$hm_trend_1970[round2_metrics$dc] <- round2_metrics$hm_trend[seq(1, 9900, 2)]
+round2_metrics$hm_trend_1993[round2_metrics$dc] <- round2_metrics$hm_trend[seq(2, 9900, 2)]
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")) |>
+    mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
+round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
+round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
+round2_priors <- read_csv(here("Data/Input/sample_data_round2b.csv"))
+```
+
+# What is my goal in Round 2 of simulation?
+
+My goal is to improve over Round 1 on the validation metrics. I attempted this using priors this round informed by the posteriors from the first round. I will assess my success by comparing validation metric performance between rounds, comparing the posterior distributions, and examining animations of the simulated maps.
+
+# Validation Metric Performance
+
+To start with, let's look at presence of finches in DC. In the first round, 4876 simulations out of 10000 simulated the presence of house finches in Washington, DC in 1994.
+
+```{r presence_dc}
+sum(round2_metrics$dc)
+```
+
+In this round, fewer simulations record presence in DC in 1994, which is a somewhat worrying result.
+
+Now let's plot some distributions of changing performance on the other validation metrics.
+
+```{r validation_metrics_plot, warning = FALSE}
+validation_metrics <- bind_rows(round1_metrics, round2_metrics) |>
+                      mutate(Round = factor(c(rep(1, 10000), rep(2, 10000)))) |>
+                      filter(dc) |>
+                      select(-hm_trend, -index, -dc)
+quantiles <- validation_metrics[,1:7] |> 
+  map_dbl(\(x) quantile(x, prob = c(0.001), na.rm = T))
+labels <- c("Mycoplasma presence", "Finch pres/abs", 
+            "Point prevalence", "Mycoplasma arrival", "Finch arrival",
+            "Finch trend from 1970", "Finch trend from 1993")
+plotlist <- pmap(list(names(validation_metrics)[1:7], quantiles, labels), function(x, y, z) {
+    outliers_removed <- validation_metrics[, c(x, "Round")][pull(validation_metrics, x) < quantile(pull(validation_metrics, x), 0.95, na.rm=T), ]
+    ggplot(data = outliers_removed, aes(x = .data[[x]], fill = Round, group = Round)) + 
+    geom_histogram(position = "dodge") + 
+    geom_vline(xintercept = y, color = "blue") +
+    xlab(z) +
+    scale_y_log10()
+})
+plot_grid(plotlist = plotlist)
+```
+
+I put blue lines at the 0.001 percentile to show that we're getting an impressive improvement in this round, not only on the two metrics used for validation (year of house finch arrival and consistent Mycoplasma presence in hotspots) but also metrics that were not used for validation. The only metric that seems to be doing worse is finch population trends since 1993.
+
+# Choosing validation metrics
+
+I chose these two validation metrics, year of house finch arrival and Mycoplasma presence, using `abctools::selectsumm` to find the metrics that narrowed the posterior distribution the most. I will do so here again.
+
+```{r selectsumm}
+metric_selection <- abctools::selectsumm(obs = matrix(rep(0,7), nrow=1),
+                    sumstats = round2_metrics |> filter(dc) |> select(c(3:4, 6:10)) |> as.matrix(),
+                    param = as.matrix(round2_priors[round2_metrics$dc,]),
+                    ssmethod = abctools::mincrit,
+                    verbose = F)
+metric_selection$best
+```
+
+The last three validation metrics correspond to year of finch arrival, trend in finch population from 1970, and trend in finch population from 1993.
+
+# Select the ensemble model
+
+I will use these three metrics to perform ABC and animate the selected ensemble model to see how it looks.
+
+```{r animate_susceptible_adults}
+abc50 <- abc(param = round2_priors[round2_metrics$dc,], 
+             sumstat = round2_metrics |> filter(dc) |> select(8:10),
+              target = rep(0, 3), 
+             tol = 0.01, 
+             method = "neuralnet")
+qsave(abc50, here("Data/Validation/abc_round2a.qs"))
+head(abc50$ss, 10)
+selected_samples <- round2_priors %>% 
+  rowid_to_column("sample") |> 
+  semi_join(abc50$unadj.values, copy = TRUE) %>% 
+  pull(sample)
+write_sftp_transfer("/glade/work/pilowskyj/Round2b", 
+                      "/Users/julypilowsky/Documents/mgsim/Data/Output/Round2b", 
+                      selected_samples, 
+                      here("Scripts/Globus/abc_round2b.txt"))
+ensemble_sa <- ensemble_mean(selected_samples, abc50$weights, "Sa", here("Data/Output/Round2b"))
+animate_sim(ensemble_sa, region)
+```
+
+This is an animation of susceptible adults. And now we will look at recovered adults to get a sense of the outbreak of *Mycoplasma*:
+
+```{r animate_recovered_adults}
+ensemble_ra <- ensemble_mean(selected_samples, abc50$weights, "Ra", here("Data/Output/Round2b"))
+animate_sim(ensemble_ra, region, years = 1994:2016, burn_in = 111)
+```
+
+The spread of the disease from DC is unfortunately too slow to be realistic. It should be in the West by the early 2000s.

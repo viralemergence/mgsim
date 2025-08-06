@@ -5,9 +5,11 @@ library(data.table)
 
 animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
   if (burn_in > 0) {
-    arr <- array[, burn_in:ncol(array), ]
+    arr <- array[,, burn_in:dim(array)[3]]
+    timesteps <- dim(arr)[3]
   } else {
     arr <- array
+    timesteps <- 154
   }
   coords <- region$region_raster |> coordinates()
   # Create a data.frame with the correct x, y, z coordinates
@@ -20,8 +22,8 @@ animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
   dt[, Abundance := arr[cbind(x, y, z)]]
   dt$Year <- years[round(dt$z / 2) + 1]
   dt$Season <- if_else(dt$z %% 2 == 0, 0, 0.5)
-  dt$x <- rep(coords[, 1], 154)
-  dt$y <- rep(coords[, 2], 154)
+  dt$x <- rep(coords[, 1], timesteps)
+  dt$y <- rep(coords[, 2], timesteps)
   dt$Time <- dt$Year + dt$Season
   dt$Abundance <- if_else(dt$Abundance == 0, NA_real_, dt$Abundance)
 
