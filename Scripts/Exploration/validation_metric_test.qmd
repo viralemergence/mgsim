@@ -167,8 +167,6 @@ basemap +
   scale_color_viridis_c()
 ```
 
-TO BE COMPLETED LATER
-
 ## Presence
 
 I don't really trust absence too much based on the House Finch Disease Survey because community science surveillance is far from exhaustive, but I do trust presences. As such, I want to find places where MG is consistently spotted for years on end and use these as validation markers.
@@ -186,7 +184,15 @@ pres_hfds <- hfds |> mutate(region_cell = rasterized) |>
   summarize(min_year = min(Year), max_year = max(Year)) |> 
   rowwise() |> 
   mutate(min_index = which(1994:2016 == min_year),
+         max_index = which(1994:2016 == max_year)) |>
+  # Adding Mycoplasma presence from Montana to shift things westward (Dhondt et al. 2006)
+  add_row(region_cell = matrix(c(-114, 46.867), nrow = 1) |>  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
++ +lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
++ +no_defs") |> cellFromXY(object = region_raster), 
+         min_year = 2002, max_year = 2004,
+         min_index = which(1994:2016 == min_year),
          max_index = which(1994:2016 == max_year))
+
 write_csv(pres_hfds, here("Data/Validation/mycoplasma_presence.csv"))
 wgs_coordinates <- region$coordinates |> 
   sf_project(from = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
