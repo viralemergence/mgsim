@@ -20,12 +20,14 @@ library(furrr)
 #' alternative is "constant", which implements a step function.
 #' @return A `terra::SpatRaster` with as many layers as the length of `target_time`.
 #' @export
-interpolate_raster <- function(raster_stack,
-                               source_time,
-                               target_time,
-                               time_label,
-                               ...,
-                               method = "linear") {
+interpolate_raster <- function(
+  raster_stack,
+  source_time,
+  target_time,
+  time_label,
+  ...,
+  method = "linear"
+) {
   if (!inherits(raster_stack, "SpatRaster")) {
     stop("raster_stack must be a terra::SpatRaster")
   }
@@ -83,12 +85,7 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE) {
 
   #Create the table of sampling event information from all observation periods
   PFW_SED <- InputData %>%
-    select(-OBS_ID,
-           -SPECIES_CODE,
-           -HOW_MANY,
-           -PLUS_CODE,
-           -VALID,
-           -REVIEWED) %>%
+    select(-OBS_ID, -SPECIES_CODE, -HOW_MANY, -PLUS_CODE, -VALID, -REVIEWED) %>%
     distinct()
 
   #Count the number of species codes
@@ -98,9 +95,11 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE) {
   InvalidSppCodes <- InputData %>%
     select(SPECIES_CODE) %>%
     distinct() %>%
-    anti_join(y = .,
-              x = tibble(SPECIES_CODE = SpeciesCodes),
-              by = "SPECIES_CODE")
+    anti_join(
+      y = .,
+      x = tibble(SPECIES_CODE = SpeciesCodes),
+      by = "SPECIES_CODE"
+    )
   #For each non-existing species code, print an error message
   if (nrow(InvalidSppCodes) >= 1) {
     for (i in 1:nrow(InvalidSppCodes)) {
@@ -138,22 +137,17 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE) {
     #If a taxonomic roll-up is to be done, then do so for the focal species.
     if (rollup) {
       InputData <- InputData %>%
-        mutate(SPECIES_CODE = case_when(
-          (is.na(alt_full_spp_code)
-           ~ SPECIES_CODE),
-          ((
-            !is.na(alt_full_spp_code) &
-              alt_full_spp_code == Spp_to_Zero_Fill
+        mutate(
+          SPECIES_CODE = case_when(
+            (is.na(alt_full_spp_code) ~ SPECIES_CODE),
+            ((!is.na(alt_full_spp_code) &
+              alt_full_spp_code == Spp_to_Zero_Fill) ~
+              alt_full_spp_code),
+            ((!is.na(alt_full_spp_code) &
+              alt_full_spp_code != Spp_to_Zero_Fill) ~
+              SPECIES_CODE)
           )
-          ~ alt_full_spp_code
-          ),
-          ((
-            !is.na(alt_full_spp_code) &
-              alt_full_spp_code != Spp_to_Zero_Fill
-          )
-          ~ SPECIES_CODE
-          )
-        ))
+        )
     }
 
     #Create template for zero-count records for the focal species.
@@ -181,16 +175,19 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE) {
         REVIEWED = max(REVIEWED)
       ) %>%
       ungroup()
-    ZeroFilledFocalSpecies$PLUS_CODE <- as.logical(ZeroFilledFocalSpecies$PLUS_CODE)
+    ZeroFilledFocalSpecies$PLUS_CODE <- as.logical(
+      ZeroFilledFocalSpecies$PLUS_CODE
+    )
 
     #Put the zero-filled data into a table that accumulates data from all of
     # the species named in the vector SpeciesCodes. Either create the tibble
     # to be returned if it does not already exist, or append rows to an
     # existing object.
-    if ((exists("OutputData")))
+    if ((exists("OutputData"))) {
       OutputData <- bind_rows(OutputData, ZeroFilledFocalSpecies)
-    else
+    } else {
       OutputData <- ZeroFilledFocalSpecies
+    }
   }
   #After all species' data are zero-filled, return the zero-filled data to the
   # user. Unless the user of the function directs the output into some object,
@@ -198,10 +195,14 @@ ZeroFillPFW <- function(InputData, SpeciesCodes, rollup = TRUE) {
   #Also, if a taxonomic roll-up has been done, print a message to remind users
   # this was done.
   if (rollup) {
-    cat("\nNOTE: ANY RECORDS OF BIRDS REPORTED TO THE LEVEL OF A SUBSPECIES OR\n")
+    cat(
+      "\nNOTE: ANY RECORDS OF BIRDS REPORTED TO THE LEVEL OF A SUBSPECIES OR\n"
+    )
     cat(" OTHER RECOGNIZABLE FORM HAVE BEEN TREATED AS MEMBERS OF THE FULL\n")
     cat(" SPECIES FOR THE PURPOSE OF ZERO-FILLING, AND 'species_code' VALUES\n")
-    cat(" FOR THESE RECOGNIZABLE FORMS HAVE BEEN REPLACE BY THE CODES FOR THE\n")
+    cat(
+      " FOR THESE RECOGNIZABLE FORMS HAVE BEEN REPLACE BY THE CODES FOR THE\n"
+    )
     cat(" FULL SPECIES IN THE OUTPUT.\n\n")
   }
   return(OutputData)
@@ -225,10 +226,7 @@ unpack_closure <- function(closure) {
 }
 
 ## Write simulation numbers to a batch transfer file
-write_sftp_transfer <- function(source_dir,
-                                dest_dir,
-                                sim_numbers,
-                                filename) {
+write_sftp_transfer <- function(source_dir, dest_dir, sim_numbers, filename) {
   # Assertions
   assert_character(source_dir, min.chars = 1)
   assert_character(dest_dir, min.chars = 1)
@@ -274,36 +272,48 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
     len = length(samples)
   )
   assert_string(compartment, min.chars = 2)
-  assert_choice(compartment,
-                c("Sj", "Sa", "I1j", "I1a", "Rj", "Ra", "I2j", "I2a"))
+  assert_choice(
+    compartment,
+    c("Sj", "Sa", "I1j", "I1a", "Rj", "Ra", "I2j", "I2a")
+  )
   assert_directory_exists(data_dir, access = "r")
 
   # Read in data
   dir_vec <- map_chr(samples, function(n) {
     file.path(data_dir, paste0("simulation", n))
   })
+  map_lgl(dir_vec, dir.exists) |>
+    all() |>
+    assert_true()
   num_slashes <- str_count(dir_vec[1], "/")
   year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
   file_info <- dir_vec |>
     lapply(list.files, full.names = TRUE) |>
     lapply(
-      function(p)
+      function(p) {
         data.frame(
           path = p,
-          index = as.numeric(str_split_i(p, "/", num_slashes + 2) |>
-                               str_split_i("_", 1)),
+          index = as.numeric(
+            str_split_i(p, "/", num_slashes + 2) |>
+              str_split_i("_", 1)
+          ),
           season = str_extract(p, "summer|winter")
         ) |>
-        mutate(season = factor(season, levels = c(
-          "winter", "summer"
-        ))) |>
-        arrange(index, season) |>
-        left_join(year_lookup, by = join_by(index)) |>
-        filter(str_detect(path, compartment))
+          mutate(
+            season = factor(
+              season,
+              levels = c(
+                "winter",
+                "summer"
+              )
+            )
+          ) |>
+          arrange(index, season) |>
+          left_join(year_lookup, by = join_by(index)) |>
+          filter(str_detect(path, compartment))
+      }
     ) |>
-    map(fill_missing_years,
-        start_year = 1940,
-        end_year = 2016)
+    map(fill_missing_years, start_year = 1940, end_year = 2016)
 
   plan(multisession)
   # Read in .qs files and create a weighted ensemble mean
@@ -314,7 +324,7 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
       # Read the .qs file
       sim_data <- read_or_zero(info$path[i])
       # Fill the 3D array with the data
-      sim_array_results[, , i] <- sim_data
+      sim_array_results[,, i] <- sim_data
     }
     return(sim_array_results * weight)
   })
@@ -385,21 +395,33 @@ plot_abc_posteriors <- function(abc, priors) {
   )
   # Remove values in each column that are outside the range of values in
   # the same column in the prior samples
-  posterior_samples <- abc$adj.values |> as.data.frame() |>
+  posterior_samples <- abc$adj.values |>
+    as.data.frame() |>
     mutate(Distribution = "Posterior") |>
-    mutate(across(all_of(param_names), ~ ifelse(. < min(prior_samples[[cur_column()]]),
-                                                 min(prior_samples[[cur_column()]]),
-                                                 ifelse(. > max(prior_samples[[cur_column()]]),
-                                                        max(prior_samples[[cur_column()]]), .))))
-
+    mutate(across(
+      all_of(param_names),
+      ~ ifelse(
+        . < min(prior_samples[[cur_column()]]),
+        min(prior_samples[[cur_column()]]),
+        ifelse(
+          . > max(prior_samples[[cur_column()]]),
+          max(prior_samples[[cur_column()]]),
+          .
+        )
+      )
+    ))
 
   # Create a data frame for plotting
   plot_data <- bind_rows(posterior_samples, prior_samples) |>
     select(-c("mortality_Sa_summer", "mortality_Ra_summer")) |>
-    pivot_longer(cols = !any_of("Distribution"), names_to = "Parameter",
-                 values_to = "Value") |>
-    mutate(Parameter = factor(Parameter, levels = param_names,
-           labels = param_labels))
+    pivot_longer(
+      cols = !any_of("Distribution"),
+      names_to = "Parameter",
+      values_to = "Value"
+    ) |>
+    mutate(
+      Parameter = factor(Parameter, levels = param_names, labels = param_labels)
+    )
 
   # Create faceted plot
   tidyplot(plot_data, x = Value, fill = Distribution) |>
