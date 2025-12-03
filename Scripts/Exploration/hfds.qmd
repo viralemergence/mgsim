@@ -17,13 +17,48 @@ library(broom)
 library(qs)
 library(raster)
 library(sf)
+library(conflicted)
+conflicts_prefer(dplyr::filter(), purrr::map(), dplyr::select())
 i_am("Scripts/Exploration/hfds.qmd")
-hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
+hfds1 <- vroom(
+  "~/Documents/Very_Large_Data/House Finch Disease Survey/HFDSPapper_HOFIEyeDisease_Pilowsky.csv"
+)
+hfds2 <- vroom(
+  "~/Documents/Very_Large_Data/House Finch Disease Survey/PFW_HOFIEyeDisease_Pilowsky.csv"
+)
+hfds <- hfds2 |>
+  filter(symptom_code %in% c("red_crusty_eyes")) |>
+  group_by(ID, Year, Month) %>%
+  summarise(
+    NDaysObserved = sum(NDaysObserved),
+    Total_Birds = max(NBirdsTot),
+    Sick_Birds = max(NBirdsSick)
+  ) |>
+  left_join(
+    hfds2 |>
+      select(
+        StateProv,
+        latitude,
+        longitude,
+        Month,
+        Year,
+        MonthNum,
+        DataSource,
+        FW_Year,
+        ID,
+        Offset
+      ) |>
+      distinct()
+  ) |>
+  mutate(problem = Sick_Birds > Total_Birds) |>
+  filter(!problem) |> 
+  select(-problem) |> 
+  ungroup()
 ```
 
 # About the Dataset
 
-I have been provided with data from the northeastern part of the House Finch Disease Survey, which was done by citizen scientists in their backyards and includes absences of the disease as well as presences. There is whole-continent data but I haven't received it yet. All the data are from the winter (beginning of November to end of March.)
+I have been provided with data from the House Finch Disease Survey, which was done by citizen scientists in their backyards and includes absences of the disease as well as presences. All the data are from the winter (beginning of November to end of March.)
 
 Notable is that there is a column called `OffsetValue` which quantifies observer effort and can be used as an offset in models.
 
@@ -32,19 +67,19 @@ Notable is that there is a column called `OffsetValue` which quantifies observer
 I will start by creating a binomial model of prevalence, with a year covariate and an observer effort offset.
 
 ```{r prevalence model}
-year <- hfds %>% filter(NBirdsTot>0) %>% pull(FW_Year)
-offset <- hfds %>% filter(NBirdsTot>0) %>% pull(OffsetValue)
-response <- hfds %>% filter(NBirdsTot>0) %>% 
-  mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>% 
-  select(NBirdsSick, NBirdsHealthy) %>% as.matrix()
-prev <- glm(response ~ year, family = binomial)
+year <- hfds %>% filter(Total_Birds>0) %>% pull(FW_Year)
+offset <- hfds %>% filter(Total_Birds>0) %>% pull(NDaysObserved)
+response <- hfds %>% filter(Total_Birds>0) %>% 
+  mutate(Healthy_Birds = Total_Birds - Sick_Birds) %>% 
+  select(Sick_Birds, Healthy_Birds) %>% as.matrix()
+prev <- glm(response ~ year, family = binomial, offset = offset)
 prev
 ```
 
 I will now use the fitted values to make an animation of prevalence over time in the Northeast.
 
 ```{r animation}
-hfds_fit <- hfds %>% filter(NBirdsTot>0) %>% 
+hfds_fit <- hfds %>% filter(Total_Birds>0) %>% 
   augment(prev, ., se_fit = TRUE, type.predict = "response") %>% 
   rename(Prevalence = .fitted)
 usa <- map_data("usa")
@@ -55,8 +90,7 @@ basemap <- ggplot() +
     fill = "white",
     color = "gray60"
   ) +
-  coord_map(projection = "albers", lat0 = 39, lat1 = 45, xlim = c(-83, -69.5),
-            ylim = c(37, 45))
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45)
 ani <- basemap + 
   geom_point(data = hfds, size = 4, alpha = 0.7,
              aes(x = LONGITUDE, y = LATITUDE, col = NBirdsSick/NBirdsTot)) +
@@ -72,7 +106,7 @@ Here I add a time series of prevalence over time:
 
 ```{r prevalence over time}
 hfds %>% 
-  mutate(Prevalence = NBirdsSick/NBirdsTot, Time = as.factor(FW_Year)) %>% 
+  mutate(Prevalence = Sick_Birds/Total_Birds, Time = as.factor(FW_Year)) %>% 
   ggplot(aes(x = Time, y = Prevalence)) +
   geom_hex() +
   scale_fill_paletteer_c("pals::linearl", trans = "log10") +
@@ -85,7 +119,7 @@ The prevalences found by citizen scientists in the House Finch Disease Survey ar
 
 ```{r prevalence trends map}
 region_raster <- qread(here("Data/Input/finch_region.qs")) |> _$region_raster
-rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
+rasterized <- as.matrix(hfds[, c("longitude", "latitude")]) |> 
   sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
 +lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
 +no_defs") |> 
@@ -94,18 +128,18 @@ trends <- hfds |>
   mutate(region_cell = rasterized) |> 
   filter(Year < 2016, Year > 2000) |> 
   group_by(region_cell) |> 
-  mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>% 
+  mutate(sumyears = length(unique(Year)), sumbirds = sum(Total_Birds)) %>% 
   filter(sumbirds > 0, sumyears == 15) %>% arrange(region_cell) %>%
-  mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>%
+  mutate(NBirdsHealthy = Total_Birds - Sick_Birds) %>%
   nest() %>%
   mutate(model = map(data, ~ glm(
-    cbind(NBirdsSick, NBirdsHealthy) ~ Year, family = binomial, data = .
+    cbind(Sick_Birds, NBirdsHealthy) ~ Year, family = binomial, data = .
   ))) %>%
   mutate(tidy = map(model, broom::tidy)) %>%
   unnest(tidy) %>%
   filter(term == "Year", p.value<0.05) %>%
-  mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
-         Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>% 
+  mutate(Latitude = data[[1]] %>% pull(latitude) %>% first(),
+         Longitude = data[[1]] %>% pull(longitude) %>% first()) %>% 
   identity()
 basemap + theme_map() +
   scale_fill_paletteer_c(`"ggthemes::Red-Blue-White Diverging"`, 

@@ -41,11 +41,44 @@ I am testing out some possible validation metrics on an example simulation to se
 
 ## Prevalence Trends
 
-Trends in MG prevalence from 2001 to 2015 are only available for the Northeast, and even then they are patchy, but it's much better than nothing.
+Here I collect trends in prevalence from throughout the US. There are more data points in the East, but there are some throughout.
 
 ```{r prevalence trends}
-hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
-rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
+hfds1 <- vroom(
+  "~/Documents/Very_Large_Data/House Finch Disease Survey/HFDSPapper_HOFIEyeDisease_Pilowsky.csv"
+)
+hfds2 <- vroom(
+  "~/Documents/Very_Large_Data/House Finch Disease Survey/PFW_HOFIEyeDisease_Pilowsky.csv"
+)
+hfds <- hfds2 |>
+  filter(symptom_code %in% c("red_crusty_eyes")) |>
+  group_by(ID, Year, Month) %>%
+  summarise(
+    NDaysObserved = sum(NDaysObserved),
+    Total_Birds = max(NBirdsTot),
+    Sick_Birds = max(NBirdsSick)
+  ) |>
+  left_join(
+    hfds2 |>
+      select(
+        StateProv,
+        latitude,
+        longitude,
+        Month,
+        Year,
+        MonthNum,
+        DataSource,
+        FW_Year,
+        ID,
+        Offset
+      ) |>
+      distinct()
+  ) |>
+  mutate(problem = Sick_Birds > Total_Birds) |>
+  filter(!problem) |> 
+  select(-problem) |> 
+  ungroup()
+rasterized <- as.matrix(hfds[, c("longitude", "latitude")]) |> 
   sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
 +lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
 +no_defs") |> 
@@ -54,18 +87,18 @@ trends <- hfds |>
   mutate(region_cell = rasterized) |> 
   filter(Year < 2016, Year > 2000, region_cell %in% region$region_indices) |> 
   group_by(region_cell) |> 
-  mutate(sumyears = length(unique(Year)), sumbirds = sum(NBirdsTot)) %>% 
+  mutate(sumyears = length(unique(Year)), sumbirds = sum(Total_Birds)) %>% 
   filter(sumbirds > 0, sumyears == 15) %>% arrange(region_cell) %>%
-  mutate(NBirdsHealthy = NBirdsTot - NBirdsSick) %>%
+  mutate(Healthy_Birds = Total_Birds - Sick_Birds) %>%
   nest() %>%
   mutate(model = map(data, ~ glm(
-    cbind(NBirdsSick, NBirdsHealthy) ~ Year, family = binomial, data = .
+    cbind(Sick_Birds, Healthy_Birds) ~ Year, family = binomial, data = .
   ))) %>%
   mutate(tidy = map(model, broom::tidy)) %>%
   unnest(tidy) %>%
   filter(term == "Year", p.value<0.05) %>%
-  mutate(Latitude = data[[1]] %>% pull(LATITUDE) %>% first(),
-         Longitude = data[[1]] %>% pull(LONGITUDE) %>% first()) %>% 
+  mutate(Latitude = data[[1]] %>% pull(latitude) %>% first(),
+         Longitude = data[[1]] %>% pull(longitude) %>% first()) %>% 
   identity()
 write_csv(trends, here("Data/Validation/prevalence_trends.csv"))
 basemap +
@@ -126,7 +159,7 @@ First, I need to rasterize my sightings to the study region map.
 
 ```{r rasterize MG sightings}
 sightings <- hfds |> mutate(region_cell = rasterized) |> 
-  filter(NBirdsSick > 0, region_cell %in% region$region_indices) |> 
+  filter(Sick_Birds > 0, region_cell %in% region$region_indices) |> 
   group_by(region_cell) |> 
   summarize(first_sighting = min(Year))
 sighting_raster <- region_raster
@@ -138,12 +171,6 @@ plot(sighting_raster, xlim = c(0, Inf), ylim = c(0, Inf))
 However, simply using the year of first sighting is not good enough. Observations are biased and flawed, so we need to use a statistical method to estimate the true first arrival date of the disease.
 
 ```{r estimate first arrival}
-hfds <- vroom(here("Data/Validation/HFDS Northeast/NE_US_prev.csv"))
-rasterized <- as.matrix(hfds[, c("LONGITUDE", "LATITUDE")]) |> 
-  sf_project(from = "EPSG:4326", to = "+proj=aea +lat_0=34.5 +lon_0=-94.5 +lat_1=21.5
-+lat_2=47.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m
-+no_defs") |> 
-  cellFromXY(object = region_raster)
 sightings <- hfds |> mutate(region_cell = rasterized) |> 
   filter(NBirdsSick > 0, region_cell %in% region$region_indices) |> 
   group_by(region_cell) |> 
@@ -160,8 +187,8 @@ write_csv(mg_arrival, here("Data/Validation/mycoplasma_first_arrival.csv"))
 basemap +
   geom_point(data = mg_arrival |> group_by(region_cell) |>
                summarize(first_arrival = first(first_arrival),
-                         LONGITUDE = first(LONGITUDE),
-                         LATITUDE = first(LATITUDE)),
+                         LONGITUDE = first(longitude),
+                         LATITUDE = first(latitude)),
              aes(x = LONGITUDE, y = LATITUDE, col = first_arrival),
              size = 2) +
   scale_color_viridis_c()
