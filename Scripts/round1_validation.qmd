@@ -132,7 +132,6 @@ prevalence_trend <- sick_healthy |> group_split(sim) |>
 }
 ```
 
-
 ## Mycoplasma Presence
 
 Here I take sites that have consistent presence of the disease over many years and see if the simulations can replicate this persistence.
@@ -421,10 +420,13 @@ I have estimated confidence intervals of first date of arrival of MG to various 
 ```{r mg first arrival}
 # Load first arrival data
 mg_arrival <- here("mgsim/Data_minimal/Validation/mycoplasma_first_arrival.csv") |> 
-  read_csv() |> group_by(region_cell) |> 
+  read_csv() |> 
+  group_by(region_cell) |> 
   summarize(first_arrival = first(first_arrival) |> round(), 
             first_arrival_high = first(first_arrival_high) |> round(),
             first_arrival_low = first(first_arrival_low) |> round()) |> 
+  filter(first_arrival_low < 2017) |>
+  mutate(first_arrival_high = if_else(first_arrival_high > 2016, 2016, first_arrival_high)) |>
   left_join(year_lookup, by = c("first_arrival_high" = "Year")) |> 
   left_join(year_lookup, by = c("first_arrival_low" = "Year"),
             suffix = c("_high", "_low"))
@@ -563,4 +565,3 @@ summary_metrics$mg_arrival[dc] <- mg_arrival_penalty
 summary_metrics$hm_arrival[dc] <- hm_arrival_metric
 write_csv(summary_metrics, here("mgsim/Data_minimal/Validation/round1_validation_metrics.csv"))
 ```
-
