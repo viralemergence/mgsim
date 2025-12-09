@@ -5,15 +5,80 @@ format: html
 editor: visual
 ---
 
-```{r setup}
+
+``` r
 library(ggplot2)
 library(stringr)
 library(here)
+```
+
+```
+## here() starts at /glade/u/home/pilowskyj/mgsim
+```
+
+``` r
 library(readr)
 library(doParallel)
+```
+
+```
+## Loading required package: foreach
+```
+
+```
+## Loading required package: iterators
+```
+
+```
+## Loading required package: parallel
+```
+
+``` r
 library(foreach)
 i_am("mgsim/Scripts/round1_validation.qmd")
+```
+
+```
+## here() starts at /glade/u/home/pilowskyj
+```
+
+``` r
 source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
+```
+
+```
+## 
+## Attaching package: 'dplyr'
+```
+
+```
+## The following objects are masked from 'package:stats':
+## 
+##     filter, lag
+```
+
+```
+## The following objects are masked from 'package:base':
+## 
+##     intersect, setdiff, setequal, union
+```
+
+```
+## 
+## Attaching package: 'purrr'
+```
+
+```
+## The following objects are masked from 'package:foreach':
+## 
+##     accumulate, when
+```
+
+```
+## qs 0.27.3. Announcement: https://github.com/qsbase/qs/issues/103
+```
+
+``` r
 # Register parallel backend with doParallel
 num_cores <- 120
 cl <- makeCluster(num_cores, type="FORK", outfile="")
@@ -21,6 +86,22 @@ registerDoParallel(cl)
 results_dir <- system("cd /glade/work/pilowskyj/Round1_matrix/; ls -f", intern = T) |>  
   gtools::mixedsort() |> _[-c(1:2)]
 round1_priors <- read_csv(here("mgsim/Data_minimal/Input/sample_data_round1.csv"))
+```
+
+```
+## Rows: 10000 Columns: 47
+```
+
+```
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## dbl (47): dispersal_p_juv, dispersal_p_adult, dispersal_r_juv, dispersal_r_a...
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
 ```
 
@@ -32,7 +113,8 @@ Here I will score the simulations against various validation datasets and see ho
 
 The first and most important validation is whether there are house finches in Washington DC in 1994. If this check is not passed, then the simulation terminates because the disease cannot be introduced there, which is when the disease did in fact start. This validation is the initial filter.
 
-```{r dc}
+
+``` r
 # Are birds in DC?
 # dc <- results_dir |> 
 #  map(\(path) system(paste0("cd /glade/work/pilowskyj/Round1_matrix/", path, "; ls -f"), 
@@ -40,6 +122,20 @@ The first and most important validation is whether there are house finches in Wa
 #  map(length) |> 
 #  map_lgl(\(x) x > 214)
 dc <- read_csv("/glade/u/home/pilowskyj/mgsim/Data_minimal/Validation/dc.csv") |> pull(dc)
+```
+
+```
+## Rows: 10000 Columns: 2
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## dbl (1): sim
+## lgl (1): dc
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 # Graph
 round1_priors |> 
   mutate(dc = dc) |> 
@@ -49,11 +145,14 @@ round1_priors |>
   theme_void()
 ```
 
+![plot of chunk dc](figure/dc-1.png)
+
 ## Prevalence Trends
 
 Here I compare trends in prevalence in the Northeast against observed patterns in Project FeederWatch.
 
-```{r prevalence trends}
+
+``` r
 # Function to filter file paths based on the second number
 filter_paths <- function(file_paths) {
   # Use str_extract to capture the last number before the underscore
@@ -66,8 +165,14 @@ filter_paths <- function(file_paths) {
 }
 
 # Validation data
-mg_trends <- here("mgsim/Data_minimal/Validation/prevalence_trends.csv") |> read_csv()
+mg_trends <- here("mgsim/Data/Validation/prevalence_trends.csv") |> read_csv()
+```
 
+```
+## Error: '/glade/u/home/pilowskyj/mgsim/Data/Validation/prevalence_trends.csv' does not exist.
+```
+
+``` r
 # Put file paths in the right order
 file_paths <- results_dir[dc] |> 
   map(list.files, full.names = T) |> 
@@ -97,7 +202,7 @@ process_single_number <- function(df, number) {
 
 sick_healthy_sums <- function(df_list) {
   df_list |> 
-    map(\(df) map_dfr(63:77, process_single_number, df = df)) |> 
+    future_map(\(df) map_dfr(63:77, process_single_number, df = df)) |> 
     imap(\(df, i) mutate(df, sim = simulation_id[i])) |> 
     bind_rows()   
 }
@@ -107,7 +212,13 @@ rmse <- function(predicted, observed) {
 }
 
 sick_healthy <- sick_healthy_sums(data_list)
+```
 
+```
+## Error in future_map(df_list, function(df) map_dfr(63:77, process_single_number, : could not find function "future_map"
+```
+
+``` r
 prevalence_trend_metric <- function(df) {
   prevalence_metrics <- df |> 
   left_join(year_lookup, by = join_by(index)) %>%
@@ -132,15 +243,32 @@ prevalence_trend <- sick_healthy |> group_split(sim) |>
 }
 ```
 
+```
+## Error in eval(a, envir = extra, enclos = obj$evalenv): object 'sick_healthy' not found
+```
+
 
 ## Mycoplasma Presence
 
 Here I take sites that have consistent presence of the disease over many years and see if the simulations can replicate this persistence.
 
-```{r mg presence}
+
+``` r
 # Load the presence/absence data
 pres_hfds <- read_csv(here("mgsim/Data_minimal/Validation/mycoplasma_presence.csv"))
+```
 
+```
+## Rows: 91 Columns: 5
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## dbl (5): region_cell, min_year, max_year, min_index, max_index
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 # Max penalty for simulations with no sick birds
 max_penalty <- pres_hfds |> 
   rowwise() |> 
@@ -212,11 +340,25 @@ This is looking to be an excellent filter.
 
 Here I test the simulations at locations where, according to my observation data, the finches are either present for long periods of time or absent for long periods of time.
 
-```{r presence absence}
+
+``` r
 # Load the presence/absence data
 presabs <- here("mgsim/Data_minimal/Validation/haemorhous_presence_absence.csv") |> 
 		read_csv()
+```
 
+```
+## Rows: 217 Columns: 10
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## dbl (8): region_index, years_present, total_years, min_year, max_year, regio...
+## lgl (2): always_present, always_absent
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 # Gather relevant data
 presence_list <- results_dir[dc] |>
   map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
@@ -278,10 +420,41 @@ presabs_metric <- foreach(
 
 I have information on trends in house finch abundance across North America. I just need to compare the trends in the simulations in the conservation regions of interest against the observed ones from Christmas Bird Count data.
 
-```{r abundance trend}
+
+``` r
 # Read in trend data
 trend1993 <- read_csv(here("mgsim/Data_minimal/Validation/abundance_trend_1993on.csv"))
+```
+
+```
+## Rows: 30 Columns: 14
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## chr (4): ebird_com_name, ebird_sci_name, parameter, stratum
+## dbl (9): estimate_median, estimate_lcl, estimate_ucl, estimate_mean, quantil...
+## lgl (1): count_year
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 trend1970 <- read_csv(here("mgsim/Data_minimal/Validation/abundance_trend_1970on.csv"))
+```
+
+```
+## Rows: 30 Columns: 14
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## chr (4): ebird_com_name, ebird_sci_name, parameter, stratum
+## dbl (9): estimate_median, estimate_lcl, estimate_ucl, estimate_mean, quantil...
+## lgl (1): count_year
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 # and conservation regions
 bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs") |> qread()
 
@@ -335,14 +508,14 @@ trend_metric <- foreach(
   gc()
   return(c(penalty1993 = penalty1993, penalty1970 = penalty1970))
 }
-
 ```
 
 ## Spatiotemporal Prevalence
 
 The prevalence trends didn't work so well, but I also have point prevalences from field studies that I can use to validate.
 
-```{r spatiotemporal point prevalence}
+
+``` r
 winter_indices <- seq(1, 39, 2)
 summer_indices <- seq(2, 40, 2)
 # Read in validation data
@@ -353,7 +526,21 @@ prevalence <- here("mgsim/Data_minimal/Validation/mycoplasma_point_prevalence.cs
   mutate(index = if_else(Season == "Summer",
                          summer_indices[index - 55],
                          winter_indices[index - 55]))
+```
 
+```
+## Rows: 27 Columns: 9
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## chr (2): DOI, Season
+## dbl (7): Latitude, Longitude, Year, Lower, Upper, Zero, region_cell
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+## Joining with `by = join_by(Year)`
+```
+
+``` r
 prevalence_list <- results_dir[dc] |> 
   map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
   lapply(list.files, full.names = TRUE) |>  
@@ -418,7 +605,8 @@ point_prevalence_metric <- foreach(plist = prevalence_list,
 
 I have estimated confidence intervals of first date of arrival of MG to various locations in the Northeast. I will check my simulations to see if they have the disease first arriving within the correct interval.
 
-```{r mg first arrival}
+
+``` r
 # Load first arrival data
 mg_arrival <- here("mgsim/Data_minimal/Validation/mycoplasma_first_arrival.csv") |> 
   read_csv() |> group_by(region_cell) |> 
@@ -428,7 +616,20 @@ mg_arrival <- here("mgsim/Data_minimal/Validation/mycoplasma_first_arrival.csv")
   left_join(year_lookup, by = c("first_arrival_high" = "Year")) |> 
   left_join(year_lookup, by = c("first_arrival_low" = "Year"),
             suffix = c("_high", "_low"))
+```
 
+```
+## Rows: 40849 Columns: 17
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## chr  (3): ID, StateProv, DataSource
+## dbl (14): Year, Month, NDaysObserved, Total_Birds, Sick_Birds, latitude, lon...
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 # Pre-allocate the penalty vector
 mg_arrival_penalty <- rep(NA, length(infected_list))
 mg_arrival_penalty[no_infection] <- 54
@@ -475,17 +676,37 @@ else
   gc()
   return(penalty)
 }
+```
 
+```
+## Error in {: task 9 failed - "ℹ In argument: `penalty = mg_arrival_function(arrival_index, index_low,
+##   index_high)`.
+## ℹ In row 42.
+## Caused by error in `if (observed < low) ...`:
+## ! missing value where TRUE/FALSE needed"
+```
+
+``` r
 # Assign metrics to the penalty vector
 mg_arrival_penalty[!no_infection] <- mg_arrival_metric
+```
+
+```
+## Error in eval(expr, envir, enclos): object 'mg_arrival_metric' not found
+```
+
+``` r
 hist(mg_arrival_penalty)
 ```
+
+![plot of chunk mg first arrival](figure/mg first arrival-1.png)
 
 ## Haemorhous First Arrival
 
 I have data on the year of first arrival of the house finch in its invasive range, estimated from Breeding Bird Survey and Project FeederWatch. I will compare first arrival dates in my simulations against these observed estimates.
 
-```{r hm first arrival}
+
+``` r
 presence_list <- results_dir[dc] |>
   map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
   lapply(list.files, full.names = TRUE) |>
@@ -509,7 +730,20 @@ hm_arrival <- here("mgsim/Data_minimal/Validation/haemorhous_first_arrival.csv")
   left_join(year_lookup, by = c("first_arrival_high" = "Year")) |> 
   left_join(year_lookup, by = c("first_arrival_low" = "Year"),
             suffix = c("_high", "_low"))
+```
 
+```
+## Rows: 14850 Columns: 8
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## dbl (7): region_cell, Year, Latitude, Longitude, first_arrival_low, first_ar...
+## lgl (1): Finches
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
 # Penalize simulations that have first arrival of finches at the wrong timestep.
 hm_arrival_metric <- foreach(df = presence_list, .combine = c, .packages = c("dplyr", "purrr", "qs")) %dopar% {
   # Fill missing years and group by Year
@@ -552,9 +786,17 @@ stopCluster(cl)
 
 # Write summary metrics to disk
 
-```{r dc posteriors}
+
+``` r
 summary_metrics <- data.frame(index = 1:10000, dc = dc)
 summary_metrics$prevalence_trend[dc] <- prevalence_trend
+```
+
+```
+## Error in eval(expr, envir, enclos): object 'prevalence_trend' not found
+```
+
+``` r
 summary_metrics$mg_presence[dc] <- mg_presence_penalty
 summary_metrics$hm_presabs[dc] <- presabs_metric
 summary_metrics$hm_trend <- c(trend_metric, rep(NA_real_, 10000-length(trend_metric)))
