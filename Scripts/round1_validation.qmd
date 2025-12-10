@@ -70,6 +70,7 @@ mg_trends <- here("mgsim/Data_minimal/Validation/prevalence_trends.csv") |> read
 
 # Put file paths in the right order
 file_paths <- results_dir[dc] |> 
+  map(\(f) paste0("/glade/work/pilowskyj/Round1_matrix/", f)) |>
   map(list.files, full.names = T) |> 
   map(filter_paths)
 data_list <- map(file_paths, \(fp) data.frame(
@@ -80,19 +81,23 @@ data_list <- map(file_paths, \(fp) data.frame(
 ) |> 
   mutate(season = factor(season, levels = c("winter", "summer"))) |> 
   arrange(number, season))
-simulation_id <- results_dir[dc] |> str_sub(74) |> as.integer()
+simulation_id <- results_dir[dc] |> str_extract("[0-9]+") |> as.integer()
 
 process_single_number <- function(df, number) {
-  df %>%
-    filter(number == !!number) %>%
-    group_split(infected) %>%
-    map(\(subset_df) pull(subset_df, path)) %>%
-    map(\(l) map(l, qread)) |> 
-    map(\(l) map(l, \(m) m[mg_trends$region_cell])) |> 
-    map(\(df) Reduce(`+`, df)) |> 
-    setNames(c("healthy", "sick")) |> 
-    bind_cols() |> 
-    mutate(index = number, region_cell = mg_trends$region_cell)
+  if (number %in% df$number) {
+    df %>%
+      filter(number == !!number) %>%
+      group_split(infected) %>%
+      map(\(subset_df) pull(subset_df, path)) %>%
+      map(\(l) map(l, qread)) |> 
+      map(\(l) map(l, \(m) m[mg_trends$region_cell])) |> 
+      map(\(df) Reduce(`+`, df)) |> 
+      setNames(c("healthy", "sick")) |> 
+      bind_cols() |> 
+      mutate(index = number, region_cell = mg_trends$region_cell)
+  } else {
+    data.frame(healthy = rep(0), sick = rep(0), index = rep(number), region_cell = mg_trends$region_cell)
+  }
 }
 
 sick_healthy_sums <- function(df_list) {
