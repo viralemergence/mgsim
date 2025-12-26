@@ -358,32 +358,35 @@ delta_aic
   set.seed(20212511)
 
   dt_lhs_run2 <- data.table(
-    dispersal_p_juv = rbetat(
+    dispersal_p_juv = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["dispersal_p_juv"]],
         probs = c(0.05, 0.95)
       ),
-      shape1 = param_dists$dispersal_p_juv$Output$beta$estimate[1],
-      shape2 = param_dists$dispersal_p_juv$Output$beta$estimate[2]
+      min = param_dists$dispersal_p_juv$Output$triangular$estimate[1],
+      max = param_dists$dispersal_p_juv$Output$triangular$estimate[2],
+      mode = param_dists$dispersal_p_juv$Output$triangular$estimate[3]
     ),
-    dispersal_p_adult = rlnormt(
+    dispersal_p_adult = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["dispersal_p_adult"]],
         probs = c(0.05, 0.95)
       ),
-      meanlog = param_dists$dispersal_p_adult$Output$lnorm$estimate[1],
-      sdlog = param_dists$dispersal_p_adult$Output$lnorm$estimate[2]
+      min = param_dists$dispersal_p_adult$Output$triangular$estimate[1],
+      max = param_dists$dispersal_p_adult$Output$triangular$estimate[2],
+      mode = param_dists$dispersal_p_adult$Output$triangular$estimate[3]
     ),
-    dispersal_r_juv = rgammat(
+    dispersal_r_juv = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["dispersal_r_juv"]],
         probs = c(0.05, 0.95)
       ),
-      shape = param_dists$dispersal_r_juv$Output$gamma$estimate[1],
-      rate = param_dists$dispersal_r_juv$Output$gamma$estimate[2]
+      min = param_dists$dispersal_r_juv$Output$triangular$estimate[1],
+      max = param_dists$dispersal_r_juv$Output$triangular$estimate[2],
+      mode = param_dists$dispersal_r_juv$Output$triangular$estimate[3]
     ),
     dispersal_r_adult = rtrianglet(
       n = 10000,
@@ -404,20 +407,17 @@ delta_aic
       shape1 = param_dists$dispersal_source_n_k_cutoff$Output$beta$estimate[1],
       shape2 = param_dists$dispersal_source_n_k_cutoff$Output$beta$estimate[2]
     ),
-    dispersal_source_n_k_threshold = rtrianglet(
+    dispersal_source_n_k_threshold = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["dispersal_source_n_k_threshold"]],
         probs = c(0.05, 0.95)
       ),
-      min = param_dists$dispersal_source_n_k_threshold$Output$triangular$estimate[
+      shape1 = param_dists$dispersal_source_n_k_threshold$Output$beta$estimate[
         1
       ],
-      max = param_dists$dispersal_source_n_k_threshold$Output$triangular$estimate[
+      shape2 = param_dists$dispersal_source_n_k_threshold$Output$beta$estimate[
         2
-      ],
-      mode = param_dists$dispersal_source_n_k_threshold$Output$triangular$estimate[
-        3
       ]
     ),
     dispersal_target_n_k_cutoff = rbetat(
@@ -443,15 +443,10 @@ delta_aic
       ]
     ),
     abundance_threshold = round(
-      rtrianglet(
+      runif(
         n = 10000,
-        range = quantile(
-          demo_params_selected[["abundance_threshold"]],
-          probs = c(0.05, 0.95)
-        ),
-        min = param_dists$abundance_threshold$Output$triangular$estimate[1],
-        max = param_dists$abundance_threshold$Output$triangular$estimate[2],
-        mode = param_dists$abundance_threshold$Output$triangular$estimate[3]
+        min = param_dists$abundance_threshold$Output$unif$estimate[1],
+        max = param_dists$abundance_threshold$Output$unif$estimate[2]
       )
     ),
     initial_release = round(
@@ -467,10 +462,15 @@ delta_aic
       )
     ),
     density_max = round(
-      runif(
+      rtrianglet(
         n = 10000,
-        param_dists$density_max$Output$unif$estimate[1],
-        param_dists$density_max$Output$unif$estimate[2]
+        range = quantile(
+          demo_params_selected[["initial_release"]],
+          probs = c(0.05, 0.95)
+        ),
+        min = param_dists$density_max$Output$triangular$estimate[1],
+        max = param_dists$density_max$Output$triangular$estimate[2],
+        mode = param_dists$density_max$Output$triangular$estimate[3]
       )
     ),
     fecundity = round(
@@ -497,14 +497,15 @@ delta_aic
         mode = param_dists$infected_t1$Output$triangular$estimate[3]
       )
     ),
-    beta_Sa_winter = rnormt(
+    beta_Sa_winter = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["beta_Sa_winter"]],
         probs = c(0.05, 0.95)
       ),
-      mean = param_dists$beta_Sa_winter$Output$norm$estimate[1],
-      sd = param_dists$beta_Sa_winter$Output$norm$estimate[2]
+      min = param_dists$beta_Sa_winter$Output$triangular$estimate[1],
+      max = param_dists$beta_Sa_winter$Output$triangular$estimate[2],
+      mode = param_dists$beta_Sa_winter$Output$triangular$estimate[3]
     ),
     beta_Sa_summer = rtrianglet(
       n = 10000,
@@ -525,14 +526,15 @@ delta_aic
       shape1 = param_dists$beta_I2_modifier$Output$beta$estimate[1],
       shape2 = param_dists$beta_I2_modifier$Output$beta$estimate[2]
     ),
-    mortality_Sj_winter = rbetat(
+    mortality_Sj_winter = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_Sj_winter"]],
         probs = c(0.05, 0.95)
       ),
-      shape1 = param_dists$mortality_Sj_winter$Output$beta$estimate[1],
-      shape2 = param_dists$mortality_Sj_winter$Output$beta$estimate[2]
+      min = param_dists$mortality_Sj_winter$Output$triangular$estimate[1],
+      max = param_dists$mortality_Sj_winter$Output$triangular$estimate[2],
+      mode = param_dists$mortality_Sj_winter$Output$triangular$estimate[3]
     ),
     mortality_Sa_winter = rtrianglet(
       n = 10000,
@@ -573,33 +575,32 @@ delta_aic
       meanlog = param_dists$mortality_I1j_winter$Output$lnorm$estimate[1],
       sdlog = param_dists$mortality_I1j_winter$Output$lnorm$estimate[2]
     ),
-    mortality_I1a_summer = rlnormt(
+    mortality_I1a_summer = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_I1a_summer"]],
         probs = c(0.05, 0.95)
       ),
-      meanlog = param_dists$mortality_I1a_summer$Output$lnorm$estimate[1],
-      sdlog = param_dists$mortality_I1a_summer$Output$lnorm$estimate[2]
+      shape1 = param_dists$mortality_I1a_summer$Output$beta$estimate[1],
+      shape2 = param_dists$mortality_I1a_summer$Output$beta$estimate[2]
     ),
-    mortality_I1a_winter = rbetat(
+    mortality_I1a_winter = rlnormt(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_I1a_winter"]],
         probs = c(0.05, 0.95)
       ),
-      shape1 = param_dists$mortality_I1a_winter$Output$beta$estimate[1],
-      shape2 = param_dists$mortality_I1a_winter$Output$beta$estimate[2]
+      meanlog = param_dists$mortality_I1a_winter$Output$lnorm$estimate[1],
+      sdlog = param_dists$mortality_I1a_winter$Output$lnorm$estimate[2]
     ),
-    mortality_I2_modifier = rtrianglet(
+    mortality_I2_modifier = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_I2_modifier"]],
         probs = c(0.05, 0.95)
       ),
-      min = param_dists$mortality_I2_modifier$Output$triangular$estimate[1],
-      max = param_dists$mortality_I2_modifier$Output$triangular$estimate[2],
-      mode = param_dists$mortality_I2_modifier$Output$triangular$estimate[3]
+      shape1 = param_dists$mortality_I2_modifier$Output$beta$estimate[1],
+      shape2 = param_dists$mortality_I2_modifier$Output$beta$estimate[2]
     ),
     mortality_I2j_summer = rbetat(
       n = 10000,
@@ -619,23 +620,23 @@ delta_aic
       shape1 = param_dists$mortality_I2j_winter$Output$beta$estimate[1],
       shape2 = param_dists$mortality_I2j_winter$Output$beta$estimate[2]
     ),
-    mortality_I2a_winter = rbetat(
+    mortality_I2a_winter = rlnormt(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_I2a_winter"]],
         probs = c(0.05, 0.95)
       ),
-      shape1 = param_dists$mortality_I2a_winter$Output$beta$estimate[1],
-      shape2 = param_dists$mortality_I2a_winter$Output$beta$estimate[2]
+      meanlog = param_dists$mortality_I2a_winter$Output$lnorm$estimate[1],
+      sdlog = param_dists$mortality_I2a_winter$Output$lnorm$estimate[2]
     ),
-    mortality_I2a_summer = rlnormt(
+    mortality_I2a_summer = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_I2a_summer"]],
         probs = c(0.05, 0.95)
       ),
-      meanlog = param_dists$mortality_I2a_summer$Output$lnorm$estimate[1],
-      sdlog = param_dists$mortality_I2a_summer$Output$lnorm$estimate[2]
+      shape1 = param_dists$mortality_I2a_summer$Output$beta$estimate[1],
+      shape2 = param_dists$mortality_I2a_summer$Output$beta$estimate[2]
     ),
     mortality_Rj_summer = rtrianglet(
       n = 10000,
@@ -647,14 +648,15 @@ delta_aic
       max = param_dists$mortality_Rj_summer$Output$triangular$estimate[2],
       mode = param_dists$mortality_Rj_summer$Output$triangular$estimate[3]
     ),
-    mortality_Rj_winter = rbetat(
+    mortality_Rj_winter = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["mortality_Rj_winter"]],
         probs = c(0.05, 0.95)
       ),
-      shape1 = param_dists$mortality_Rj_winter$Output$beta$estimate[1],
-      shape2 = param_dists$mortality_Rj_winter$Output$beta$estimate[2]
+      min = param_dists$mortality_Rj_winter$Output$triangular$estimate[1],
+      max = param_dists$mortality_Rj_winter$Output$triangular$estimate[2],
+      mode = param_dists$mortality_Rj_winter$Output$triangular$estimate[3]
     ),
     mortality_Ra_winter = rtrianglet(
       n = 10000,
@@ -685,43 +687,42 @@ delta_aic
       max = param_dists$beta_Sj_summer$Output$triangular$estimate[2],
       mode = param_dists$beta_Sj_summer$Output$triangular$estimate[3]
     ),
-    beta_Ra_winter = rtrianglet(
+    beta_Ra_winter = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["beta_Ra_winter"]],
         probs = c(0.05, 0.95)
       ),
-      min = param_dists$beta_Ra_winter$Output$triangular$estimate[1],
-      max = param_dists$beta_Ra_winter$Output$triangular$estimate[2],
-      mode = param_dists$beta_Ra_winter$Output$triangular$estimate[3]
+      shape1 = param_dists$beta_Ra_winter$Output$beta$estimate[1],
+      shape2 = param_dists$beta_Ra_winter$Output$beta$estimate[2]
     ),
-    beta_Rj_winter = rgammat(
+    beta_Rj_winter = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["beta_Rj_winter"]],
         probs = c(0.05, 0.95)
       ),
-      shape = param_dists$beta_Rj_winter$Output$gamma$estimate[1],
-      rate = param_dists$beta_Rj_winter$Output$gamma$estimate[2]
+      shape1 = param_dists$beta_Rj_winter$Output$beta$estimate[1],
+      shape2 = param_dists$beta_Rj_winter$Output$beta$estimate[2]
     ),
-    beta_Ra_summer = rbetat(
+    beta_Ra_summer = rtrianglet(
       n = 10000,
       range = quantile(
         demo_params_selected[["beta_Ra_summer"]],
         probs = c(0.05, 0.95)
       ),
-      shape1 = param_dists$beta_Ra_summer$Output$beta$estimate[1],
-      shape2 = param_dists$beta_Ra_summer$Output$beta$estimate[2]
+      min = param_dists$beta_Ra_summer$Output$triangular$estimate[1],
+      max = param_dists$beta_Ra_summer$Output$triangular$estimate[2],
+      mode = param_dists$beta_Ra_summer$Output$triangular$estimate[3]
     ),
-    beta_Rj_summer = rtrianglet(
+    beta_Rj_summer = rbetat(
       n = 10000,
       range = quantile(
         demo_params_selected[["beta_Rj_summer"]],
         probs = c(0.05, 0.95)
       ),
-      min = param_dists$beta_Rj_summer$Output$triangular$estimate[1],
-      max = param_dists$beta_Rj_summer$Output$triangular$estimate[2],
-      mode = param_dists$beta_Rj_summer$Output$triangular$estimate[3]
+      shape1 = param_dists$beta_Rj_summer$Output$beta$estimate[1],
+      shape2 = param_dists$beta_Rj_summer$Output$beta$estimate[2]
     ),
     recovery_I1j_summer = rtrianglet(
       n = 10000,

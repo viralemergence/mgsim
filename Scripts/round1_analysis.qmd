@@ -81,7 +81,7 @@ Now, let's look at the performance on the other seven validation metrics. What I
 ```{r performance histogram, message = F}
 round1_metrics_dc <- round1_metrics |> 
   filter(dc) |> 
-  select(-index, -dc, -hm_trend)
+  select(-index, -dc, -hm_trend, -prevalence_trend)
 quantiles <- round1_metrics_dc |> 
   map_dbl(\(x) quantile(x, prob = c(0.01), na.rm = T))
 labels <- c("Mycoplasma presence", "Finch pres/abs", 

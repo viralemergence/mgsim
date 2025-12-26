@@ -285,6 +285,9 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
   map_lgl(dir_vec, dir.exists) |>
     all() |>
     assert_true()
+  map_lgl(dir_vec, \(d) length(list.files(d)) > 0) |>
+    all() |>
+    assert_true()
   num_slashes <- str_count(dir_vec[1], "/")
   year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
   file_info <- dir_vec |>
