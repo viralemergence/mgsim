@@ -11,7 +11,17 @@ library(here)
 library(doParallel)
 i_am("mgsim/Scripts/simulation_round2b.r")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- "/glade/work/pilowskyj/Round2b" # production
+results_dir <- "/glade/work/pilowskyj/Round2c" # production
+run_indices <- list.files(results_dir) |> map_chr(substring, 11) |> as.integer()
+incomplete_runs <- results_dir |> list.files(full.names = T) |> map(list.files) |> 
+  map_int(length) |> map_lgl(\(x) x < 212) |> which()
+incomplete_sims <- c(run_indices[incomplete_runs], setdiff(1:10000, run_indices)) |> 
+  sort()
+write_csv(
+  data.frame(sim_index = incomplete_sims),
+  file.path("/glade/work/pilowskyj/incomplete_sims_round2c.csv")
+)
+results_dir <- "/glade/work/pilowskyj/Round2c_temp"
 # results_dir <- here("mgsim/Data/Output/Round2b") # testing
 set_trust_promises(TRUE)
 random_seed <- 90
@@ -545,7 +555,7 @@ sim$add_process(
 )
 
 #### Set up parallel threading ####
-numCores <- 62 # production
+numCores <- 36 # production
 # numCores <- 2 # testing
 cl <- makeCluster(numCores)
 registerDoParallel(cl)
@@ -555,7 +565,7 @@ sim_manager <- metaRangeParallel$new(
   simulation_template = sim,
   generators = list(juvenile_dispersal_gen, adult_dispersal_gen, abundance_gen),
   # sample_data = sample_data[1:n_sims, ], # testing
-  sample_data = sample_data, # production
+  sample_data = sample_data[incomplete_sims,], # production
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,
