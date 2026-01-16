@@ -1,5 +1,4 @@
 library(checkmate)
-library(furrr)
 
 #' Interpolation of Missing Timesteps in a Raster Stack
 #'
@@ -317,8 +316,6 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
       }
     ) |>
     map(fill_missing_years, start_year = 1940, end_year = 2016)
-
-  plan(multisession)
   # Read in .qs files and create a weighted ensemble mean
   ensemble <- future_map2(file_info, weights, function(info, weight) {
     # Preallocate a 3D array for sim_array results
@@ -330,6 +327,7 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
       sim_array_results[,, i] <- sim_data
     }
     return(sim_array_results * weight)
+    gc()
   })
 
   weighted_ensemble <- Reduce(`+`, ensemble) / sum(weights)
