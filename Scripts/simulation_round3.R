@@ -564,7 +564,7 @@ sim_manager <- metaRangeParallel$new(
   simulation_template = sim,
   generators = list(juvenile_dispersal_gen, adult_dispersal_gen, abundance_gen),
   # sample_data = sample_data[1:n_sims, ], # testing
-  sample_data = sample_data[incomplete_sims, ], # production
+  sample_data = sample_data, # production
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,
