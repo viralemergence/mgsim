@@ -123,7 +123,7 @@ This animation is already obviously problematic. The finches spread to the entir
 abc35 <- abc(param = round2_priors[round2_metrics$dc,], 
              sumstat = round2_metrics |> filter(dc) |> select(c(3,7)),
               target = rep(0, 2), 
-             tol = 0.005,
+             tol = 0.01,
              method = "neuralnet")
 qsave(abc35, here("Data/Validation/abc_round2c_2.qs"))
 head(abc35$ss, 10)

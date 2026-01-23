@@ -9,9 +9,9 @@ library(qs)
 library(terra)
 library(here)
 library(doParallel)
-i_am("mgsim/Scripts/simulation_round3.R")
+i_am("mgsim/Scripts/simulation_round3a.R")
 data_dir <- here("mgsim/Data_minimal/Input")
-results_dir <- "/glade/work/pilowskyj/Round3" # production
+results_dir <- "/glade/work/pilowskyj/Round3a" # production
 # incomplete_runs <- results_dir |> list.files(full.names = T) |> map(list.files) |>
 #   map_int(length) |> map_lgl(\(x) x < 212) |> which()
 # incomplete_sims <- c(run_indices[incomplete_runs], setdiff(1:10000, run_indices)) |>
@@ -20,7 +20,7 @@ results_dir <- "/glade/work/pilowskyj/Round3" # production
 #   data.frame(sim_index = incomplete_sims),
 #   file.path("/glade/work/pilowskyj/incomplete_sims_round2c.csv")
 # )
-results_dir <- "/glade/work/pilowskyj/Round3"
+results_dir <- "/glade/work/pilowskyj/Round3a"
 # results_dir <- here("mgsim/Data/Output/Round2b") # testing
 set_trust_promises(TRUE)
 random_seed <- 90
@@ -29,7 +29,7 @@ n_sims <- 10000 # production
 region <- data_dir |> file.path("finch_region.qs") |> qread()
 
 #### Create sample data frame ####
-sample_data <- read_csv(file.path(data_dir, "sample_data_round3.csv")) |>
+sample_data <- read_csv(file.path(data_dir, "sample_data_round3a.csv")) |>
   mutate(
     mortality_Sa_summer = rep(1, n()),
     mortality_Ra_summer = rep(1, n())

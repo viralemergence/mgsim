@@ -4,13 +4,13 @@ library(here)
 library(readr)
 library(doParallel)
 library(foreach)
-i_am("mgsim/Scripts/round3_validation.R")
+i_am("mgsim/Scripts/round3a_validation.R")
 source("/glade/u/home/pilowskyj/mgsim/Scripts/validation_metric_functions.R")
 # Register parallel backend with doParallel
 num_cores <- 120
 cl <- makeCluster(num_cores, type = "FORK", outfile = "")
 registerDoParallel(cl)
-results_dir <- system("cd /glade/work/pilowskyj/Round3/; ls -f", intern = T) |>
+results_dir <- system("cd /glade/work/pilowskyj/Round3a/; ls -f", intern = T) |>
   gtools::mixedsort() |>
   _[-c(1:2, 10003)]
 year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
@@ -18,7 +18,7 @@ year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
 dc <- results_dir |>
   map(\(path) {
     system(
-      paste0("cd /glade/work/pilowskyj/Round3/", path, "; ls -f"),
+      paste0("cd /glade/work/pilowskyj/Round3a/", path, "; ls -f"),
       intern = T
     )
   }) |>
@@ -79,7 +79,7 @@ max_penalty <- pres_hfds |>
 
 # Extract the file paths for infected birds
 infected_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/work/pilowskyj/Round3/", f)) |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round3a/", f)) |>
   map(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
@@ -149,7 +149,7 @@ presabs <- here(
 
 # Gather relevant data
 presence_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/work/pilowskyj/Round3/", f)) |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round3a/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
@@ -223,7 +223,7 @@ bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs") |>
 
 # Gather relevant data
 abundance_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/work/pilowskyj/Round3/", f)) |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round3a/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
@@ -290,7 +290,7 @@ prevalence <- here(
   )
 
   prevalence_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/work/pilowskyj/Round3/", f)) |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round3a/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
@@ -427,7 +427,7 @@ mg_arrival_metric <- foreach(
 mg_arrival_penalty[!no_infection] <- mg_arrival_metric
 
 presence_list <- results_dir[dc] |>
-  map(\(f) paste0("/glade/work/pilowskyj/Round3/", f)) |>
+  map(\(f) paste0("/glade/work/pilowskyj/Round3a/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
     data.frame(
@@ -519,9 +519,9 @@ summary_metrics$mg_arrival[dc] <- mg_arrival_penalty
 summary_metrics$hm_arrival[dc] <- hm_arrival_metric
 write_csv(
   summary_metrics,
-  here("mgsim/Data_minimal/Validation/round3_validation_metrics.csv")
+  here("mgsim/Data_minimal/Validation/round3a_validation_metrics.csv")
 )
 write_csv(
   trend_metric,
-  here("mgsim/Data_minimal/Validation/round3_trend_metrics.csv")
+  here("mgsim/Data_minimal/Validation/round3a_trend_metrics.csv")
 )

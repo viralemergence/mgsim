@@ -1,5 +1,5 @@
 ---
-title: "mgsim: Round 3 Analysis"
+title: "mgsim: Round 3a Analysis"
 author: "July Pilowsky"
 format: html
 editor: visual
@@ -25,7 +25,7 @@ source(here("Scripts/animate_sim.R"))
 set_trust_promises(TRUE)
 region <- qread(here("Data/Input/finch_region.qs"))
 round2_metrics <- read_csv(here("Data/Validation/round2c_validation_metrics.csv"))
-trend_metrics2 <- read_csv(here("Data/Validation/round2c_trend_metrics.csv")) |> 
+trend_metrics2 <- read_csv(here("Data/Validation/round2c_trend_metrics.csv")) |>
     pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
 round2_metrics$hm_trend_1970[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1970") |> pull(value)
 round2_metrics$hm_trend_1993[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1993") |> pull(value)
@@ -34,20 +34,20 @@ round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")
     mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
 round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
 round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
-round2_priors <- read_csv(here("Data/Input/sample_data_round2b.csv")) |> 
+round2_priors <- read_csv(here("Data/Input/sample_data_round2b.csv")) |>
   mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
          mortality_Ra_summer = mortality_Sa_summer)
-round3_priors <- read_csv(here("Data/Input/sample_data_round3.csv")) |> 
+round3a_priors <- read_csv(here("Data/Input/sample_data_round3a.csv")) |>
   mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
          mortality_Ra_summer = mortality_Sa_summer)
-round3_metrics <- read_csv(here("Data/Validation/round3_validation_metrics.csv"))
-trend_metrics3 <- read_csv(here("Data/Validation/round3_trend_metrics.csv")) |> 
+round3a_metrics <- read_csv(here("Data/Validation/round3a_validation_metrics.csv"))
+trend_metrics3a <- read_csv(here("Data/Validation/round3a_trend_metrics.csv")) |>
     pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
-round3_metrics$hm_trend_1970[round3_metrics$dc] <- trend_metrics3 |> filter(metric == "penalty1970") |> pull(value)
-round3_metrics$hm_trend_1993[round3_metrics$dc] <- trend_metrics3 |> filter(metric == "penalty1993") |> pull(value)
+round3a_metrics$hm_trend_1970[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1970") |> pull(value)
+round3a_metrics$hm_trend_1993[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1993") |> pull(value)
 ```
 
-# What is my goal in Round 3 of simulation?
+# What is my goal in Round 3a of simulation?
 
 My goal is to improve over Rounds 1 and 2 on the validation metrics, and to determine whether the posteriors have stabilized and I can stop simulating.
 
@@ -58,16 +58,16 @@ My goal is to improve over Rounds 1 and 2 on the validation metrics, and to dete
 To start with, let's look at presence of finches in DC. In the first round, 4876 simulations out of 10000 simulated the presence of house finches in Washington, DC in 1994, and in Round 2, it was 6992 out of 10000.
 
 ```{r presence_dc}
-sum(round3_metrics$dc)
+sum(round3a_metrics$dc)
 ```
 
 3,140 simulations have birds present in DC, which is worse than the two previous rounds. Ouch. Let me examine again which parameter settings make simulations pass this filter or not:
 
 ```{r dc}
-round3_priors |> 
-  mutate(dc = round3_metrics$dc) |> 
-  select(-mortality_Sa_summer, -mortality_Ra_summer) |> 
-  pivot_longer(1:45, names_to = "Prior", values_to = "Value") |> 
+round3a_priors |>
+  mutate(dc = round3a_metrics$dc) |>
+  select(-mortality_Sa_summer, -mortality_Ra_summer) |>
+  pivot_longer(1:45, names_to = "Prior", values_to = "Value") |>
   ggplot(aes(x = Value, group = dc, fill = dc)) +
   geom_density(alpha = 0.5) +
   facet_wrap(~Prior, scales = "free") +
@@ -82,19 +82,19 @@ I'm going to zoom in on these particular priors and make sure they match the pos
 dc_params <- c("abundance_threshold", "fecundity", "dispersal_r_juv", "dispersal_source_n_k_threshold", "dispersal_source_n_k_cutoff")
 abc_first_pass <- qread(here("Data/Validation/abc_round2c_2.qs"))
 
-demo_params_selected <- round2_priors[round2_metrics$dc,] |> 
+demo_params_selected <- round2_priors[round2_metrics$dc,] |>
   mutate(Region = abc_first_pass$region,
          Weights = 1 /
     (abc_first_pass$dist +
-      .Machine$double.eps)) |> 
-  filter(Region == TRUE) |> 
-  select(dc_params) |> 
-  bind_rows(round3_priors |> select(dc_params)) |> 
-  mutate(Round = factor(c(rep("Round 2 posterior", 35), rep("Round 3 prior", 10000))))
-  
-  
-demo_params_selected  |> 
-  pivot_longer(dc_params, names_to = "Parameter", values_to = "Value") |> 
+      .Machine$double.eps)) |>
+  filter(Region == TRUE) |>
+#  select(dc_params) |>
+  bind_rows(round3a_priors |> select(dc_params)) |>
+  mutate(Round = factor(c(rep("Round 2 posterior", 35), rep("Round 3a prior", 10000))))
+
+
+demo_params_selected  |>
+  pivot_longer(dc_params, names_to = "Parameter", values_to = "Value") |>
   ggplot(aes(x = Value, fill = Round)) +
   geom_density(alpha = 0.4) +
   facet_wrap(~Parameter, scales = "free")
@@ -107,21 +107,21 @@ I think I see the issue. Some of these posteriors are bimodal, and the way I est
 Moving on I can look at the other validation metrics:
 
 ```{r validation_metrics_plot, warning = FALSE}
-validation_metrics <- bind_rows(round1_metrics, round2_metrics, round3_metrics) |>
-                      mutate(Round = factor(c(rep(1, 10000), rep(2, 10000), rep(3, 10000)))) |>
+validation_metrics <- bind_rows(round1_metrics, round2_metrics, round3a_metrics) |>
+                      mutate(Round = factor(c(rep("1", 10000), rep("2", 10000), rep("3a", 10000)))) |>
                       filter(dc) |>
                       select(-hm_trend, -index, -dc)
-quantiles <- validation_metrics[,1:7] |> 
+quantiles <- validation_metrics[,1:7] |>
   map_dbl(\(x) quantile(x, prob = c(0.001), na.rm = T))
-labels <- c("Mycoplasma presence", "Finch pres/abs", 
+labels <- c("Mycoplasma presence", "Finch pres/abs",
             "Point prevalence", "Mycoplasma arrival", "Finch arrival",
             "Finch trend from 1970", "Finch trend from 1993")
 plotlist <- pmap(list(names(validation_metrics)[1:7], quantiles, labels), function(x, y, z) {
     outliers_removed <- validation_metrics[, c(x, "Round")][pull(validation_metrics, x) < quantile(pull(validation_metrics, x), 0.95, na.rm=T), ]
-    ggplot(data = outliers_removed, aes(x = .data[[x]], fill = Round, group = Round)) + 
-    geom_histogram(position = "dodge") + 
+    ggplot(data = outliers_removed, aes(x = .data[[x]], fill = Round, group = Round)) +
+    geom_histogram(position = "dodge") +
     geom_vline(xintercept = y, color = "blue") +
-    xlab(z) + 
+    xlab(z) +
     scale_fill_paletteer_d("PNWColors::Sunset2")
 })
 plot_grid(plotlist = plotlist)
@@ -134,29 +134,29 @@ Performance has improved on the metrics used for ABC (*Mycoplasma* presence and 
 I will continue with the same two metrics used in the previous rounds, for consistency.
 
 ```{r abc_two_metrics}
-abc31 <- abc(param = round3_priors[round3_metrics$dc,], 
-             sumstat = round3_metrics |> filter(dc) |> select(c(3,7)),
-              target = rep(0, 2), 
+abc31 <- abc(param = round3a_priors[round3a_metrics$dc,],
+             sumstat = round3a_metrics |> filter(dc) |> select(c(3,7)),
+              target = rep(0, 2),
              tol = 0.01,
              method = "neuralnet")
-qsave(abc31, here("Data/Validation/abc_round3.qs"))
+qsave(abc31, here("Data/Validation/abc_round3a.qs"))
 head(abc31$ss, 10)
-selected_samples_3 <- round3_priors |> 
-  rowid_to_column("sample") |> 
-  semi_join(abc31$unadj.values, copy = TRUE) |> 
+selected_samples_3 <- round3a_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc31$unadj.values, copy = TRUE) |>
   pull(sample)
-write_sftp_transfer("/glade/work/pilowskyj/Round3", 
-                      "/Users/julypilowsky/Documents/mgsim/Data/Output/Round3", 
-                      selected_samples_3, 
-                      here("Scripts/Globus/abc_round3.txt"))
-ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3"))
+write_sftp_transfer("/glade/work/pilowskyj/Round3a",
+                      "/Users/julypilowsky/Documents/mgsim/Data/Output/Round3a",
+                      selected_samples_3,
+                      here("Scripts/Globus/abc_round3a.txt"))
+ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
 animate_sim(ensemble_sa, region)
 ```
 
 Unfortunately, this simulation looks worse than the previous round. The dispersal of finches throughout the continent is too rapid.
 
 ```{r animate_recovered_adults}
-ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3"))
+ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
 animate_sim(ensemble_ra, region, years = 1994:2016, burn_in = 111)
 ```
 
