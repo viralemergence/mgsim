@@ -3,7 +3,13 @@ library(sp)
 library(sf)
 library(data.table)
 
-animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
+animate_sim <- function(
+  array,
+  region,
+  years = 1940:2016,
+  burn_in = 0,
+  remove_outliers = FALSE
+) {
   if (burn_in > 0) {
     arr <- array[,, burn_in:dim(array)[3]]
     timesteps <- dim(arr)[3]
@@ -27,6 +33,12 @@ animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
   dt$Time <- dt$Year + dt$Season
   dt$Abundance <- if_else(dt$Abundance == 0, NA_real_, dt$Abundance)
 
+  # Handle outliers if requested
+  if (remove_outliers) {
+    threshold_95 <- quantile(dt$Abundance, 0.95, na.rm = TRUE)
+    dt$Abundance <- pmin(dt$Abundance, threshold_95)
+  }
+
   # Create a basemap
   basemap <- rnaturalearth::ne_coastline() |>
     st_transform(st_crs(region$region_raster)) |>
@@ -38,7 +50,8 @@ animate_sim <- function(array, region, years = 1940:2016, burn_in = 0) {
     geom_tile(data = dt, mapping = aes(x, y, fill = Abundance)) +
     scale_fill_viridis_c(
       labels = scales::label_comma(),
-      na.value = "transparent"
+      na.value = "transparent",
+      oob = scales::squish
     ) +
     transition_time(Time) +
     labs(title = "Year: {round(frame_time)}") +

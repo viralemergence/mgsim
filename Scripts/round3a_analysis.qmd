@@ -18,7 +18,9 @@ library(GGally)
 library(abc)
 library(tidyverse)
 library(furrr)
-plan(sequential)
+library(bayestestR)
+library(qs2)
+plan(multicore)
 source(here("Scripts/validation_metric_functions.R"))
 source(here("Scripts/convenience_functions.R"))
 source(here("Scripts/animate_sim.R"))
@@ -76,32 +78,6 @@ round3a_priors |>
 
 The controls on what passes the DC filter or not are different from Round 1. In Round 1, it had to do entirely with dispersal_target_n_k, maximizing the range of population densities that the finches were willing to migrate to. In this round, that's already been optimized, so instead we're selecting for low quasi-extinction threshold, higher fecundity, intermediate juvenile dispersal distance, and widening dispersal_source_n_k (the range of population densities that will push finches out and toward dispersal.)
 
-I'm going to zoom in on these particular priors and make sure they match the posteriors from the previous round reasonably well.
-
-```{r check_priors}
-dc_params <- c("abundance_threshold", "fecundity", "dispersal_r_juv", "dispersal_source_n_k_threshold", "dispersal_source_n_k_cutoff")
-abc_first_pass <- qread(here("Data/Validation/abc_round2c_2.qs"))
-
-demo_params_selected <- round2_priors[round2_metrics$dc,] |>
-  mutate(Region = abc_first_pass$region,
-         Weights = 1 /
-    (abc_first_pass$dist +
-      .Machine$double.eps)) |>
-  filter(Region == TRUE) |>
-#  select(dc_params) |>
-  bind_rows(round3a_priors |> select(dc_params)) |>
-  mutate(Round = factor(c(rep("Round 2 posterior", 35), rep("Round 3a prior", 10000))))
-
-
-demo_params_selected  |>
-  pivot_longer(dc_params, names_to = "Parameter", values_to = "Value") |>
-  ggplot(aes(x = Value, fill = Round)) +
-  geom_density(alpha = 0.4) +
-  facet_wrap(~Parameter, scales = "free")
-```
-
-I think I see the issue. Some of these posteriors are bimodal, and the way I estimated the priors erases this bimodality. I should probably run this round again with a different approach to the priors.
-
 ## Other Validation Metrics
 
 Moving on I can look at the other validation metrics:
@@ -137,7 +113,7 @@ I will continue with the same two metrics used in the previous rounds, for consi
 abc31 <- abc(param = round3a_priors[round3a_metrics$dc,],
              sumstat = round3a_metrics |> filter(dc) |> select(c(3,7)),
               target = rep(0, 2),
-             tol = 0.01,
+             tol = 0.02,
              method = "neuralnet")
 qsave(abc31, here("Data/Validation/abc_round3a.qs"))
 head(abc31$ss, 10)
@@ -150,10 +126,10 @@ write_sftp_transfer("/glade/work/pilowskyj/Round3a",
                       selected_samples_3,
                       here("Scripts/Globus/abc_round3a.txt"))
 ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
-animate_sim(ensemble_sa, region)
+animate_sim(ensemble_sa, region, remove_outliers = TRUE)
 ```
 
-Unfortunately, this simulation looks worse than the previous round. The dispersal of finches throughout the continent is too rapid.
+This simulation doesn't look bad, though I definitely need to talk with house finch biologists about the realism of the pattern of finch spread on the landscape.
 
 ```{r animate_recovered_adults}
 ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
@@ -161,3 +137,22 @@ animate_sim(ensemble_ra, region, years = 1994:2016, burn_in = 111)
 ```
 
 The disease dynamics look really cool here, though!
+
+## Posterior Distributions
+
+```{r optimized abc}
+plot_abc_posteriors(abc31, round2_priors)
+```
+
+# Is it time to stop modeling?
+
+We use two checks to see if it's time to stop modeling: Bayes factors and posterior predictive checks.
+
+```{r bayes_factor}
+bayesfactor_parameters(posterior = as.data.frame(abc31$adj.values)[1:45], 
+                       prior = round3a_priors[1:45])
+```
+
+Bayes factors look good! They are all well below 1.
+
+The final confirmation is to do posterior predictive checks. The way I do this is to do a small batch of pilot simulations based on the posteriors of round 3, run validation metrics, and make sure that the validation targets fall neatly within the distribution of observed validation metrics.

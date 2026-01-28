@@ -340,7 +340,7 @@ plot_abc_posteriors <- function(abc, priors) {
   assert_class(abc, "abc")
   assert_choice(abc$method, c("rejection", "loclinear", "neuralnet"))
   assert_data_frame(priors, min.rows = 1, min.cols = 1, col.names = "unique")
-  assert_true(all.equal(names(priors), colnames(abc$adj.values)))
+  assert_set_equal(names(priors), colnames(abc$adj.values))
 
   prior_samples <- priors |>
     mutate(Distribution = "Prior")
