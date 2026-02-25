@@ -50,9 +50,6 @@ rsconnect/
 # DS_Store from the Mac
 *.DS_Store
 
-# Ignore images
-*.png
-
 # Ignore memory-heavy data inputs and outputs
 Data/
 Data_minimal/Output/
