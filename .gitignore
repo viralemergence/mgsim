@@ -60,3 +60,8 @@ References/
 *.js
 *.woff
 *.css
+
+# But allow Quarto output files for GitHub Pages
+!Scripts/*_files/**/*.js
+!Scripts/*_files/**/*.woff
+!Scripts/*_files/**/*.css
