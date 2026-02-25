@@ -431,3 +431,86 @@ plot_abc_posteriors <- function(abc, priors) {
     adjust_title("Prior vs Posterior Distributions") |>
     split_plot(Parameter, ncol = 2, nrow = 2)
 }
+
+# This function unpacks the selected samples into a data frame with time series
+# for each simulation, removing the spatial element. This is useful for
+# plotting time series of overall population size or prevalence.
+ensemble_time_series <- function(samples, data_dir) {
+  years <- 1940:2016
+  # Assertions
+  assert_integerish(
+    samples,
+    lower = 1,
+    upper = 10000,
+    any.missing = FALSE,
+    min.len = 1
+  )
+  assert_directory_exists(data_dir, access = "r")
+
+  # Read in data
+  dir_vec <- map_chr(samples, function(n) {
+    file.path(data_dir, paste0("simulation", n))
+  })
+  map_lgl(dir_vec, dir.exists) |>
+    all() |>
+    assert_true()
+  map_lgl(dir_vec, \(d) length(list.files(d)) > 0) |>
+    all() |>
+    assert_true()
+  num_slashes <- str_count(dir_vec[1], "/")
+  year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
+  file_info <- dir_vec |>
+    lapply(list.files, full.names = TRUE) |>
+    lapply(
+      function(p) {
+        data.frame(
+          path = p,
+          index = as.numeric(
+            str_split_i(p, "/", num_slashes + 2) |>
+              str_split_i("_", 1)
+          ),
+          season = str_extract(p, "summer|winter")
+        ) |>
+          mutate(
+            season = factor(
+              season,
+              levels = c(
+                "winter",
+                "summer"
+              )
+            )
+          ) |>
+          arrange(index, season) |>
+          left_join(year_lookup, by = join_by(index))
+      }
+    ) |>
+    map(fill_missing_years, start_year = 1940, end_year = 2016)
+
+  # Read in .qs files and create a data frame
+  ensemble <- future_map2(file_info, samples, function(info, sim) {
+    dt_list <- list()
+    for (i in seq_len(nrow(info))) {
+      # Detect the compartment and life stage from the file name
+      compartment <- str_extract(info$path[i], "Sj|Sa|I1j|I1a|Rj|Ra|I2j|I2a")
+      life_stage <- if_else(str_detect(compartment, "j"), "Juvenile", "Adult")
+      compartment <- str_remove(compartment, "j|a")
+      # Read the .qs file
+      arr <- read_or_zero(info$path[i])
+      dt <- data.table()
+
+      # Add the corresponding values from the array
+      dt[, Abundance := sum(arr)]
+      dt$Year <- info$Year[i]
+      dt$Season <- info$season[i]
+      dt$Time <- if_else(dt$Season == "winter", dt$Year, dt$Year + 0.5)
+      dt$Simulation <- sim
+      dt$Compartment <- compartment
+      dt$Life_Stage <- life_stage
+
+      dt_list[[i]] <- dt
+    }
+    return(rbindlist(dt_list))
+    gc()
+  }) |>
+    bind_rows()
+}

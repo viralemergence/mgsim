@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.3.450">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="July Pilowsky">
+
+<title>First MG/HM Simulation</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="test_simulation_files/libs/clipboard/clipboard.min.js"></script>
+<script src="test_simulation_files/libs/quarto-html/quarto.js"></script>
+<script src="test_simulation_files/libs/quarto-html/popper.min.js"></script>
+<script src="test_simulation_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="test_simulation_files/libs/quarto-html/anchor.min.js"></script>
+<link href="test_simulation_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="test_simulation_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="test_simulation_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="test_simulation_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="test_simulation_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">First MG/HM Simulation</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>July Pilowsky </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+</header>
+
+<section id="finch-only-simulation" class="level1">
+<h1>Finch-only simulation</h1>
+<section id="goal" class="level2">
+<h2 class="anchored" data-anchor-id="goal">Goal</h2>
+<p>To produce one functional simulation of the house finch system from 1940 to 1993. I’m aware this is a lofty goal. It’ll have to go by parts.</p>
+</section>
+<section id="input-data" class="level2">
+<h2 class="anchored" data-anchor-id="input-data">Input Data</h2>
+<section id="model-settings" class="level3">
+<h3 class="anchored" data-anchor-id="model-settings">Model Settings</h3>
+<p>There are some overall model settings that need to be decided upon.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>parallel_cores <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>nsims <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>burn_in_steps <span class="ot">&lt;-</span> <span class="dv">5</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>timesteps <span class="ot">&lt;-</span> <span class="dv">54</span> <span class="sc">+</span> burn_in_steps</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>random_seed <span class="ot">&lt;-</span> <span class="dv">72</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>results_dir <span class="ot">&lt;-</span> <span class="st">"~/Documents/mgsim/Data/Output/epizootic_test"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="region" class="level3">
+<h3 class="anchored" data-anchor-id="region">Region</h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>region <span class="ot">&lt;-</span> data_dir <span class="sc">%&gt;%</span> <span class="fu">file.path</span>(<span class="st">"finch_region.qs"</span>) <span class="sc">%&gt;%</span> <span class="fu">qread</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="spatial-autocorrelation" class="level3">
+<h3 class="anchored" data-anchor-id="spatial-autocorrelation">Spatial Autocorrelation</h3>
+<p>This object calculates spatial autocorrelation among cells. This is useful for dispersal and carrying capacity calculations.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>env_corr <span class="ot">&lt;-</span> SpatialCorrelation<span class="sc">$</span><span class="fu">new</span>(<span class="at">region =</span> region, </span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>                                   <span class="at">amplitude =</span> <span class="fl">0.99</span>, </span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>                                   <span class="at">breadth =</span> <span class="dv">850</span>, </span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>                                   <span class="at">distance_scale =</span> <span class="dv">1000</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>env_corr<span class="sc">$</span><span class="fu">calculate_compact_decomposition</span>(<span class="at">decimals =</span> <span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="breeding-season-length" class="level3">
+<h3 class="anchored" data-anchor-id="breeding-season-length">Breeding Season Length</h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>burn_in <span class="ot">&lt;-</span> <span class="fu">stack</span>(<span class="fu">replicate</span>(burn_in_steps, <span class="fu">raster</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">file.path</span>(data_dir, <span class="st">"breeding_season_length.tif"</span>), <span class="at">layer =</span> <span class="dv">1</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  )))</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>bsl_raster <span class="ot">&lt;-</span> data_dir <span class="sc">%&gt;%</span> </span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">file.path</span>(<span class="st">"breeding_season_length.tif"</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stack</span>(<span class="at">bands =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">54</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stack</span>(burn_in, .) <span class="sc">|&gt;</span> </span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mask</span>(region<span class="sc">$</span>region_raster) <span class="sc">|&gt;</span> </span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">calc</span>(<span class="at">fun =</span> round)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="model-template" class="level3">
+<h3 class="anchored" data-anchor-id="model-template">Model Template</h3>
+<p>This object stores fixed parameters for the model (ones that are not sampled via Latin hypercube sampling.)</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>model_template <span class="ot">&lt;-</span> DiseaseModel<span class="sc">$</span><span class="fu">new</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">simulation_function =</span> <span class="st">"disease_simulator"</span>,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">region =</span> region,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">time_steps =</span> timesteps,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">populations =</span> region<span class="sc">$</span>region_cells,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">replicates =</span> <span class="dv">1</span>,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">stages =</span> <span class="dv">2</span>,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">compartments =</span> <span class="dv">4</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">seasons =</span> <span class="dv">2</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">mortality_unit =</span> <span class="fu">list</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>),</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>                        <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>)),</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">fecundity_unit =</span> <span class="fu">rep</span>(<span class="dv">1</span>, <span class="dv">8</span>),</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">fecundity_mask =</span> <span class="fu">rep</span>(<span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="dv">4</span>),</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">transmission =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">4</span>), <span class="co"># because this is pre-outbreak</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">transmission_unit =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">4</span>),</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">transmission_mask =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>),</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>  <span class="at">recovery =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">4</span>), <span class="co"># pre-outbreak</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">recovery_unit =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">4</span>),</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>  <span class="at">recovery_mask =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>),</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">breeding_season_length =</span> bsl_raster,</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">simulation_order =</span> <span class="fu">list</span>(<span class="fu">c</span>(<span class="st">"transition"</span>, <span class="st">"season_functions"</span>, <span class="st">"results"</span>),</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>                          <span class="fu">c</span>(<span class="st">"dispersal"</span>, <span class="st">"season_functions"</span>, <span class="st">"results"</span>)),</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  <span class="at">results_selection =</span> <span class="fu">c</span>(<span class="st">"abundance"</span>),</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  <span class="at">results_breakdown =</span> <span class="st">"stages"</span>,</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>  <span class="at">season_functions =</span> <span class="fu">list</span>(siri_model_summer, siri_model_winter),</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>  <span class="at">hs_file =</span> <span class="st">"habitat_suitability_v2"</span>,</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">mask_file =</span> <span class="st">"native_range_mask"</span>,</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">verbose =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>  <span class="co"># I will need to modify this for the next simulation phase</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">attribute_aliases =</span> <span class="fu">list</span>(</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Sj_summer =</span> <span class="st">"mortality$summer$a"</span>,</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Sa_summer =</span> <span class="st">"mortality$summer$b"</span>,</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I1j_summer =</span> <span class="st">"mortality$summer$c"</span>,</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I1a_summer =</span> <span class="st">"mortality$summer$d"</span>,</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Rj_summer =</span> <span class="st">"mortality$summer$e"</span>,</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Ra_summer =</span> <span class="st">"mortality$summer$f"</span>,</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I2j_summer =</span> <span class="st">"mortality$summer$g"</span>,</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I2a_summer =</span> <span class="st">"mortality$summer$h"</span>,</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Sj_winter =</span> <span class="st">"mortality$winter$a"</span>,</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Sa_winter =</span> <span class="st">"mortality$winter$b"</span>,</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I1j_winter =</span> <span class="st">"mortality$winter$c"</span>,</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I1a_winter =</span> <span class="st">"mortality$winter$d"</span>,</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Rj_winter =</span> <span class="st">"mortality$winter$e"</span>,</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_Ra_winter =</span> <span class="st">"mortality$winter$f"</span>,</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I2j_winter =</span> <span class="st">"mortality$winter$g"</span>,</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">mortality_I2a_winter =</span> <span class="st">"mortality$winter$h"</span>,</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">dispersal1 =</span> <span class="st">"dispersal$a"</span>,</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">dispersal2 =</span> <span class="st">"dispersal$b"</span></span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="carrying-capacity-and-initial-abundance" class="level3">
+<h3 class="anchored" data-anchor-id="carrying-capacity-and-initial-abundance">Carrying Capacity and Initial Abundance</h3>
+<p>This object is a generator. This means that it generates complex outputs (in this case, a matrix of carrying capacity throughout the simulation and a matrix of initial abundance) based on simple inputs (in this case, maximum population density and number of finches released on Jones Beach.)</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>capacity_gen <span class="ot">&lt;-</span> Generator<span class="sc">$</span><span class="fu">new</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">description =</span> <span class="st">"capacity"</span>,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">region =</span> region,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">generate_rasters =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="co"># use but don't generate</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">burn_in_steps =</span> burn_in_steps,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">time_steps =</span> timesteps,</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">generative_requirements =</span> <span class="fu">list</span>(</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">hs_raster =</span> <span class="st">"file"</span>,</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">mask_raster =</span> <span class="st">"file"</span>,</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">initial_abundance =</span> <span class="st">"function"</span>,</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">carrying_capacity =</span> <span class="st">"function"</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">inputs =</span> <span class="fu">c</span>(<span class="st">"density_max"</span>, <span class="st">"hs_file"</span>, <span class="st">"mask_file"</span>, <span class="st">"initial_release"</span>),</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">outputs =</span> <span class="fu">c</span>(<span class="st">"initial_abundance"</span>, <span class="st">"carrying_capacity"</span>)</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Here we tell the generator to import the HS file and save it as "hs_matrix"</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>capacity_gen<span class="sc">$</span><span class="fu">add_file_template</span>(</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>  <span class="at">param =</span> <span class="st">"hs_raster"</span>,</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">path_template =</span> <span class="fu">file.path</span>(data_dir, <span class="st">"%s.tif"</span>),</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">path_params =</span> <span class="st">"hs_file"</span>,</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>  <span class="at">file_type =</span> <span class="st">"tif"</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>capacity_gen<span class="sc">$</span><span class="fu">add_file_template</span>(</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>  <span class="at">param =</span> <span class="st">"mask_raster"</span>,</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>  <span class="at">path_template =</span> <span class="fu">file.path</span>(data_dir, <span class="st">"%s.tif"</span>),</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">path_params =</span> <span class="st">"mask_file"</span>,</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">file_type =</span> <span class="st">"tif"</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a><span class="co"># Here we subset the hs_matrix to have only the region cells, and we add the burn in</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a><span class="co"># Also, we tell the generator to generate the carrying_capacity based on "density_max" and "hs_matrix".</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>capacity_gen<span class="sc">$</span><span class="fu">add_function_template</span>(</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>  <span class="at">param =</span> <span class="st">"carrying_capacity"</span>,</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>  <span class="at">function_def =</span> <span class="cf">function</span>(params) {</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    hs_matrix <span class="ot">&lt;-</span> params<span class="sc">$</span>hs_raster <span class="sc">%&gt;%</span> <span class="fu">as.matrix</span>() <span class="sc">%&gt;%</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>      .[params<span class="sc">$</span>region<span class="sc">$</span>region_indices, <span class="dv">1</span><span class="sc">:</span>(params<span class="sc">$</span>time_steps <span class="sc">-</span> params<span class="sc">$</span>burn_in_steps)]</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    hs_matrix[<span class="sc">!</span><span class="fu">is.finite</span>(hs_matrix)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>    <span class="co"># repeat the first timestep n times as burn in</span></span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>    hs_matrix <span class="ot">&lt;-</span> <span class="fu">cbind</span>(<span class="fu">replicate</span>(params<span class="sc">$</span>burn_in_steps, hs_matrix[, <span class="dv">1</span>]), hs_matrix)</span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>    <span class="co"># round the density values</span></span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>    <span class="fu">round</span>(params<span class="sc">$</span>density_max <span class="sc">*</span> hs_matrix)</span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>  },</span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>  <span class="at">call_params =</span> <span class="fu">c</span>(<span class="st">"density_max"</span>, <span class="st">"hs_raster"</span>, <span class="st">"burn_in_steps"</span>, <span class="st">"region"</span>,</span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"time_steps"</span>)</span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a><span class="co"># Here we tell the generator what function to use to generate initial_abundance</span></span>
+<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a><span class="co"># based on the carrying capacity of the first time step, the native range, and </span></span>
+<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a><span class="co"># the number of finches released in Jones Beach, NY.</span></span>
+<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a>capacity_gen<span class="sc">$</span><span class="fu">add_function_template</span>(</span>
+<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a>  <span class="at">param =</span> <span class="st">"initial_abundance"</span>,</span>
+<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a>  <span class="at">function_def =</span> <span class="cf">function</span>(params) {</span>
+<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a>    hs_matrix <span class="ot">&lt;-</span> params<span class="sc">$</span>hs_raster <span class="sc">%&gt;%</span> </span>
+<span id="cb6-53"><a href="#cb6-53" aria-hidden="true" tabindex="-1"></a>                 raster<span class="sc">::</span><span class="fu">mask</span>(params<span class="sc">$</span>mask_raster) <span class="sc">%&gt;%</span> </span>
+<span id="cb6-54"><a href="#cb6-54" aria-hidden="true" tabindex="-1"></a>                 <span class="fu">as.matrix</span>() <span class="sc">%&gt;%</span></span>
+<span id="cb6-55"><a href="#cb6-55" aria-hidden="true" tabindex="-1"></a>                 .[params<span class="sc">$</span>region<span class="sc">$</span>region_indices, ] <span class="sc">%&gt;%</span></span>
+<span id="cb6-56"><a href="#cb6-56" aria-hidden="true" tabindex="-1"></a>                 <span class="fu">identity</span>()</span>
+<span id="cb6-57"><a href="#cb6-57" aria-hidden="true" tabindex="-1"></a>    hs_matrix[<span class="sc">!</span><span class="fu">is.finite</span>(hs_matrix)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb6-58"><a href="#cb6-58" aria-hidden="true" tabindex="-1"></a>    hs_vector <span class="ot">&lt;-</span> hs_matrix[, <span class="dv">1</span>]</span>
+<span id="cb6-59"><a href="#cb6-59" aria-hidden="true" tabindex="-1"></a>    hs_vector <span class="ot">&lt;-</span> <span class="fu">round</span>(params<span class="sc">$</span>density_max <span class="sc">*</span> hs_vector)</span>
+<span id="cb6-60"><a href="#cb6-60" aria-hidden="true" tabindex="-1"></a>    hs_vector[<span class="dv">3009</span>] <span class="ot">&lt;-</span> params<span class="sc">$</span>initial_release</span>
+<span id="cb6-61"><a href="#cb6-61" aria-hidden="true" tabindex="-1"></a>    initial_matrix <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, <span class="at">nrow =</span> <span class="dv">8</span>, <span class="at">ncol =</span> <span class="dv">6355</span>)</span>
+<span id="cb6-62"><a href="#cb6-62" aria-hidden="true" tabindex="-1"></a>    initial_matrix[<span class="dv">2</span>, ] <span class="ot">&lt;-</span> hs_vector</span>
+<span id="cb6-63"><a href="#cb6-63" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(initial_matrix)</span>
+<span id="cb6-64"><a href="#cb6-64" aria-hidden="true" tabindex="-1"></a>  },</span>
+<span id="cb6-65"><a href="#cb6-65" aria-hidden="true" tabindex="-1"></a>  <span class="at">call_params =</span> <span class="fu">c</span>(<span class="st">"hs_raster"</span>, <span class="st">"mask_raster"</span>, <span class="st">"density_max"</span>, <span class="st">"initial_release"</span>, <span class="st">"region"</span>)</span>
+<span id="cb6-66"><a href="#cb6-66" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-67"><a href="#cb6-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-68"><a href="#cb6-68" aria-hidden="true" tabindex="-1"></a><span class="fu">system.time</span>({</span>
+<span id="cb6-69"><a href="#cb6-69" aria-hidden="true" tabindex="-1"></a>  test_capacity <span class="ot">&lt;-</span> capacity_gen<span class="sc">$</span><span class="fu">generate</span>(<span class="at">input_values =</span> <span class="fu">list</span>(<span class="at">density_max =</span> <span class="dv">186000</span>, </span>
+<span id="cb6-70"><a href="#cb6-70" aria-hidden="true" tabindex="-1"></a>                                                             <span class="at">initial_release =</span> <span class="dv">50</span>,</span>
+<span id="cb6-71"><a href="#cb6-71" aria-hidden="true" tabindex="-1"></a>                                                             <span class="at">hs_file =</span> <span class="st">"habitat_suitability_v1"</span>,</span>
+<span id="cb6-72"><a href="#cb6-72" aria-hidden="true" tabindex="-1"></a>                                                             <span class="at">mask_file =</span> <span class="st">"native_range_mask"</span>))</span>
+<span id="cb6-73"><a href="#cb6-73" aria-hidden="true" tabindex="-1"></a>})</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   user  system elapsed 
+  0.756   0.138   0.895 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>raster<span class="sc">::</span><span class="fu">plot</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  region<span class="sc">$</span><span class="fu">raster_from_values</span>(test_capacity[[<span class="dv">1</span>]][<span class="dv">2</span>,]),</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">main =</span> <span class="st">"Initial abundance"</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">colNA =</span> <span class="st">"blue"</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="test_simulation_files/figure-html/carrying%20capacity%20generator-1.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+</section>
+<section id="dispersal" class="level3">
+<h3 class="anchored" data-anchor-id="dispersal">Dispersal</h3>
+<p>This generator can take input abundances and shift them around according to dispersal rules.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>b_lookup <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">d_max =</span> <span class="sc">-</span><span class="cn">Inf</span>, <span class="at">b =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">904</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">904</span>) {</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  b_lookup<span class="sc">$</span>d_max[i] <span class="ot">&lt;-</span> <span class="fu">which.max</span>(<span class="fu">exp</span>(<span class="sc">-</span><span class="dv">1</span><span class="sc">*</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">1501</span>)<span class="sc">/</span>b_lookup<span class="sc">$</span>b[i]) <span class="sc">&lt;=</span> <span class="fl">0.19</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>b_lookup<span class="sc">$</span>d_max[<span class="dv">905</span>] <span class="ot">&lt;-</span> <span class="dv">1501</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># distance_matrix &lt;- dispersal_gen$calculate_distance_matrix()</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"># dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="co"># these are pre-calculated because they're computationally intensive</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>distance_data <span class="ot">&lt;-</span> <span class="fu">qread</span>(<span class="fu">file.path</span>(data_dir, <span class="st">"dispersal_distance_data.qs"</span>))</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>adult_dispersal_gen <span class="ot">&lt;-</span> DispersalGenerator<span class="sc">$</span><span class="fu">new</span>(</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">region =</span> region,</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">spatial_correlation =</span> env_corr,</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">distance_classes =</span> <span class="fu">seq</span>(<span class="dv">10</span>, <span class="dv">1500</span>, <span class="dv">10</span>),</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">distance_scale =</span> <span class="dv">1000</span>, <span class="co"># km</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>  <span class="at">dispersal_function_data =</span> b_lookup,</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">inputs =</span> <span class="fu">c</span>(<span class="st">"dispersal_p_adult"</span>,</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>             <span class="st">"dispersal_r_adult"</span>),</span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">attribute_aliases =</span> <span class="fu">list</span>(<span class="at">dispersal_r_adult =</span> <span class="st">"dispersal_max_distance"</span>,</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>                           <span class="at">dispersal_p_adult =</span> <span class="st">"dispersal_proportion"</span>,</span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>                           <span class="at">dispersal_adult =</span> <span class="st">"dispersal_data"</span>),</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>  <span class="at">decimals =</span> <span class="dv">3</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>adult_dispersal_gen<span class="sc">$</span>distance_data <span class="ot">&lt;-</span> distance_data</span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>juvenile_dispersal_gen <span class="ot">&lt;-</span> DispersalGenerator<span class="sc">$</span><span class="fu">new</span>(</span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">region =</span> region,</span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>  <span class="at">spatial_correlation =</span> env_corr,</span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">distance_classes =</span> <span class="fu">seq</span>(<span class="dv">10</span>, <span class="dv">1500</span>, <span class="dv">10</span>),</span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>  <span class="at">distance_scale =</span> <span class="dv">1000</span>, <span class="co"># km</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>  <span class="at">dispersal_function_data =</span> b_lookup,</span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a>  <span class="at">decimals =</span> <span class="dv">3</span>,</span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a>  <span class="at">inputs =</span> <span class="fu">c</span>(<span class="st">"dispersal_p_juv"</span>,</span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>             <span class="st">"dispersal_r_juv"</span>),</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>  <span class="at">attribute_aliases =</span> <span class="fu">list</span>(<span class="at">dispersal_r_juv =</span> <span class="st">"dispersal_max_distance"</span>,</span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>                 <span class="at">dispersal_p_juv =</span> <span class="st">"dispersal_proportion"</span>,</span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>                 <span class="at">dispersal_source_n_k_cutoff =</span> <span class="st">"dispersal_source_n_k$cutoff"</span>,</span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a>                 <span class="at">dispersal_juv =</span> <span class="st">"dispersal_data"</span>),</span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a>  <span class="at">decimals =</span> <span class="dv">3</span></span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>juvenile_dispersal_gen<span class="sc">$</span>distance_data <span class="ot">&lt;-</span> distance_data</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a><span class="co"># Test run</span></span>
+<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a>adult_dispersal_data <span class="ot">&lt;-</span> adult_dispersal_gen<span class="sc">$</span><span class="fu">generate</span>(</span>
+<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a>  <span class="at">input_values =</span> <span class="fu">list</span>(</span>
+<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">dispersal_p_adult =</span> <span class="fl">0.5</span>,</span>
+<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">dispersal_r_adult =</span> <span class="dv">300</span></span>
+<span id="cb9-49"><a href="#cb9-49" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb9-50"><a href="#cb9-50" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span> _<span class="sc">$</span>dispersal_data</span>
+<span id="cb9-51"><a href="#cb9-51" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(adult_dispersal_data[[<span class="dv">1</span>]])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   target_pop source_pop emigrant_row immigrant_row dispersal_rate
+X2          2          1            1             1          0.029
+X5          5          1            2             1          0.029
+X6          6          1            3             1          0.026
+X7          7          1            4             1          0.021
+X8          8          1            5             1          0.017
+X9          9          1            6             1          0.013</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="latin-hypercube-sampling" class="level2">
+<h2 class="anchored" data-anchor-id="latin-hypercube-sampling">Latin Hypercube Sampling</h2>
+<p>I am only going to run one test simulation for now. However, I still want to generate a data set sampling all the variable parameters.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>lhs_generator <span class="ot">&lt;-</span> LatinHypercubeSampler<span class="sc">$</span><span class="fu">new</span>()</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Dispersal parameters</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"dispersal_p_juv"</span>, <span class="at">alpha =</span> <span class="fl">9.834837</span>, </span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">2.019125</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"dispersal_p_adult"</span>, <span class="at">alpha =</span> <span class="fl">1.5685</span>, </span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">2.365266</span>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_truncnorm_parameter</span>(<span class="st">"dispersal_r_juv"</span>, <span class="at">lower =</span> <span class="dv">0</span>, <span class="at">upper =</span> <span class="dv">1500</span>, </span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>                                      <span class="at">mean =</span> <span class="fl">725.9071</span>, <span class="at">sd =</span> <span class="fu">sqrt</span>(<span class="fl">204006.6</span>))</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_normal_parameter</span>(<span class="st">"dispersal_r_adult"</span>, <span class="at">mean =</span> <span class="fl">679.4172</span>,</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>                                   <span class="at">sd =</span> <span class="fu">sqrt</span>(<span class="fl">18594.59</span>))</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"dispersal_source_n_k_cutoff"</span>, <span class="at">lower =</span> <span class="dv">0</span>, </span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>                                    <span class="at">upper =</span> <span class="dv">1</span>)</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"dispersal_source_n_k_threshold"</span>, <span class="at">lower =</span> <span class="dv">0</span>, </span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>                                    <span class="at">upper =</span> <span class="dv">1</span>)</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"dispersal_target_n_k_cutoff"</span>, <span class="at">lower =</span> <span class="dv">0</span>, </span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>                                    <span class="at">upper =</span> <span class="dv">1</span>)</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"dispersal_target_n_k_threshold"</span>, <span class="at">lower =</span> <span class="dv">0</span>, </span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>                                    <span class="at">upper =</span> <span class="dv">1</span>)</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Population growth parameters</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"abundance_threshold"</span>, <span class="at">lower =</span> <span class="dv">0</span>, <span class="at">upper =</span> <span class="dv">25</span>, <span class="at">decimals =</span> <span class="dv">0</span>)</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"initial_release"</span>, <span class="at">lower =</span> <span class="dv">5</span>, <span class="at">upper =</span> <span class="dv">50</span>, <span class="at">decimals =</span> <span class="dv">0</span>)</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_uniform_parameter</span>(<span class="st">"density_max"</span>, <span class="at">lower =</span> <span class="dv">186000</span>, <span class="at">upper =</span> <span class="dv">310000</span>, <span class="at">decimals =</span> <span class="dv">0</span>)</span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_poisson_parameter</span>(<span class="st">"fecundity"</span>, <span class="at">lambda =</span> <span class="fl">8.509018</span>)</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a><span class="co"># # Transmission parameters</span></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a><span class="co"># lhs_generator$set_uniform_parameter("beta_Sa_winter", lower = 0, upper = 0.07588)</span></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a><span class="co"># lhs_generator$set_uniform_parameter("beta_Sa_summer", lower = 0, upper = 0.007784)</span></span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a><span class="co"># lhs_generator$set_triangular_parameter("Sj_multiplier", lower = 0, upper = 8.5,</span></span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a><span class="co">#                                        mode = 3)</span></span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a><span class="co"># lhs_generator$set_beta_parameter("beta_I2_modifier", alpha = 1.547023,</span></span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a><span class="co">#                                  beta = 0.4239236)</span></span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Mortality parameters</span></span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_Sj_winter"</span>, <span class="at">alpha =</span> <span class="fl">3.962104</span>,</span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">2.228683</span>)</span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_Sa_winter"</span>, <span class="at">alpha =</span> <span class="fl">21.89136</span>,</span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">19.59278</span>)</span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_Sj_summer"</span>, <span class="at">alpha =</span> <span class="fl">14.51403</span>,</span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">21.53632</span>)</span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_I1j_summer"</span>, <span class="at">alpha =</span> <span class="fl">2.756404</span>,</span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">62.47181</span>)</span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_I1j_winter"</span>, <span class="at">alpha =</span> <span class="fl">2.756404</span>,</span>
+<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">62.47181</span>)</span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_I1a_summer"</span>, <span class="at">alpha =</span> <span class="fl">1.771183</span>,</span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">27.19457</span>)</span>
+<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_I1a_winter"</span>, <span class="at">alpha =</span> <span class="fl">1.678424</span>,</span>
+<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">41.15975</span>)</span>
+<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>lhs_generator<span class="sc">$</span><span class="fu">set_beta_parameter</span>(<span class="st">"mortality_I2_modifier"</span>, <span class="at">alpha =</span> <span class="fl">1.033367</span>,</span>
+<span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">beta =</span> <span class="fl">3.505319</span>)</span>
+<span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a><span class="co"># # Recovery parameters</span></span>
+<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a><span class="co"># lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,</span></span>
+<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a><span class="co">#                                  beta = 620.1732)</span></span>
+<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a><span class="co"># lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,</span></span>
+<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a><span class="co">#                                  beta = 29.18489)</span></span>
+<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-59"><a href="#cb11-59" aria-hidden="true" tabindex="-1"></a>sample_data <span class="ot">&lt;-</span> lhs_generator<span class="sc">$</span><span class="fu">generate_samples</span>(<span class="at">number =</span> nsims, </span>
+<span id="cb11-60"><a href="#cb11-60" aria-hidden="true" tabindex="-1"></a>                                              <span class="at">random_seed =</span> random_seed) <span class="sc">|&gt;</span></span>
+<span id="cb11-61"><a href="#cb11-61" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">sample =</span> <span class="dv">1</span><span class="sc">:</span>nsims, <span class="at">mortality_Sa_summer =</span> <span class="dv">0</span>, </span>
+<span id="cb11-62"><a href="#cb11-62" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_I2j_summer =</span> mortality_I2_modifier <span class="sc">*</span> mortality_I1j_summer,</span>
+<span id="cb11-63"><a href="#cb11-63" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_I2j_winter =</span> mortality_I2_modifier <span class="sc">*</span> mortality_I1j_winter,</span>
+<span id="cb11-64"><a href="#cb11-64" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_I2a_winter =</span> mortality_I2_modifier <span class="sc">*</span> mortality_I1a_winter,</span>
+<span id="cb11-65"><a href="#cb11-65" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_I2a_summer =</span> mortality_I2_modifier <span class="sc">*</span> mortality_I1a_summer,</span>
+<span id="cb11-66"><a href="#cb11-66" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_Rj_summer =</span> mortality_Sj_summer,</span>
+<span id="cb11-67"><a href="#cb11-67" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_Ra_summer =</span> mortality_Sa_summer,</span>
+<span id="cb11-68"><a href="#cb11-68" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_Rj_winter =</span> mortality_Sj_winter,</span>
+<span id="cb11-69"><a href="#cb11-69" aria-hidden="true" tabindex="-1"></a>           <span class="at">mortality_Ra_winter =</span> mortality_Sa_winter)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="simulation" class="level2">
+<h2 class="anchored" data-anchor-id="simulation">Simulation</h2>
+<p>To do this, I will create a R6 object that handles the logistics of simulation, passing sample data and generator outputs as appropriate to the simulation function, parallelizing, and writing results to disk.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>handler <span class="ot">&lt;-</span> SimulationHandler<span class="sc">$</span><span class="fu">new</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample_data =</span> sample_data,</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">model_template =</span> model_template,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">generators =</span> <span class="fu">list</span>(juvenile_dispersal_gen,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>                    adult_dispersal_gen,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>                    capacity_gen),</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">parallel_cores =</span> parallel_cores,</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">results_dir =</span> results_dir</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>handler<span class="sc">$</span><span class="fu">run</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>$summary
+[1] "1 of 1 sample models ran and saved results successfully"
+
+$failed_indices
+integer(0)
+
+$warning_indices
+NULL
+
+$full_log
+$full_log[[1]]
+$full_log[[1]]$successful
+[1] TRUE
+
+$full_log[[1]]$message
+[1] "Model sample 1 simulation ran successfully and the results were saved"</code></pre>
+</div>
+</div>
+</section>
+<section id="visualization" class="level2">
+<h2 class="anchored" data-anchor-id="visualization">Visualization</h2>
+<p>Let’s look at the outcome of this simulation.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>basemap <span class="ot">&lt;-</span> rnaturalearth<span class="sc">::</span><span class="fu">ne_coastline</span>() <span class="sc">|&gt;</span> </span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_transform</span>(<span class="fu">crs</span>(region<span class="sc">$</span>region_raster)) <span class="sc">|&gt;</span> </span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_crop</span>(<span class="fu">st_bbox</span>(region<span class="sc">$</span>region_raster))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"Scripts/animate_sim.R"</span>))</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(<span class="fu">file.path</span>(results_dir, <span class="st">"sample_1_results.qs"</span>),</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>            region, <span class="dv">3</span>, <span class="dv">1940</span><span class="sc">:</span><span class="dv">1993</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="test_simulation_files/figure-html/viz-1.gif" class="img-fluid"></p>
+</div>
+</div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>

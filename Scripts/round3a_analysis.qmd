@@ -9,7 +9,7 @@ lightbox: true
 theme: materia
 ---
 
-```{r setup, message = FALSE, echo = FALSE}
+```{r setup, message = FALSE, warning = FALSE}
 library(tidyplots)
 library(paletteer)
 library(here)
@@ -20,10 +20,12 @@ library(tidyverse)
 library(furrr)
 library(bayestestR)
 library(qs2)
+library(epizootic)
 plan(multicore)
 source(here("Scripts/validation_metric_functions.R"))
 source(here("Scripts/convenience_functions.R"))
 source(here("Scripts/animate_sim.R"))
+source(here("Scripts/pp_check.R"))
 set_trust_promises(TRUE)
 region <- qread(here("Data/Input/finch_region.qs"))
 round2_metrics <- read_csv(here("Data/Validation/round2c_validation_metrics.csv"))
@@ -47,6 +49,9 @@ trend_metrics3a <- read_csv(here("Data/Validation/round3a_trend_metrics.csv")) |
     pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
 round3a_metrics$hm_trend_1970[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1970") |> pull(value)
 round3a_metrics$hm_trend_1993[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1993") |> pull(value)
+finch_region <- "Data/Input/finch_region.qs" |> here() |> qread()
+region_raster <- finch_region$region_raster
+region_raster[which(!is.na(raster::values(region_raster)))] <- 1
 ```
 
 # What is my goal in Round 3a of simulation?
@@ -95,7 +100,7 @@ labels <- c("Mycoplasma presence", "Finch pres/abs",
 plotlist <- pmap(list(names(validation_metrics)[1:7], quantiles, labels), function(x, y, z) {
     outliers_removed <- validation_metrics[, c(x, "Round")][pull(validation_metrics, x) < quantile(pull(validation_metrics, x), 0.95, na.rm=T), ]
     ggplot(data = outliers_removed, aes(x = .data[[x]], fill = Round, group = Round)) +
-    geom_histogram(position = "dodge") +
+    geom_histogram(position = "dodge", bins = 30) +
     geom_vline(xintercept = y, color = "blue") +
     xlab(z) +
     scale_fill_paletteer_d("PNWColors::Sunset2")
@@ -109,11 +114,11 @@ Performance has improved on the metrics used for ABC (*Mycoplasma* presence and 
 
 I will continue with the same two metrics used in the previous rounds, for consistency.
 
-```{r abc_two_metrics}
+```{r abc_two_metrics, message = F, warning = F}
 abc31 <- abc(param = round3a_priors[round3a_metrics$dc,],
              sumstat = round3a_metrics |> filter(dc) |> select(c(3,7)),
               target = rep(0, 2),
-             tol = 0.02,
+             tol = 0.01,
              method = "neuralnet")
 qsave(abc31, here("Data/Validation/abc_round3a.qs"))
 head(abc31$ss, 10)
@@ -131,7 +136,7 @@ animate_sim(ensemble_sa, region, remove_outliers = TRUE)
 
 This simulation doesn't look bad, though I definitely need to talk with house finch biologists about the realism of the pattern of finch spread on the landscape.
 
-```{r animate_recovered_adults}
+```{r animate_recovered_adults, warning = F}
 ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
 animate_sim(ensemble_ra, region, years = 1994:2016, burn_in = 111)
 ```
@@ -148,7 +153,7 @@ plot_abc_posteriors(abc31, round2_priors)
 
 We use two checks to see if it's time to stop modeling: Bayes factors and posterior predictive checks.
 
-```{r bayes_factor}
+```{r bayes_factor, warning = F, message = F}
 bayesfactor_parameters(posterior = as.data.frame(abc31$adj.values)[1:45], 
                        prior = round3a_priors[1:45])
 ```
@@ -156,3 +161,160 @@ bayesfactor_parameters(posterior = as.data.frame(abc31$adj.values)[1:45],
 Bayes factors look good! They are all well below 1.
 
 The final confirmation is to do posterior predictive checks. The way I do this is to do a small batch of pilot simulations based on the posteriors of round 3, run validation metrics, and make sure that the validation targets fall neatly within the distribution of observed validation metrics.
+
+```{r posterior_predictive}
+pp_metrics <- read_csv(here("Data_minimal/Validation/posterior_predictive_validation_metrics.csv"), show_col_types = FALSE)
+pp_check(model_metrics = pp_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+pp_check(model_metrics = round3a_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+pp_check(model_metrics = round2_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+pp_check(model_metrics = round1_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+```
+
+None of the rounds pass the posterior predictive check, but round 3 does the best at it, and the additional pilot simulations actually do worse than round 3, which is a strong argument for stopping. However, I think it's worthwhile to stop and check why round 3 can't quite meet the target. By which I mean, I want to examine *exactly what* my best validated model gets wrong.
+
+## What does the best validated ensemble model get wrong?
+
+I can answer this question by estimating the validation metrics just for the top models selected by ABC in round 3, and looking at what's correct and what isn't. I will do this for all of the metrics, even though I only used two for validation.
+
+```{r finch_arrival_deep_dive, message = F}
+source(here("Scripts/validated_ensemble_metrics.R"))
+hm_arrival_raster <- region_raster
+hm_arrival_raster[hm_arrival_df |> filter(is.na(arrival_index)) |> pull(region_cell)] <- 2
+raster::plot(hm_arrival_raster, main = "Places where finches sometimes fail to arrive", colNA = "blue")
+hm_arrival2 <- region_raster
+hm_arrival2[hm_arrival_df |> filter(arrival_index > 1, penalty > 33) |> pull(region_cell)] <- 2 
+raster::plot(hm_arrival2, main = "Places where finches sometimes arrive too early", colNA = "blue")
+```
+
+The first plot shows, in green, the locations where in some of the top simulations, we were unable to simulate the finches ever arriving there. The second plot shows, in green, some places where in some of the top simulations, the finches arrive much too early.
+
+```{r mg_arrival_deep_dive}
+mg_arrival_raster <- region_raster
+mg_arrival_raster[mg_arrival_metric |> filter(penalty > 45) |> pull(region_cell)] <- 2
+raster::plot(mg_arrival_raster, main = "Places where Mycoplasma arrives too early", colNA = "blue")
+```
+
+The places where the top simulations have MG arriving too early are concentrated in New England.
+
+```{r point_prevalence_deep_dive}
+point_prevalence_raster <- region_raster
+point_prevalence_raster[point_prevalence_metric |> filter(!is.na(prevalence), penalty > 0.1) |> pull(region_cell)] <- 2
+raster::plot(point_prevalence_raster, main = "Places where simulated prevalence is much too high", colNA = "blue")
+```
+
+There are not too many places where the simulated prevalence is much too high; the simulations do pretty well on this.
+
+```{r hm_presabs_deep_dive}
+hm_presence_raster <- region_raster
+false_negative <- hm_presabs_df |> filter(always_present, penalty > 5) |> pull(region_cell) |> 
+    map(\(i) finch_region$region_indices[i]) |> discard(\(v) length(v) == 0) |>
+    flatten_int()
+hm_presence_raster[false_negative] <- 2
+raster::plot(hm_presence_raster, colNA = "blue", main = "Places where models fail to simulate continuous finch presence")
+hm_absence_raster <- region_raster
+false_positive <- hm_presabs_df |> filter(always_absent, penalty > 5) |> pull(region_cell) |>
+    map_int(\(i) finch_region$region_indices[i])
+hm_absence_raster[false_positive] <- 2
+raster::plot(hm_absence_raster, colNA = "blue", main = "Places where finches are absent but the model simulates presence")
+```
+
+The places with false negatives (failure to simulate continuous finch presence) are in the West, and the places with false positives are in the South. There are more false negatives than false positives.
+
+```{r mg_presence_deep_dive}
+mg_presence_raster <- region_raster
+mg_presence_raster[mg_presence_df |> filter(none_sick) |> pull(region_cell)] <- 2
+raster::plot(mg_presence_raster, colNA = "blue", main = "Places where models fail to simulate continuous presence of Mycoplasma")
+```
+
+Most of the places where the model fails to simulate MG outbreaks are in the West, but it's not many points; the model does well on this.
+
+# Time Series
+
+There are a few aspatial time series I'm interested in looking at from the top validated models. First, I want to see an overall trajectory of house finch population size.
+
+```{r population_size_ts}
+sim_weights <- data.frame(sim = selected_samples_3, weight = abc31$weights)
+ensemble_model <- ensemble_time_series(selected_samples_3, here("Data/Output/Round3a")) |> 
+    left_join(sim_weights, by = c("Simulation" = "sim")) |>
+    mutate(Simulation = factor(Simulation))
+
+# Sum across compartments/life stages per simulation/time
+ensemble_by_sim_time <- ensemble_model |>
+  group_by(Time, Simulation, weight) |>
+  summarize(Abundance = sum(Abundance), .groups = "drop")
+
+# Calculate weighted average by time
+weighted_average <- ensemble_by_sim_time |>
+  group_by(Time) |>
+  summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop")
+
+p <- ensemble_by_sim_time |> 
+    tidyplot(x = Time, y = Abundance, group = Simulation) |>
+    add_sum_line(alpha = 0.4) |>
+    add_annotation_line(x = 1994, xend = 1994, y = 0, yend = 6e08, linetype = "dashed") |>
+    add_annotation_text(x = 1994, y = 6e08, text = "MG start") |>
+    add_title("Ensemble Finch Population Size Time Series")
+
+p + geom_line(data = weighted_average, aes(x = Time, y = Abundance, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```
+
+What's interesting here is that the seasonal variation in population size reduces after the introduction of MG.
+
+```{r prevalence_ts, warning = F}
+weighted_average2 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation, weight) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    group_by(Infected, Time) |>
+    summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    mutate(Prevalence = InfectedTRUE/InfectedFALSE)
+
+p2 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    mutate(Prevalence = InfectedTRUE/InfectedFALSE) |>
+    tidyplot(x = Time, y = Prevalence, group = Simulation) |>
+    add_line(alpha = 0.4) |> 
+    adjust_y_axis(transform = "log10") |>
+    add_title("Ensemble MG Prevalence Time Series (Log Scale)")
+
+p2 + geom_line(data = weighted_average2, aes(x = Time, y = Prevalence, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```
+
+The simulations with the prevalence at 100% are definitely too high; I'll want to investigate the simulations that end up with a prevalence lower than that. Let's have a look at number of cases of conjunctivitis over time:
+
+```{r case_ts}
+weighted_average3 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation, weight) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    group_by(Infected, Time) |>
+    summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected")
+
+p3 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    tidyplot(x = Time, y = InfectedTRUE, group = Simulation) |>
+    add_line(alpha = 0.4) |>
+    adjust_y_axis_title("MG Cases") |>
+    add_title("Ensemble MG Cases Time Series")
+
+p3 + geom_line(data = weighted_average3, aes(x = Time, y = InfectedTRUE, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```

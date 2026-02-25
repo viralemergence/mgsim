@@ -25,7 +25,7 @@ dc <- results_dir |>
   map(length) |>
   map_lgl(\(x) x > 214)
 
-  # Function to filter file paths based on the second number
+# Function to filter file paths based on the second number
 filter_paths <- function(file_paths) {
   # Use str_extract to capture the last number before the underscore
   last_numbers <- as.numeric(str_extract(file_paths, "(?<=/)(\\d+)(?=_)"))
@@ -93,7 +93,7 @@ infected_list <- results_dir[dc] |>
       filter(Year %in% 1994:2016)
   })
 
-  no_infection <- sapply(infected_list, function(d) nrow(d) == 0)
+no_infection <- sapply(infected_list, function(d) nrow(d) == 0)
 
 # Pre-allocate the penalty vector
 mg_presence_penalty <- rep(NA, length(infected_list))
@@ -161,7 +161,7 @@ presence_list <- results_dir[dc] |>
       left_join(year_lookup, by = join_by(index))
   })
 
-  # Calculating whether simulations have presence/absence in the right locations and years
+# Calculating whether simulations have presence/absence in the right locations and years
 presabs_metric <- foreach(
   plist = presence_list,
   .combine = c,
@@ -210,7 +210,7 @@ presabs_metric <- foreach(
     return(penalty)
   }
 
-  # Read in trend data
+# Read in trend data
 trend1993 <- read_csv(here(
   "mgsim/Data_minimal/Validation/abundance_trend_1993on.csv"
 ))
@@ -236,7 +236,7 @@ abundance_list <- results_dir[dc] |>
       filter(Year %in% 1970:2016)
   })
 
-  trend_metric <- foreach(
+trend_metric <- foreach(
   alist = abundance_list,
   .combine = c,
   .packages = c("dplyr", "purrr", "qs", "tidyr", "broom", "Rcpp")
@@ -270,9 +270,10 @@ abundance_list <- results_dir[dc] |>
 
     gc()
     return(c(penalty1993 = penalty1993, penalty1970 = penalty1970))
-  } |> bind_rows()
+  } |>
+  bind_rows()
 
-  winter_indices <- seq(1, 39, 2)
+winter_indices <- seq(1, 39, 2)
 summer_indices <- seq(2, 40, 2)
 # Read in validation data
 prevalence <- here(
@@ -289,7 +290,7 @@ prevalence <- here(
     )
   )
 
-  prevalence_list <- results_dir[dc] |>
+prevalence_list <- results_dir[dc] |>
   map(\(f) paste0("/glade/work/pilowskyj/Round3a/", f)) |>
   lapply(list.files, full.names = TRUE) |>
   lapply(function(p) {
@@ -305,7 +306,7 @@ prevalence <- here(
       filter(Year %in% 1995:2014)
   })
 
-  point_prevalence_metric <- foreach(
+point_prevalence_metric <- foreach(
   plist = prevalence_list,
   .combine = c,
   .packages = c("dplyr", "purrr")
@@ -439,7 +440,7 @@ presence_list <- results_dir[dc] |>
       left_join(year_lookup, by = join_by(index))
   })
 
-  hm_arrival <- here(
+hm_arrival <- here(
   "mgsim/Data_minimal/Validation/haemorhous_first_arrival.csv"
 ) |>
   read_csv() |>
