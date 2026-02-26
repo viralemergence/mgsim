@@ -155,7 +155,7 @@ We use two checks to see if it's time to stop modeling: Bayes factors and poster
 
 ```{r bayes_factor, warning = F, message = F}
 bayesfactor_parameters(posterior = as.data.frame(abc31$adj.values)[1:45], 
-                       prior = round3a_priors[1:45])
+                       prior = round3a_priors[1:45], verbose = FALSE)
 ```
 
 Bayes factors look good! They are all well below 1.
@@ -274,15 +274,17 @@ weighted_average2 <- ensemble_model |>
     group_by(Infected, Time) |>
     summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop") |>
     pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
-    mutate(Prevalence = InfectedTRUE/InfectedFALSE)
+    mutate(Prevalence = InfectedTRUE/(InfectedTRUE + InfectedFALSE))
 
-p2 <- ensemble_model |>
+prevalence_df <- ensemble_model |>
     filter(Year > 1993) |>
     mutate(Infected = str_detect(Compartment, "I")) |>
     group_by(Infected, Time, Simulation) |>
     summarize(Abundance = sum(Abundance), .groups = "drop") |>
     pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
-    mutate(Prevalence = InfectedTRUE/InfectedFALSE) |>
+    mutate(Prevalence = InfectedTRUE/(InfectedTRUE + InfectedFALSE))
+
+p2 <- prevalence_df |>
     tidyplot(x = Time, y = Prevalence, group = Simulation) |>
     add_line(alpha = 0.4) |> 
     adjust_y_axis(transform = "log10") |>
@@ -292,7 +294,7 @@ p2 + geom_line(data = weighted_average2, aes(x = Time, y = Prevalence, group = N
               color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
 ```
 
-The simulations with the prevalence at 100% are definitely too high; I'll want to investigate the simulations that end up with a prevalence lower than that. Let's have a look at number of cases of conjunctivitis over time:
+The simulations where everything ends up at 100% prevalence from 2005 onward are somewhat concerning and I'll have to investigate them later. Let's have a look at number of cases of conjunctivitis over time:
 
 ```{r case_ts}
 weighted_average3 <- ensemble_model |>
@@ -318,3 +320,43 @@ p3 <- ensemble_model |>
 p3 + geom_line(data = weighted_average3, aes(x = Time, y = InfectedTRUE, group = NA), 
               color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
 ```
+
+# Prevalence Animations
+
+Based on the prevalence trajectories I saw in the time series, I would like to create animations of prevalence in a few individual simulations representing different prevalence trajectories through time, to get a sense of what happens in each.
+
+## Weighted Ensemble Average
+
+```{r weighted_average_prevalence}
+ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
+ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
+ensemble_sj <- ensemble_mean(selected_samples_3, abc31$weights, "Sj", here("Data/Output/Round3a"))
+ensemble_rj <- ensemble_mean(selected_samples_3, abc31$weights, "Rj", here("Data/Output/Round3a"))
+ensemble_I1a <- ensemble_mean(selected_samples_3, abc31$weights, "I1a", here("Data/Output/Round3a"))
+ensemble_I2a <- ensemble_mean(selected_samples_3, abc31$weights, "I2a", here("Data/Output/Round3a"))
+ensemble_I1j <- ensemble_mean(selected_samples_3, abc31$weights, "I1j", here("Data/Output/Round3a"))
+ensemble_I2j <- ensemble_mean(selected_samples_3, abc31$weights, "I2j", here("Data/Output/Round3a"))
+prevalence_array <- (ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j)/(ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j)
+animate_sim(prevalence_array, region, years = 1994:2016, burn_in = 111)
+```
+
+Yes, the present-day prevalence is much too high in the weighted ensemble mean. I suspect there is a problem coming from the fact that most of my spatiotemporal prevalence data is from before 2003, so it doesn't capture the fact that prevalence stopped increasing after a certain date. I wonder if I can find more recent prevalence data...
+
+## Simulation 7649
+
+This is a simulation that does *not* hit 100% prevalence, providing an alternative trajectory to look at.
+
+```{r prevalence_anim_7649}
+prevalence_sim(7649, region, here("Data/Output/Round3a"), biclass = TRUE)
+prevalence_sim(7649, region, here("Data/Output/Round3a"))
+```
+
+## Simulation 9673
+
+This simulation also does not hit 100% prevalence; in fact, it eventually gets to zero.
+
+```{r prevalence_anim_9673}
+prevalence_sim(9673, region, here("Data/Output/Round3a"), biclass = TRUE)
+```
+
+Wow, okay, this is one is wild. That's definitely not what happened.

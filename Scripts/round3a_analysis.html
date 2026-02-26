@@ -100,6 +100,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#what-does-the-best-validated-ensemble-model-get-wrong" id="toc-what-does-the-best-validated-ensemble-model-get-wrong" class="nav-link" data-scroll-target="#what-does-the-best-validated-ensemble-model-get-wrong">What does the best validated ensemble model get wrong?</a></li>
   </ul></li>
   <li><a href="#time-series" id="toc-time-series" class="nav-link" data-scroll-target="#time-series">Time Series</a></li>
+  <li><a href="#prevalence-animations" id="toc-prevalence-animations" class="nav-link" data-scroll-target="#prevalence-animations">Prevalence Animations</a>
+  <ul class="collapse">
+  <li><a href="#weighted-ensemble-average" id="toc-weighted-ensemble-average" class="nav-link" data-scroll-target="#weighted-ensemble-average">Weighted Ensemble Average</a></li>
+  <li><a href="#simulation-7649" id="toc-simulation-7649" class="nav-link" data-scroll-target="#simulation-7649">Simulation 7649</a></li>
+  <li><a href="#simulation-9673" id="toc-simulation-9673" class="nav-link" data-scroll-target="#simulation-9673">Simulation 9673</a></li>
+  </ul></li>
   </ul>
 </nav>
 </div>
@@ -482,7 +488,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">bayesfactor_parameters</span>(<span class="at">posterior =</span> <span class="fu">as.data.frame</span>(abc31<span class="sc">$</span>adj.values)[<span class="dv">1</span><span class="sc">:</span><span class="dv">45</span>], </span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>                       <span class="at">prior =</span> round3a_priors[<span class="dv">1</span><span class="sc">:</span><span class="dv">45</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>                       <span class="at">prior =</span> round3a_priors[<span class="dv">1</span><span class="sc">:</span><span class="dv">45</span>], <span class="at">verbose =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>possible infinite density at lower end
@@ -533,51 +539,51 @@ running program with fewer knots</code></pre>
 
 Parameter                      |        BF
 ------------------------------------------
-dispersal_p_juv                |  9.64e-09
-dispersal_p_adult              |  1.04e-13
-dispersal_r_juv                |  2.09e-18
-dispersal_r_adult              |  2.86e-08
-dispersal_source_n_k_cutoff    |     0.007
-dispersal_source_n_k_threshold |  1.82e-04
-dispersal_target_n_k_cutoff    |  3.58e-14
-dispersal_target_n_k_threshold |  7.32e-07
-abundance_threshold            |  1.35e-05
-initial_release                |  7.62e-14
-density_max                    |  5.28e-17
-fecundity                      |     0.020
-infected_t1                    |  1.31e-06
-beta_Sa_winter                 |  1.29e-57
-beta_Sa_summer                 | 2.70e-117
+dispersal_p_juv                |  4.86e-05
+dispersal_p_adult              |  8.47e-12
+dispersal_r_juv                |  4.53e-18
+dispersal_r_adult              |  2.49e+13
+dispersal_source_n_k_cutoff    |     0.016
+dispersal_source_n_k_threshold |  5.92e-05
+dispersal_target_n_k_cutoff    |  2.27e-13
+dispersal_target_n_k_threshold |  3.91e-06
+abundance_threshold            |  2.24e-04
+initial_release                |  6.27e-13
+density_max                    |  1.03e-15
+fecundity                      |     0.017
+infected_t1                    |  7.68e-06
+beta_Sa_winter                 |  1.73e-57
+beta_Sa_summer                 | 4.84e-117
 beta_I2_modifier               |  0.00e+00
-mortality_Sj_winter            |  7.12e-11
-mortality_Sa_winter            |  1.14e-11
-mortality_Sj_summer            |  6.93e-15
-mortality_I1j_winter           |  2.23e-09
-mortality_I1j_summer           |  3.83e-60
-mortality_I1a_summer           |  2.16e-97
-mortality_I1a_winter           |  9.86e-11
-mortality_I2_modifier          |  1.15e-04
-mortality_I2j_summer           |  6.93e-75
-mortality_I2j_winter           |  8.39e-08
-mortality_I2a_winter           |  1.05e-57
-mortality_I2a_summer           | 4.51e-123
-mortality_Rj_summer            |  1.54e-10
-mortality_Rj_winter            |  1.26e-08
-mortality_Ra_winter            |  2.46e-16
-beta_Sj_winter                 |  1.16e-09
-beta_Sj_summer                 |  9.02e-07
-beta_Ra_winter                 |  1.97e-09
-beta_Rj_winter                 | 5.40e-124
-beta_Ra_summer                 | 7.40e-153
-beta_Rj_summer                 |  7.58e-04
-recovery_I1j_summer            |  2.36e-17
-recovery_I1a_summer            |  5.43e-19
-recovery_I2j_summer            |  1.81e-58
-recovery_I2a_summer            |  6.28e-20
-recovery_I1j_winter            |  8.37e-26
-recovery_I1a_winter            |  1.67e-15
-recovery_I2j_winter            |  4.54e-99
-recovery_I2a_winter            |  5.27e-31
+mortality_Sj_winter            |  1.18e-10
+mortality_Sa_winter            |  6.16e-10
+mortality_Sj_summer            |  1.95e-14
+mortality_I1j_winter           |  9.71e-09
+mortality_I1j_summer           |  2.77e-59
+mortality_I1a_summer           |  1.87e-95
+mortality_I1a_winter           |  1.31e-10
+mortality_I2_modifier          |     0.002
+mortality_I2j_summer           |  2.71e-74
+mortality_I2j_winter           |  5.77e-07
+mortality_I2a_winter           |  1.35e-57
+mortality_I2a_summer           | 3.74e-121
+mortality_Rj_summer            |  7.76e-11
+mortality_Rj_winter            |  6.67e-08
+mortality_Ra_winter            |  1.19e-15
+beta_Sj_winter                 |  2.35e-09
+beta_Sj_summer                 |  1.52e-06
+beta_Ra_winter                 |  6.00e-09
+beta_Rj_winter                 | 1.24e-123
+beta_Ra_summer                 | 3.20e-151
+beta_Rj_summer                 |     0.001
+recovery_I1j_summer            |  1.42e-15
+recovery_I1a_summer            |  4.78e-19
+recovery_I2j_summer            |  2.95e-57
+recovery_I2a_summer            |  1.00e-22
+recovery_I1j_winter            |  2.13e-22
+recovery_I1a_winter            |  6.94e-14
+recovery_I2j_winter            | 2.21e-100
+recovery_I2a_winter            |  6.92e-30
 
 * Evidence Against The Null: 0</code></pre>
 </div>
@@ -828,22 +834,24 @@ mean of x mean of y
 <span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(Infected, Time) <span class="sc">|&gt;</span></span>
 <span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarize</span>(<span class="at">Abundance =</span> <span class="fu">weighted.mean</span>(Abundance, weight), <span class="at">.groups =</span> <span class="st">"drop"</span>) <span class="sc">|&gt;</span></span>
 <span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> Infected, <span class="at">values_from =</span> Abundance, <span class="at">names_prefix =</span> <span class="st">"Infected"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Prevalence =</span> InfectedTRUE<span class="sc">/</span>InfectedFALSE)</span>
+<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Prevalence =</span> InfectedTRUE<span class="sc">/</span>(InfectedTRUE <span class="sc">+</span> InfectedFALSE))</span>
 <span id="cb47-10"><a href="#cb47-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-11"><a href="#cb47-11" aria-hidden="true" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> ensemble_model <span class="sc">|&gt;</span></span>
+<span id="cb47-11"><a href="#cb47-11" aria-hidden="true" tabindex="-1"></a>prevalence_df <span class="ot">&lt;-</span> ensemble_model <span class="sc">|&gt;</span></span>
 <span id="cb47-12"><a href="#cb47-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">filter</span>(Year <span class="sc">&gt;</span> <span class="dv">1993</span>) <span class="sc">|&gt;</span></span>
 <span id="cb47-13"><a href="#cb47-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Infected =</span> <span class="fu">str_detect</span>(Compartment, <span class="st">"I"</span>)) <span class="sc">|&gt;</span></span>
 <span id="cb47-14"><a href="#cb47-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(Infected, Time, Simulation) <span class="sc">|&gt;</span></span>
 <span id="cb47-15"><a href="#cb47-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarize</span>(<span class="at">Abundance =</span> <span class="fu">sum</span>(Abundance), <span class="at">.groups =</span> <span class="st">"drop"</span>) <span class="sc">|&gt;</span></span>
 <span id="cb47-16"><a href="#cb47-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> Infected, <span class="at">values_from =</span> Abundance, <span class="at">names_prefix =</span> <span class="st">"Infected"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb47-17"><a href="#cb47-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Prevalence =</span> InfectedTRUE<span class="sc">/</span>InfectedFALSE) <span class="sc">|&gt;</span></span>
-<span id="cb47-18"><a href="#cb47-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">tidyplot</span>(<span class="at">x =</span> Time, <span class="at">y =</span> Prevalence, <span class="at">group =</span> Simulation) <span class="sc">|&gt;</span></span>
-<span id="cb47-19"><a href="#cb47-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_line</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb47-20"><a href="#cb47-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">adjust_y_axis</span>(<span class="at">transform =</span> <span class="st">"log10"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb47-21"><a href="#cb47-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_title</span>(<span class="st">"Ensemble MG Prevalence Time Series (Log Scale)"</span>)</span>
-<span id="cb47-22"><a href="#cb47-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-23"><a href="#cb47-23" aria-hidden="true" tabindex="-1"></a>p2 <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="at">data =</span> weighted_average2, <span class="fu">aes</span>(<span class="at">x =</span> Time, <span class="at">y =</span> Prevalence, <span class="at">group =</span> <span class="cn">NA</span>), </span>
-<span id="cb47-24"><a href="#cb47-24" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="dv">1</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb47-17"><a href="#cb47-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Prevalence =</span> InfectedTRUE<span class="sc">/</span>(InfectedTRUE <span class="sc">+</span> InfectedFALSE))</span>
+<span id="cb47-18"><a href="#cb47-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-19"><a href="#cb47-19" aria-hidden="true" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> prevalence_df <span class="sc">|&gt;</span></span>
+<span id="cb47-20"><a href="#cb47-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">tidyplot</span>(<span class="at">x =</span> Time, <span class="at">y =</span> Prevalence, <span class="at">group =</span> Simulation) <span class="sc">|&gt;</span></span>
+<span id="cb47-21"><a href="#cb47-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_line</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb47-22"><a href="#cb47-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">adjust_y_axis</span>(<span class="at">transform =</span> <span class="st">"log10"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb47-23"><a href="#cb47-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_title</span>(<span class="st">"Ensemble MG Prevalence Time Series (Log Scale)"</span>)</span>
+<span id="cb47-24"><a href="#cb47-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-25"><a href="#cb47-25" aria-hidden="true" tabindex="-1"></a>p2 <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="at">data =</span> weighted_average2, <span class="fu">aes</span>(<span class="at">x =</span> Time, <span class="at">y =</span> Prevalence, <span class="at">group =</span> <span class="cn">NA</span>), </span>
+<span id="cb47-26"><a href="#cb47-26" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="dv">1</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -853,7 +861,7 @@ mean of x mean of y
 </div>
 </div>
 </div>
-<p>The simulations with the prevalence at 100% are definitely too high; I’ll want to investigate the simulations that end up with a prevalence lower than that. Let’s have a look at number of cases of conjunctivitis over time:</p>
+<p>The simulations where everything ends up at 100% prevalence from 2005 onward are somewhat concerning and I’ll have to investigate them later. Let’s have a look at number of cases of conjunctivitis over time:</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -888,6 +896,123 @@ mean of x mean of y
 </div>
 </div>
 </div>
+</section>
+<section id="prevalence-animations" class="level1">
+<h1>Prevalence Animations</h1>
+<p>Based on the prevalence trajectories I saw in the time series, I would like to create animations of prevalence in a few individual simulations representing different prevalence trajectories through time, to get a sense of what happens in each.</p>
+<section id="weighted-ensemble-average" class="level2">
+<h2 class="anchored" data-anchor-id="weighted-ensemble-average">Weighted Ensemble Average</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a>ensemble_sa <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Sa"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a>ensemble_ra <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Ra"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a>ensemble_sj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Sj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-4"><a href="#cb49-4" aria-hidden="true" tabindex="-1"></a>ensemble_rj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Rj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-5"><a href="#cb49-5" aria-hidden="true" tabindex="-1"></a>ensemble_I1a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I1a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-6"><a href="#cb49-6" aria-hidden="true" tabindex="-1"></a>ensemble_I2a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I2a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-7"><a href="#cb49-7" aria-hidden="true" tabindex="-1"></a>ensemble_I1j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I1j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-8"><a href="#cb49-8" aria-hidden="true" tabindex="-1"></a>ensemble_I2j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I2j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb49-9"><a href="#cb49-9" aria-hidden="true" tabindex="-1"></a>prevalence_array <span class="ot">&lt;-</span> (ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j)<span class="sc">/</span>(ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j)</span>
+<span id="cb49-10"><a href="#cb49-10" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence_array, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round3a_analysis_files/figure-html/weighted_average_prevalence-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-27"><img src="round3a_analysis_files/figure-html/weighted_average_prevalence-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Yes, the present-day prevalence is much too high in the weighted ensemble mean. I suspect there is a problem coming from the fact that most of my spatiotemporal prevalence data is from before 2003, so it doesn’t capture the fact that prevalence stopped increasing after a certain date. I wonder if I can find more recent prevalence data…</p>
+</section>
+<section id="simulation-7649" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-7649">Simulation 7649</h2>
+<p>This is a simulation that does <em>not</em> hit 100% prevalence, providing an alternative trajectory to look at.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb51"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a><span class="fu">prevalence_sim</span>(<span class="dv">7649</span>, region, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>), <span class="at">biclass =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): var
+has missing values, omitted in finding classes</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): N is
+large, and some styles will run very slowly; sampling imposed</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): var
+has missing values, omitted in finding classes</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): N is
+large, and some styles will run very slowly; sampling imposed</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb57"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a><span class="fu">prevalence_sim</span>(<span class="dv">7649</span>, region, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round3a_analysis_files/figure-html/prevalence_anim_7649-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-28"><img src="round3a_analysis_files/figure-html/prevalence_anim_7649-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="simulation-9673" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-9673">Simulation 9673</h2>
+<p>This simulation also does not hit 100% prevalence; in fact, it eventually gets to zero.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="fu">prevalence_sim</span>(<span class="dv">9673</span>, region, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>), <span class="at">biclass =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): var
+has missing values, omitted in finding classes</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): N is
+large, and some styles will run very slowly; sampling imposed</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): var
+has missing values, omitted in finding classes</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in classInt::classIntervals(.data[[var]], n = dim, style = style): N is
+large, and some styles will run very slowly; sampling imposed</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round3a_analysis_files/figure-html/prevalence_anim_9673-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-29"><img src="round3a_analysis_files/figure-html/prevalence_anim_9673-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Wow, okay, this is one is wild. That’s definitely not what happened.</p>
+</section>
 </section>
 
 </main>
