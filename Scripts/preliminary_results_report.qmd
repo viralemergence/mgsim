@@ -1,0 +1,300 @@
+---
+title: "Preliminary results from process-explicit models of the MG outbreak in house finches"
+author: "July Pilowsky"
+format: html
+editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
+---
+
+```{r setup, echo = F, message = F, warning = F}
+# Load packages
+library(conflicted)
+library(tidyverse)
+library(tidyplots)
+library(tidymodels)
+library(terra)
+library(DALEXtra)
+library(qs)
+library(here)
+library(paletteer)
+library(furrr)
+conflicts_prefer(dplyr::filter)
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE
+)
+# Source other scripts as needed
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+source(here("Scripts/animate_sim.R"))
+# Geospatial data
+region <- qread(here("Data/Input/finch_region.qs"))
+# Validation metrics
+round2_metrics <- read_csv(here(
+  "Data/Validation/round2c_validation_metrics.csv"
+))
+trend_metrics2 <- read_csv(here("Data/Validation/round2c_trend_metrics.csv")) |>
+  pivot_longer(
+    everything(),
+    names_to = c("metric", "sim"),
+    names_sep = "\\.\\.\\."
+  )
+round2_metrics$hm_trend_1970[round2_metrics$dc] <- trend_metrics2 |>
+  filter(metric == "penalty1970") |>
+  pull(value)
+round2_metrics$hm_trend_1993[round2_metrics$dc] <- trend_metrics2 |>
+  filter(metric == "penalty1993") |>
+  pull(value)
+round1_metrics <- read_csv(here(
+  "Data/Validation/round1_validation_metrics.csv"
+)) |>
+  mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
+round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(
+  1,
+  9752,
+  2
+)]
+round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(
+  2,
+  9752,
+  2
+)]
+round3a_metrics <- read_csv(here(
+  "Data/Validation/round3a_validation_metrics.csv"
+))
+trend_metrics3a <- read_csv(here(
+  "Data/Validation/round3a_trend_metrics.csv"
+)) |>
+  pivot_longer(
+    everything(),
+    names_to = c("metric", "sim"),
+    names_sep = "\\.\\.\\."
+  )
+round3a_metrics$hm_trend_1970[round3a_metrics$dc] <- trend_metrics3a |>
+  filter(metric == "penalty1970") |>
+  pull(value)
+round3a_metrics$hm_trend_1993[round3a_metrics$dc] <- trend_metrics3a |>
+  filter(metric == "penalty1993") |>
+  pull(value)
+# Priors
+round3a_priors <- read_csv(here("Data/Input/sample_data_round3a.csv"), show_col_types = FALSE) |>
+  mutate(
+    mortality_Sa_summer = 0,
+    mortality_Ra_summer = mortality_Sa_summer
+  )
+```
+
+# 1. What is this all about?
+
+These are process-explicit models of the MG outbreak in house finches using the `epizootic` package, which I created for modeling wildlife disease outbreaks. This is a powerful tool for understanding processes and spatially-explicit disease dynamics. However, we must keep in mind the following limitations:
+
+-   The models are only as good as the validation data.
+-   The models assume that the characteristics of *Mycoplasma gallisepticum* do not change over time, which we know to be false.
+-   The models assume that there are no regional differences in the characteristics of *M. gallisepticum* or house finches, which we also know to be false.
+
+# 2. The validation data
+
+We used the following data for model validation:
+
+-   **Are there finches in Washington DC in 1994?** This is crucial because this is the time and place where the Mycoplasma gallisepticum outbreak first occurred. If there are no finches there, there can't be an outbreak. The subsequent metrics are conditioned on whether the simulation meets this criterion. All simulations that fail are excluded.
+-   **Mycoplasma presence.** There are 90 locations where Project FeederWatch spotted infected finches every year for years on end. This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.
+-   **First arrival of *Haemorhous*.** I estimated the first arrival of the house finch in parts of its invasive range based on sightings from the Breeding Bird Survey, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range. I have these estimates for 14,850 locations.
+
+It is important to note that I started out with more validation data than this. I narrowed down to these metrics using `abctools::selectsumm`, which picks validation metrics from a set based on which ones parsimoniously inform the posterior distribution the most. This means I can justifiably try out other validation data if it seems like there are problems with the selected metrics.
+
+Let us have a look at the performance of the final round of simulation modeling on these metrics.
+
+```{r presence_in_dc}
+validation_metrics <- bind_rows(
+  round1_metrics,
+  round2_metrics,
+  round3a_metrics
+) |>
+  mutate(
+    Round = factor(c(rep("1", 10000), rep("2", 10000), rep("3", 10000)))
+  ) |>
+  filter(dc) |>
+  select(-hm_trend, -index)
+validation_metrics |>
+  tidyplot(x = dc, fill = Round) |>
+  add_count_bar() |>
+  adjust_y_axis_title("Count") |>
+  adjust_x_axis_title("Presence of finches in DC in 1994") |>
+  adjust_colors(new_colors = paletteer_d("PNWColors::Sunset2", 3))
+```
+
+There were 10,000 simulations in each round of modeling, so performance on this metric did not monotonically improve.
+
+Now we will examine the other two validation metrics, which are only calculated for simulations that had finches in DC in 1994.
+
+```{r validation_metrics}
+validation_metrics |>
+  pivot_longer(
+    c(mg_presence, hm_arrival),
+    values_to = "Value",
+    names_to = "Metric"
+  ) |>
+  mutate(Metric = recode(
+    Metric,
+    mg_presence = "MG presence",
+    hm_arrival = "First arrival of Haemorhous"
+  )) |>
+  tidyplot(x = Value, fill = Round) |>
+  add_histogram(bins = 30, alpha = 0.7) |>
+  adjust_y_axis_title("Count") |>
+  adjust_colors(new_colors = paletteer_d("PNWColors::Sunset2", 3)) |> 
+  split_plot(by = Metric, scales = "free_x")
+```
+
+Lower values are better for both, so there's improvement on both metrics, though first arrival of *Haemorhous* is still pretty far off from zero, the perfect score.
+
+At this point, what I did was take the top 1% of models from round 3 based on these three validation metrics, and then created a weighted ensemble mean of these simulations. I will refer to this as the validated ensemble model.
+
+# 3. Visualizing the validated ensemble model
+
+I find that the easiest way to visualize the outbreak dynamics is using animations. 
+
+## 3a. Total population size
+
+Let's start with an animation of total population size of house finches.
+
+```{r total_population_size}
+abc31 <- qread(here("Data/Validation/abc_round3a.qs"))
+selected_samples_3 <- round3a_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc31$unadj.values, copy = TRUE) |>
+  pull(sample)
+ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
+ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
+ensemble_sj <- ensemble_mean(selected_samples_3, abc31$weights, "Sj", here("Data/Output/Round3a"))
+ensemble_rj <- ensemble_mean(selected_samples_3, abc31$weights, "Rj", here("Data/Output/Round3a"))
+ensemble_I1a <- ensemble_mean(selected_samples_3, abc31$weights, "I1a", here("Data/Output/Round3a"))
+ensemble_I2a <- ensemble_mean(selected_samples_3, abc31$weights, "I2a", here("Data/Output/Round3a"))
+ensemble_I1j <- ensemble_mean(selected_samples_3, abc31$weights, "I1j", here("Data/Output/Round3a"))
+ensemble_I2j <- ensemble_mean(selected_samples_3, abc31$weights, "I2j", here("Data/Output/Round3a"))
+total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+animate_sim(total_population_size, region, years = 1940:2016)
+```
+
+We can see here the effect of the outbreak on population size, which is likely too dramatic to be realistic based on my understanding. It is important to note that I did not use finch trends in population size as validation metrics, so there was nothing selecting for correct population size trends.
+
+## 3b. Prevalence
+
+Here is an animation of prevalence of MG in the house finch population.
+
+```{r prevalence}
+total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+prevalence <- total_cases / total_population_size
+animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
+```
+
+The prevalence definitely gets too high to be realistic in this simulation. The validation metric that could control for this is spatiotemporal point prevalence, based on data points on prevalence in the literature, which I did not use here.
+
+# 4. Urbanization analysis
+
+A question I was really interested in answering with this model was whether urbanization really increases cases of MG, as many papers on MG have supposed based on date of first arrival of the outbreak in rural vs. urban areas. Here I fit a regression model to the validated ensemble model to investigate the relationship between urbanization and number of MG cases, controlling for other factors.
+
+```{r urbanization}
+# Prep the data
+total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+arr <- total_cases[, , 110:154]
+arr2 <- total_population_size[, , 110:154]
+years <- 1994:2016
+coords <- region$region_raster |> raster::coordinates()
+dt <- expand.grid(y = 1:dim(arr)[2], x = 1:dim(arr)[1], z = 1:dim(arr)[3]) |> 
+  mutate(Cases = arr[cbind(x, y, z)],
+         Population_size = arr2[cbind(x, y, z)])
+dt$Year <- years[round(dt$z / 2) + 1]
+dt$Season <- if_else(dt$z %% 2 == 0, 0, 0.5)
+dt$x <- rep(coords[, 1], 45)
+dt$y <- rep(coords[, 2], 45)
+dt$Time <- dt$Year + dt$Season
+index_case_coords <- c(y = 621173.8, x = 1475944)
+dt$Distance_from_index_case <- sqrt((dt$x - index_case_coords["x"])^2 + (dt$y - index_case_coords["y"])^2)
+
+# Extract environmental predictors
+col_names <- 1:19 %>%
+  as.character() %>%
+  map(~ paste0("bio", .)) %>%
+  append("urban") %>%
+  flatten_chr()
+files2 <- list.files(
+  "~/Documents/Very_Large_Data/predictors/CHELSA",
+  pattern = "^predictors_.+",
+  full.names = T
+) %>%
+  keep(str_detect, pattern = "\\.grd$") %>%
+  .[55:77] |>
+  set_names(years)
+extracted <- dt |>
+  group_by(Year) |>
+  group_split() |>
+  map(~ select(.x, x, y)) |>
+  future_map2(
+    files2,
+    function(p, f) {
+      r <- rast(f)
+      terra::extract(r, p, ID = F)
+    },
+    .options = furrr_options(seed = T)
+  ) %>%
+  map(~ set_names(., col_names)) %>%
+  list_rbind(names_to = "Year") |> 
+  select(bio1, bio4, urban) |> 
+  bind_cols(dt)
+
+# Fit model
+analysis_input <- extracted |> 
+    select(bio1, bio4, urban, Population_size, Cases, Year, Distance_from_index_case, Season) |>
+    mutate(Season = if_else(Season %% 0.5 == 0, "Winter", "Summer")) |>
+    mutate(Season = factor(Season, levels = c("Winter", "Summer"))) |>
+    drop_na()
+urb_split <- initial_split(analysis_input, strata = "Cases")
+urb_train <- training(urb_split)
+urb_test <- testing(urb_split)
+urb_recipe <- recipe(Cases ~ ., data = urb_train) |>
+    step_normalize(-Season, -all_outcomes()) |> 
+    step_dummy(Season)
+tune_spec <- boost_tree(
+    # tuned already to save time
+) |>
+    set_engine("xgboost") |>
+    set_mode("regression")
+# urb_folds <- vfold_cv(urb_train, v = 5, strata = "Cases")
+# urb_tune <- workflow() |> 
+#     add_recipe(urb_recipe) |>
+#     add_model(tune_spec) |>
+#     tune_grid(
+#         resamples = urb_folds,
+#         grid = 20,
+#         control = control_grid(save_pred = TRUE)
+#     )
+best_tree <- list(
+  trees = 316,
+    tree_depth = 4,
+    min_n = 12,
+    loss_reduction = 0.120,
+    sample_size = 0.621,
+    mtry = 8,
+    learn_rate = 0.210
+)
+final_wf_urb <- workflow() |> 
+  add_model(tune_spec) |>
+  add_recipe(urb_recipe) |> 
+  finalize_workflow(best_tree)
+final_fit_urb <- final_wf_urb |> last_fit(urb_split)
+final_fit_urb |> collect_metrics()
+
+# Visualize
+urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size))
+urb_explainer |> variable_importance() |> plot()
+urb_explainer %>% 
+  model_profile(variables = "urban", N = 2000) %>% 
+  plot() + ggtitle("Partial dependence profile for urbanization")
+```
+
+Intriguingly, urbanization is still a meaningful predictor of total MG cases even when we control for population size, which means that the effect of urbanization goes beyond simply increasing the finch population size. The partial dependence profile indicates that this is a threshold effect, in which having zero urbanized land cover is associated with lower cases, but any amount of urbanized land cover is associated with higher cases, and then the effect levels off.

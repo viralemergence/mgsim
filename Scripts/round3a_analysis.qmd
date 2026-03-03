@@ -49,7 +49,6 @@ trend_metrics3a <- read_csv(here("Data/Validation/round3a_trend_metrics.csv")) |
     pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
 round3a_metrics$hm_trend_1970[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1970") |> pull(value)
 round3a_metrics$hm_trend_1993[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1993") |> pull(value)
-finch_region <- "Data/Input/finch_region.qs" |> here() |> qread()
 region_raster <- finch_region$region_raster
 region_raster[which(!is.na(raster::values(region_raster)))] <- 1
 ```
