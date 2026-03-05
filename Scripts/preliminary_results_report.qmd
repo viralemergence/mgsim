@@ -7,6 +7,7 @@ toc: true
 code-fold: true
 lightbox: true
 theme: materia
+bibliography: references.bib
 ---
 
 ```{r setup, echo = F, message = F, warning = F}
@@ -89,18 +90,18 @@ round3a_priors <- read_csv(here("Data/Input/sample_data_round3a.csv"), show_col_
 
 # 1. What is this all about?
 
-These are process-explicit models of the MG outbreak in house finches using the `epizootic` package, which I created for modeling wildlife disease outbreaks. This is a powerful tool for understanding processes and spatially-explicit disease dynamics. However, we must keep in mind the following limitations:
+These are process-explicit models [@Pilowsky2022-ng] of the MG outbreak in house finches using [the `epizootic` package](https://cran.r-project.org/web//packages/epizootic/vignettes/mycoplasma.html), which I created for modeling wildlife disease outbreaks. This is a powerful tool for understanding processes and spatially-explicit disease dynamics, because unlike other approaches, it can give spatiotemporally explicit values for population size, new infections, and other key metrics. It can also be used to infer uncertain and unobserved parameters, such as the number of house finches in the founder population in New York. However, we must keep in mind the following limitations:
 
 -   The models are only as good as the validation data.
--   The models assume that the characteristics of *Mycoplasma gallisepticum* do not change over time, which we know to be false.
--   The models assume that there are no regional differences in the characteristics of *M. gallisepticum* or house finches, which we also know to be false.
+-   The models assume that the characteristics of *Mycoplasma gallisepticum* do not change over time, which we know to be false [@Fleming-Davies2018-ak].
+-   The models assume that there are no regional differences in the characteristics of *M. gallisepticum* or house finches, which we also know to be false [@Dhondt2006-cz].
 
 # 2. The validation data
 
 We used the following data for model validation:
 
 -   **Are there finches in Washington DC in 1994?** This is crucial because this is the time and place where the Mycoplasma gallisepticum outbreak first occurred. If there are no finches there, there can't be an outbreak. The subsequent metrics are conditioned on whether the simulation meets this criterion. All simulations that fail are excluded.
--   **Mycoplasma presence.** There are 90 locations where Project FeederWatch spotted infected finches every year for years on end. This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.
+-   **Mycoplasma presence.** There are 90 locations where Project FeederWatch spotted infected finches every year for years on end (median: 16 consecutive years). This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.
 -   **First arrival of *Haemorhous*.** I estimated the first arrival of the house finch in parts of its invasive range based on sightings from the Breeding Bird Survey, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range. I have these estimates for 14,850 locations.
 
 It is important to note that I started out with more validation data than this. I narrowed down to these metrics using `abctools::selectsumm`, which picks validation metrics from a set based on which ones parsimoniously inform the posterior distribution the most. This means I can justifiably try out other validation data if it seems like there are problems with the selected metrics.
@@ -126,9 +127,9 @@ validation_metrics |>
   adjust_colors(new_colors = paletteer_d("PNWColors::Sunset2", 3))
 ```
 
-There were 10,000 simulations in each round of modeling, so performance on this metric did not monotonically improve.
+There were 10,000 simulations in each round of modeling, so performance on this metric did not monotonically improve. This is more or less expected; I could not use this metric for validation by Approximate Bayesian Computation (ABC) because it is binary, so it was used as a pre-filter for ABC, so ABC could not optimize for it.
 
-Now we will examine the other two validation metrics, which are only calculated for simulations that had finches in DC in 1994.
+Now we will examine the other two validation metrics, *Mycoplasma* presence and first arrival of *Haemorhous*, which are only calculated for simulations that had finches in DC in 1994.
 
 ```{r validation_metrics}
 validation_metrics |>
@@ -149,7 +150,7 @@ validation_metrics |>
   split_plot(by = Metric, scales = "free_x")
 ```
 
-Lower values are better for both, so there's improvement on both metrics, though first arrival of *Haemorhous* is still pretty far off from zero, the perfect score.
+Lower values are better for both, so there's improvement on both metrics as we proceed through rounds 1, 2 and 3. However, first arrival of *Haemorhous* is still pretty far off from zero, the perfect score. We decided to stop modeling at this stage because the Bayes factors indicated that the posterior distributions had stabliized, and posterior predictive checks showed that the predictive power of the models could improve no further, at least with these validation metrics. The fact that first arrival of *Haemorhous* remained far from zero indicates that there is something about the assumptions of the model that makes it impossible to accurately recreate the first arrival of house finches to various regions.
 
 At this point, what I did was take the top 1% of models from round 3 based on these three validation metrics, and then created a weighted ensemble mean of these simulations. I will refer to this as the validated ensemble model.
 
@@ -179,7 +180,7 @@ total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj +
 animate_sim(total_population_size, region, years = 1940:2016)
 ```
 
-We can see here the effect of the outbreak on population size, which is likely too dramatic to be realistic based on my understanding. It is important to note that I did not use finch trends in population size as validation metrics, so there was nothing selecting for correct population size trends.
+We can see here the effect of the outbreak on population size. According to the literature, the MG outbreak roughly halved population densities of house finches [@Hochachka2021-dp], and in this animation, the population seems to decline by more than half after the arrival of MG. It is important to note that I did not use finch trends in population size as validation metrics, so there was nothing selecting for correct population size trends. As noted above, I chose validation metrics based on which combination of metrics informed the posterior distributions the most. I could try running the simulations again using validation metrics chosen a different way.
 
 ## 3b. Prevalence
 
@@ -191,7 +192,7 @@ prevalence <- total_cases / total_population_size
 animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
 ```
 
-The prevalence definitely gets too high to be realistic in this simulation. The validation metric that could control for this is spatiotemporal point prevalence, based on data points on prevalence in the literature, which I did not use here.
+The prevalence definitely gets too high to be realistic in this simulation; it is rare for a deadly outbreak like this one to reach 100% prevalence, let alone over such a large geographical extent. The validation metric that could control for this is spatiotemporal point prevalence, based on data points on prevalence in the literature, which I did not use here. As mentioned above, I chose my validation metrics based on which subset of them most informed the posterior distributions, but I could try re-running the simulations using validation metrics chosen a different way.
 
 # 4. Urbanization analysis
 
@@ -290,7 +291,7 @@ final_fit_urb <- final_wf_urb |> last_fit(urb_split)
 final_fit_urb |> collect_metrics()
 
 # Visualize
-urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size))
+urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size), verbose = FALSE)
 urb_explainer |> variable_importance() |> plot()
 urb_explainer %>% 
   model_profile(variables = "urban", N = 2000) %>% 
@@ -298,3 +299,5 @@ urb_explainer %>%
 ```
 
 Intriguingly, urbanization is still a meaningful predictor of total MG cases even when we control for population size, which means that the effect of urbanization goes beyond simply increasing the finch population size. The partial dependence profile indicates that this is a threshold effect, in which having zero urbanized land cover is associated with lower cases, but any amount of urbanized land cover is associated with higher cases, and then the effect levels off.
+
+I would advise caution in taking the exact size of the effect to heart (which is shown in the partial dependence profile as an average increase of 350 cases per 46 km x 46 km grid cell as proportion of urban land goes above 0) due to the excessively high prevalence in the validated ensemble model.

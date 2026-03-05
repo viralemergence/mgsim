@@ -56,7 +56,27 @@ div.sourceCode
 @media screen {
 pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
-</style>
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+  margin-bottom: 0em;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
 
 
 <script src="preliminary_results_report_files/libs/clipboard/clipboard.min.js"></script>
@@ -125,11 +145,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <section id="what-is-this-all-about" class="level1">
 <h1>1. What is this all about?</h1>
-<p>These are process-explicit models of the MG outbreak in house finches using the <code>epizootic</code> package, which I created for modeling wildlife disease outbreaks. This is a powerful tool for understanding processes and spatially-explicit disease dynamics. However, we must keep in mind the following limitations:</p>
+<p>These are process-explicit models <span class="citation" data-cites="Pilowsky2022-ng">(<a href="#ref-Pilowsky2022-ng" role="doc-biblioref">Pilowsky et al. 2022</a>)</span> of the MG outbreak in house finches using <a href="https://cran.r-project.org/web//packages/epizootic/vignettes/mycoplasma.html">the <code>epizootic</code> package</a>, which I created for modeling wildlife disease outbreaks. This is a powerful tool for understanding processes and spatially-explicit disease dynamics, because unlike other approaches, it can give spatiotemporally explicit values for population size, new infections, and other key metrics. It can also be used to infer uncertain and unobserved parameters, such as the number of house finches in the founder population in New York. However, we must keep in mind the following limitations:</p>
 <ul>
 <li>The models are only as good as the validation data.</li>
-<li>The models assume that the characteristics of <em>Mycoplasma gallisepticum</em> do not change over time, which we know to be false.</li>
-<li>The models assume that there are no regional differences in the characteristics of <em>M. gallisepticum</em> or house finches, which we also know to be false.</li>
+<li>The models assume that the characteristics of <em>Mycoplasma gallisepticum</em> do not change over time, which we know to be false <span class="citation" data-cites="Fleming-Davies2018-ak">(<a href="#ref-Fleming-Davies2018-ak" role="doc-biblioref">Fleming-Davies et al. 2018</a>)</span>.</li>
+<li>The models assume that there are no regional differences in the characteristics of <em>M. gallisepticum</em> or house finches, which we also know to be false <span class="citation" data-cites="Dhondt2006-cz">(<a href="#ref-Dhondt2006-cz" role="doc-biblioref">Dhondt et al. 2006</a>)</span>.</li>
 </ul>
 </section>
 <section id="the-validation-data" class="level1">
@@ -137,7 +157,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>We used the following data for model validation:</p>
 <ul>
 <li><strong>Are there finches in Washington DC in 1994?</strong> This is crucial because this is the time and place where the Mycoplasma gallisepticum outbreak first occurred. If there are no finches there, there can’t be an outbreak. The subsequent metrics are conditioned on whether the simulation meets this criterion. All simulations that fail are excluded.</li>
-<li><strong>Mycoplasma presence.</strong> There are 90 locations where Project FeederWatch spotted infected finches every year for years on end. This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.</li>
+<li><strong>Mycoplasma presence.</strong> There are 90 locations where Project FeederWatch spotted infected finches every year for years on end (median: 16 consecutive years). This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.</li>
 <li><strong>First arrival of <em>Haemorhous</em>.</strong> I estimated the first arrival of the house finch in parts of its invasive range based on sightings from the Breeding Bird Survey, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range. I have these estimates for 14,850 locations.</li>
 </ul>
 <p>It is important to note that I started out with more validation data than this. I narrowed down to these metrics using <code>abctools::selectsumm</code>, which picks validation metrics from a set based on which ones parsimoniously inform the posterior distribution the most. This means I can justifiably try out other validation data if it seems like there are problems with the selected metrics.</p>
@@ -170,8 +190,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<p>There were 10,000 simulations in each round of modeling, so performance on this metric did not monotonically improve.</p>
-<p>Now we will examine the other two validation metrics, which are only calculated for simulations that had finches in DC in 1994.</p>
+<p>There were 10,000 simulations in each round of modeling, so performance on this metric did not monotonically improve. This is more or less expected; I could not use this metric for validation by Approximate Bayesian Computation (ABC) because it is binary, so it was used as a pre-filter for ABC, so ABC could not optimize for it.</p>
+<p>Now we will examine the other two validation metrics, <em>Mycoplasma</em> presence and first arrival of <em>Haemorhous</em>, which are only calculated for simulations that had finches in DC in 1994.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -200,7 +220,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<p>Lower values are better for both, so there’s improvement on both metrics, though first arrival of <em>Haemorhous</em> is still pretty far off from zero, the perfect score.</p>
+<p>Lower values are better for both, so there’s improvement on both metrics as we proceed through rounds 1, 2 and 3. However, first arrival of <em>Haemorhous</em> is still pretty far off from zero, the perfect score. We decided to stop modeling at this stage because the Bayes factors indicated that the posterior distributions had stabliized, and posterior predictive checks showed that the predictive power of the models could improve no further, at least with these validation metrics. The fact that first arrival of <em>Haemorhous</em> remained far from zero indicates that there is something about the assumptions of the model that makes it impossible to accurately recreate the first arrival of house finches to various regions.</p>
 <p>At this point, what I did was take the top 1% of models from round 3 based on these three validation metrics, and then created a weighted ensemble mean of these simulations. I will refer to this as the validated ensemble model.</p>
 </section>
 <section id="visualizing-the-validated-ensemble-model" class="level1">
@@ -236,7 +256,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<p>We can see here the effect of the outbreak on population size, which is likely too dramatic to be realistic based on my understanding. It is important to note that I did not use finch trends in population size as validation metrics, so there was nothing selecting for correct population size trends.</p>
+<p>We can see here the effect of the outbreak on population size. According to the literature, the MG outbreak roughly halved population densities of house finches <span class="citation" data-cites="Hochachka2021-dp">(<a href="#ref-Hochachka2021-dp" role="doc-biblioref">Hochachka et al. 2021</a>)</span>, and in this animation, the population seems to decline by more than half after the arrival of MG. It is important to note that I did not use finch trends in population size as validation metrics, so there was nothing selecting for correct population size trends. As noted above, I chose validation metrics based on which combination of metrics informed the posterior distributions the most. I could try running the simulations again using validation metrics chosen a different way.</p>
 </section>
 <section id="b.-prevalence" class="level2">
 <h2 class="anchored" data-anchor-id="b.-prevalence">3b. Prevalence</h2>
@@ -256,7 +276,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<p>The prevalence definitely gets too high to be realistic in this simulation. The validation metric that could control for this is spatiotemporal point prevalence, based on data points on prevalence in the literature, which I did not use here.</p>
+<p>The prevalence definitely gets too high to be realistic in this simulation; it is rare for a deadly outbreak like this one to reach 100% prevalence, let alone over such a large geographical extent. The validation metric that could control for this is spatiotemporal point prevalence, based on data points on prevalence in the literature, which I did not use here. As mentioned above, I chose my validation metrics based on which subset of them most informed the posterior distributions, but I could try re-running the simulations using validation metrics chosen a different way.</p>
 </section>
 </section>
 <section id="urbanization-analysis" class="level1">
@@ -360,30 +380,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <pre><code># A tibble: 2 × 4
   .metric .estimator .estimate .config        
   &lt;chr&gt;   &lt;chr&gt;          &lt;dbl&gt; &lt;chr&gt;          
-1 rmse    standard     421.    pre0_mod0_post0
+1 rmse    standard     431.    pre0_mod0_post0
 2 rsq     standard       0.868 pre0_mod0_post0</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Visualize</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="ot">&lt;-</span> <span class="fu">explain_tidymodels</span>(final_fit_urb<span class="sc">$</span>.workflow[[<span class="dv">1</span>]], <span class="at">y =</span> urb_test<span class="sc">$</span>Cases, <span class="at">data =</span> urb_test <span class="sc">|&gt;</span> <span class="fu">select</span>(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Preparation of a new explainer is initiated
-  -&gt; model label       :  workflow  (  default  )
-  -&gt; data              :  67557  rows  8  cols 
-  -&gt; target variable   :  67557  values 
-  -&gt; predict function  :  yhat.workflow  will be used (  default  )
-  -&gt; predicted values  :  No value for predict function target column. (  default  )
-  -&gt; model_info        :  package tidymodels , ver. 1.4.1 , task regression (  default  ) 
-  -&gt; predicted values  :  numerical, min =  -625.0715 , mean =  695.3568 , max =  6609.005  
-  -&gt; residual function :  difference between y and yhat (  default  )
-  -&gt; residuals         :  numerical, min =  -3780.545 , mean =  3.24236 , max =  4630.499  
-  A new explainer has been created!  </code></pre>
-</div>
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="sc">|&gt;</span> <span class="fu">variable_importance</span>() <span class="sc">|&gt;</span> <span class="fu">plot</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="ot">&lt;-</span> <span class="fu">explain_tidymodels</span>(final_fit_urb<span class="sc">$</span>.workflow[[<span class="dv">1</span>]], <span class="at">y =</span> urb_test<span class="sc">$</span>Cases, <span class="at">data =</span> urb_test <span class="sc">|&gt;</span> <span class="fu">select</span>(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size), <span class="at">verbose =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="sc">|&gt;</span> <span class="fu">variable_importance</span>() <span class="sc">|&gt;</span> <span class="fu">plot</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -394,9 +398,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="sc">%&gt;%</span> </span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">model_profile</span>(<span class="at">variables =</span> <span class="st">"urban"</span>, <span class="at">N =</span> <span class="dv">2000</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>() <span class="sc">+</span> <span class="fu">ggtitle</span>(<span class="st">"Partial dependence profile for urbanization"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="sc">%&gt;%</span> </span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">model_profile</span>(<span class="at">variables =</span> <span class="st">"urban"</span>, <span class="at">N =</span> <span class="dv">2000</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>() <span class="sc">+</span> <span class="fu">ggtitle</span>(<span class="st">"Partial dependence profile for urbanization"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -407,9 +411,24 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 <p>Intriguingly, urbanization is still a meaningful predictor of total MG cases even when we control for population size, which means that the effect of urbanization goes beyond simply increasing the finch population size. The partial dependence profile indicates that this is a threshold effect, in which having zero urbanized land cover is associated with lower cases, but any amount of urbanized land cover is associated with higher cases, and then the effect levels off.</p>
+<p>I would advise caution in taking the exact size of the effect to heart (which is shown in the partial dependence profile as an average increase of 350 cases per 46 km x 46 km grid cell as proportion of urban land goes above 0) due to the excessively high prevalence in the validated ensemble model.</p>
+
 </section>
 
-</main>
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" data-entry-spacing="0" role="list">
+<div id="ref-Dhondt2006-cz" class="csl-entry" role="listitem">
+Dhondt, André A, Alexander V Badyaev, Andrew P Dobson, Dana M Hawley, Melanie J L Driscoll, Wesley M Hochachka, and David H Ley. 2006. <span>“Dynamics of Mycoplasmal Conjunctivitis in the Native and Introduced Range of the Host.”</span> <em>Ecohealth</em> 3 (2): 95–102.
+</div>
+<div id="ref-Fleming-Davies2018-ak" class="csl-entry" role="listitem">
+Fleming-Davies, Arietta E, Paul D Williams, André A Dhondt, Andrew P Dobson, Wesley M Hochachka, Ariel E Leon, David H Ley, Erik E Osnas, and Dana M Hawley. 2018. <span>“Incomplete Host Immunity Favors the Evolution of Virulence in an Emergent Pathogen.”</span> <em>Science</em> 359 (6379): 1030–33.
+</div>
+<div id="ref-Hochachka2021-dp" class="csl-entry" role="listitem">
+Hochachka, Wesley M, Andrew P Dobson, Dana M Hawley, and André A Dhondt. 2021. <span>“Host Population Dynamics in the Face of an Evolving Pathogen.”</span> <em>J. Anim. Ecol.</em> 90 (6): 1480–91.
+</div>
+<div id="ref-Pilowsky2022-ng" class="csl-entry" role="listitem">
+Pilowsky, July A, Robert K Colwell, Carsten Rahbek, and Damien A Fordham. 2022. <span>“Process-Explicit Models Reveal the Structure and Dynamics of Biodiversity Patterns.”</span> <em>Sci. Adv.</em> 8 (31): eabj2271.
+</div>
+</div></section></div></main>
 <!-- /main column -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
