@@ -38,7 +38,7 @@ The first and most important validation is whether there are house finches in Wa
 #  map(\(path) system(paste0("cd /glade/work/pilowskyj/Round1_matrix/", path, "; ls -f"), 
 #                     intern = T)) |> 
 #  map(length) |> 
-#  map_lgl(\(x) x > 214)
+#  map_lgl(\(x) x > 217)
 dc <- read_csv("/glade/u/home/pilowskyj/mgsim/Data_minimal/Validation/dc.csv") |> pull(dc)
 # Graph
 round1_priors |> 

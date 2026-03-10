@@ -156,7 +156,7 @@ At this point, what I did was take the top 1% of models from round 3 based on th
 
 # 3. Visualizing the validated ensemble model
 
-I find that the easiest way to visualize the outbreak dynamics is using animations. 
+I find that the easiest way to visualize the outbreak dynamics is using animations.
 
 ## 3a. Total population size
 
