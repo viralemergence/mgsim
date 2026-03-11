@@ -31,6 +31,9 @@ round1_metrics <- read_csv(here("Data_minimal/Validation/round1_validation_metri
 round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
 round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
 round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+  round1_metrics_dc <- round1_metrics |> 
+  filter(dc) |> 
+  select(-index, -dc, -hm_trend)
 ```
 
 # 1. What is the motivation and methodology of this research?
@@ -81,9 +84,6 @@ About half of the simulations (4876) succeeded on this metric. The main determin
 Now, let's look at the performance on the other seven validation metrics. What I'm looking for here are metrics that are *good filters*: not all the simulations succeed, but not all of them fail horribly, either. This helps us choose which simulations are the best.
 
 ```{r performance histogram, message = F}
-round1_metrics_dc <- round1_metrics |> 
-  filter(dc) |> 
-  select(-index, -dc, -hm_trend)
 quantiles <- round1_metrics_dc |> 
   map_dbl(\(x) quantile(x, prob = c(0.01), na.rm = T))
 labels <- c("Mycoplasma presence", "Finch pres/abs", 
@@ -238,6 +238,7 @@ abc49 <- abc(param = round1_priors[round1_metrics$dc,],
               target = rep(0, 7), 
              tol = 0.01, 
              method = "neuralnet")
+qs_save(abc49, here("Data/Validation/abc_round1_5params.qs2"))
 head(abc49$ss, 10)
 selected_samples <- round1_priors %>% 
   rowid_to_column("sample") |> 
