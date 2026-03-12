@@ -576,7 +576,8 @@ sim_manager <- metaRangeParallel$new(
   parallel_threads = numCores,
   results_dir = results_dir,
   seed = random_seed,
-  species_name = "house_finch"
+  species_name = "house_finch",
+  sample_id = as.character(incomplete_sims)
 )
 
 sim_log <- sim_manager$run()
