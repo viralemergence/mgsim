@@ -18,4 +18,4 @@ module load ncarenv/23.06 intel/2023.0.0 ncarcompilers/1.0.0 netcdf/4.9.2 proj/8
 conda activate mgsim
 
 # Run script
-Rscript /glade/u/home/pilowskyj/mgsim/Scripts/round2b_validation.R
+Rscript /glade/u/home/pilowskyj/mgsim/Scripts/round2d_validation.R
