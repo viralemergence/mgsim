@@ -15,9 +15,29 @@ results_dir <- "/glade/work/pilowskyj/Round2d" # production
 run_indices <- list.files(results_dir) |> map_chr(substring, 11) |> as.integer()
 incomplete_runs <- results_dir |>
   list.files(full.names = T) |>
-  map(list.files) |>
-  map_int(length) |>
-  map_lgl(\(x) x < 212) |>
+  map_lgl(\(dir) {
+    files <- list.files(dir, full.names = T)
+    
+    # Check file sizes - all files must be at least 77 bytes
+    file_sizes <- file.size(files)
+    if (any(file_sizes < 77, na.rm = TRUE)) {
+      return(TRUE)  # incomplete
+    }
+    
+    # Extract numeric prefixes from filenames (everything before the first underscore)
+    file_names <- list.files(dir)
+    prefixes <- sub("_.*", "", file_names) |> as.integer()
+    max_timestep <- max(prefixes, na.rm = TRUE)
+
+    # Check if max timestep is less than 54, or if there are gaps in the sequence
+    if (max_timestep < 54) {
+      TRUE  # incomplete
+    } else {
+      # Check if all numbers from 1 to max_timestep are present
+      expected <- 1:max_timestep
+      !all(expected %in% prefixes)  # incomplete if not all expected are present
+    }
+  }) |>
   which()
 incomplete_sims <- c(
   run_indices[incomplete_runs],
@@ -249,7 +269,7 @@ sim$add_process(
         ),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
-        overwrite = "skip",
+        overwrite = "overwrite",
         raster = FALSE
       )
     } else {
@@ -258,7 +278,7 @@ sim$add_process(
         traits = c("Sj_abundance", "Sa_abundance"),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
-        overwrite = "skip",
+        overwrite = "overwrite",
         raster = FALSE
       )
     }
@@ -283,7 +303,7 @@ sim$add_process(
         ),
         prefix = paste0(self$get_current_time_step(), "_", "summer_"),
         path = self$globals$results_dir,
-        overwrite = "skip",
+        overwrite = "overwrite",
         raster = FALSE
       )
     } else {
@@ -292,7 +312,7 @@ sim$add_process(
         traits = c("Sj_abundance", "Sa_abundance"),
         prefix = paste0(self$get_current_time_step(), "_summer_"),
         path = self$globals$results_dir,
-        overwrite = "skip",
+        overwrite = "overwrite",
         raster = FALSE
       )
     }

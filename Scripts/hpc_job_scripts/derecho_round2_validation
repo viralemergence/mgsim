@@ -1,10 +1,10 @@
 #!/bin/bash -l
 #PBS -A UCIE0003
-#PBS -N round2b_validation
+#PBS -N round2d_validation
 #PBS -q main
 #PBS -j oe
 #PBS -m abe
-#PBS -l walltime=12:00:00
+#PBS -l walltime=4:00:00
 #PBS -l select=1:ncpus=120:ompthreads=120:mem=235GB
 
 ### Set temp to scratch
