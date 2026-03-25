@@ -514,3 +514,51 @@ ensemble_time_series <- function(samples, data_dir) {
   }) |>
     bind_rows()
 }
+
+process_sims <- function(samples, weights, data_dir) {
+  # Assertions
+  assert_integerish(
+    samples,
+    lower = 1,
+    upper = 10000,
+    any.missing = FALSE,
+    min.len = 1
+  )
+  assert_numeric(
+    weights,
+    lower = 0,
+    upper = 1,
+    any.missing = FALSE,
+    len = length(samples)
+  )
+  assert_directory_exists(data_dir, access = "r")
+  assert_number(allee, lower = 0)
+
+  ensemble_sa <- ensemble_mean(samples, weights, "Sa", data_dir)
+  ensemble_sj <- ensemble_mean(samples, weights, "Sj", data_dir)
+  ensemble_I1a <- ensemble_mean(samples, weights, "I1a", data_dir)
+  ensemble_I1j <- ensemble_mean(samples, weights, "I1j", data_dir)
+  ensemble_Ra <- ensemble_mean(samples, weights, "Ra", data_dir)
+  ensemble_Rj <- ensemble_mean(samples, weights, "Rj", data_dir)
+  ensemble_I2a <- ensemble_mean(samples, weights, "I2a", data_dir)
+  ensemble_I2j <- ensemble_mean(samples, weights, "I2j", data_dir)
+
+  # Sum to get total population size
+  total_population <- ensemble_sa +
+    ensemble_sj +
+    ensemble_I1a +
+    ensemble_I1j +
+    ensemble_Ra +
+    ensemble_Rj +
+    ensemble_I2a +
+    ensemble_I2j
+
+  # Calculate prevalence
+  total_infected <- ensemble_I1a + ensemble_I1j + ensemble_I2a + ensemble_I2j
+  prevalence <- total_infected / total_population
+
+  return(list(
+    total_population = total_population,
+    prevalence = prevalence
+  ))
+}

@@ -22,7 +22,7 @@ library(qs)
 library(here)
 library(paletteer)
 library(furrr)
-conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::filter, dplyr::select)
 knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE
@@ -168,15 +168,8 @@ selected_samples_3 <- round3a_priors |>
   rowid_to_column("sample") |>
   semi_join(abc31$unadj.values, copy = TRUE) |>
   pull(sample)
-ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
-ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
-ensemble_sj <- ensemble_mean(selected_samples_3, abc31$weights, "Sj", here("Data/Output/Round3a"))
-ensemble_rj <- ensemble_mean(selected_samples_3, abc31$weights, "Rj", here("Data/Output/Round3a"))
-ensemble_I1a <- ensemble_mean(selected_samples_3, abc31$weights, "I1a", here("Data/Output/Round3a"))
-ensemble_I2a <- ensemble_mean(selected_samples_3, abc31$weights, "I2a", here("Data/Output/Round3a"))
-ensemble_I1j <- ensemble_mean(selected_samples_3, abc31$weights, "I1j", here("Data/Output/Round3a"))
-ensemble_I2j <- ensemble_mean(selected_samples_3, abc31$weights, "I2j", here("Data/Output/Round3a"))
-total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+abc31_processed <- process_sims(selected_samples_3, abc31$weights, here("Data/Output/Round3a"))
+total_population_size <- abc31_processed$total_population
 animate_sim(total_population_size, region, years = 1940:2016)
 ```
 
@@ -187,8 +180,7 @@ We can see here the effect of the outbreak on population size. According to the 
 Here is an animation of prevalence of MG in the house finch population.
 
 ```{r prevalence}
-total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
-prevalence <- total_cases / total_population_size
+prevalence <- abc31_processed$prevalence
 animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
 ```
 
