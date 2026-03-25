@@ -242,8 +242,18 @@ write_sftp_transfer <- function(source_dir, dest_dir, sim_numbers, filename) {
     file.path(dest_dir, paste0("simulation", n))
   })
   dir_exists <- map_lgl(destinations, dir.exists)
+  # Check if directories contain files
+  dir_has_files <- map_lgl(destinations, function(d) {
+    if (dir.exists(d)) {
+      length(list.files(d)) > 0
+    } else {
+      FALSE
+    }
+  })
+  # Combined logical vector
+  dir_exists_has_files <- dir_exists & dir_has_files
 
-  instructions <- map_chr(sim_numbers[!dir_exists], function(n) {
+  instructions <- map_chr(sim_numbers[!dir_exists_has_files], function(n) {
     paste0("get -r ", source_dir, "/simulation", n, " ", dest_dir)
   }) |>
     paste(collapse = "\n")
