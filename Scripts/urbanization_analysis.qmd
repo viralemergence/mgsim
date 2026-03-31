@@ -35,11 +35,11 @@ finch_region <- "Data/Input/finch_region.qs" |> here() |> qread()
 
 The goal of this analysis is to explore predictors of number of cases of *Mycoplasma* in the house finch epizootic simulations I've done. The predictors I will investigate are:
 
-- Time
-- Distance from index case
-- Urbanization
-- Temperature seasonality
-- Mean annual temperature
+-   Time
+-   Distance from index case
+-   Urbanization
+-   Temperature seasonality
+-   Mean annual temperature
 
 To measure this, I will need to go from 1994 (the start of the outbreak) to 2016 (the end of the outbreak) and assemble data frames of number of cases, then pair these data with calculated distances from the index case and extracts from the raster of spatial predictors. I will then use a regression model to investigate the relationship between the predictors and number of cases.
 
@@ -89,6 +89,7 @@ dt$x <- rep(coords[, 1], 45)
 dt$y <- rep(coords[, 2], 45)
 dt$Time <- dt$Year + dt$Season
 summary(dt)
+ggplot(dt, aes(x = Cases)) + geom_density()
 ```
 
 Time is already taken care of. Distance from index case is also easy to calculate, since I have the coordinates of each cell in a projected coordinate system. I can calculate the distance from the index case for each cell and add that as a predictor.
@@ -136,7 +137,7 @@ extracted <- dt |>
 
 # Regression model
 
-Now I will implement a machine learning algorithm to investigate the relationship between the predictors and number of MG cases. 
+Now I will implement a machine learning algorithm to investigate the relationship between the predictors and number of MG cases.
 
 ```{r machine_learning}
 analysis_input <- extracted |> 
@@ -177,11 +178,11 @@ final_wf_urb <- workflow() |>
   add_model(tune_spec) |>
   add_recipe(urb_recipe) |> 
   finalize_workflow(best_tree)
-final_fit_urb <- final_wf_urb |> last_fit(urb_split)
+final_fit_urb <- final_wf_urb |> last_fit(urb_split, metrics = metric_set(mae, rsq))
 final_fit_urb |> collect_metrics()
 ```
 
-The RMSE is large, though we are dealing with some very large numbers in the number of cases.
+The MAE is large, though we are dealing with some very large numbers in the number of cases (up to \~8,000).
 
 ```{r explainer}
 urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season))
@@ -192,6 +193,8 @@ urb_explainer %>%
 ```
 
 This has the same threshold effect that urbanization has on habitat suitability for house finches. Since cases depend just as much on population size as they do on spread of the disease, this is to be expected, and it perhaps calls for another analysis that controls for population size to see what happens.
+
+## Controlling for population size
 
 ```{r prevalence_model}
 analysis_input <- extracted |> 
@@ -232,11 +235,11 @@ final_wf_urb <- workflow() |>
   add_model(tune_spec) |>
   add_recipe(urb_recipe) |> 
   finalize_workflow(best_tree)
-final_fit_urb <- final_wf_urb |> last_fit(urb_split)
+final_fit_urb <- final_wf_urb |> last_fit(urb_split, metrics = metric_set(mae, rsq))
 final_fit_urb |> collect_metrics()
 ```
 
-The R-squared is much higher in this analysis that includes population size as a predictor, and lower RMSE as well.
+The R-squared is much higher in this analysis that includes population size as a predictor, and lower MAE as well.
 
 ```{r explainer2}
 urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size))
@@ -246,4 +249,4 @@ urb_explainer %>%
   plot() + ggtitle("Partial dependence profile for urbanization")
 ```
 
-Intriguingly, urbanization is still a meaningful predictor even when we control for population size, which means that the effect of urbanization goes beyond simply increasing the finch population size.
+Intriguingly, urbanization is still a meaningful predictor even when we control for population size, which means that the effect of urbanization goes beyond simply increasing the finch population size. Mechanistically given how the model works, this has to be about the density-dependent dispersal, in which dispersal depends on the saturation of carrying capacity (N/K) in a locale.

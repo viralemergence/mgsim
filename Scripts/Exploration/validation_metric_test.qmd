@@ -479,8 +479,6 @@ hm_arrival <- sightings |>
 write_csv(hm_arrival, here("Data/Validation/haemorhous_first_arrival.csv"))
 ```
 
-TO BE COMPLETED LATER
-
 ## Abundance Trends
 
 I have house finch abundance trends from Christmas Bird Count data. Thanks, Audubon!

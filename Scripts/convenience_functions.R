@@ -542,7 +542,6 @@ process_sims <- function(samples, weights, data_dir) {
     len = length(samples)
   )
   assert_directory_exists(data_dir, access = "r")
-  assert_number(allee, lower = 0)
 
   ensemble_sa <- ensemble_mean(samples, weights, "Sa", data_dir)
   ensemble_sj <- ensemble_mean(samples, weights, "Sj", data_dir)
