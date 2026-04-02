@@ -242,7 +242,7 @@ final_fit_urb |> collect_metrics()
 The R-squared is much higher in this analysis that includes population size as a predictor, and lower MAE as well.
 
 ```{r explainer2}
-urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size))
+urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Population_size))
 urb_explainer |> variable_importance() |> plot()
 urb_explainer %>% 
   model_profile(variables = "urban", N = 2000) %>% 

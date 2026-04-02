@@ -168,19 +168,21 @@ div.csl-indent {
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>validation_metrics <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  round1_metrics,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  round2_metrics,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  round3a_metrics</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">Round =</span> <span class="fu">factor</span>(<span class="fu">c</span>(<span class="fu">rep</span>(<span class="st">"1"</span>, <span class="dv">10000</span>), <span class="fu">rep</span>(<span class="st">"2"</span>, <span class="dv">10000</span>), <span class="fu">rep</span>(<span class="st">"3"</span>, <span class="dv">10000</span>)))</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(dc) <span class="sc">|&gt;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  round3a_metrics,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  selected_metrics</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">Round =</span> <span class="fu">factor</span>(<span class="fu">c</span>(<span class="fu">rep</span>(<span class="st">"1"</span>, <span class="dv">10000</span>), <span class="fu">rep</span>(<span class="st">"2"</span>, <span class="dv">10000</span>), <span class="fu">rep</span>(<span class="st">"3"</span>, <span class="dv">10000</span>), <span class="fu">rep</span>(<span class="st">"Selected"</span>, <span class="dv">32</span>)))</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>hm_trend, <span class="sc">-</span>index)</span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>validation_metrics <span class="sc">|&gt;</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tidyplot</span>(<span class="at">x =</span> dc, <span class="at">fill =</span> Round) <span class="sc">|&gt;</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_count_bar</span>() <span class="sc">|&gt;</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_y_axis_title</span>(<span class="st">"Count"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_x_axis_title</span>(<span class="st">"Presence of finches in DC in 1994"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_colors</span>(<span class="at">new_colors =</span> <span class="fu">paletteer_d</span>(<span class="st">"PNWColors::Sunset2"</span>, <span class="dv">3</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(Round<span class="sc">!=</span><span class="st">"Selected"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tidyplot</span>(<span class="at">x =</span> Round, <span class="at">fill =</span> dc) <span class="sc">|&gt;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_barstack_absolute</span>() <span class="sc">|&gt;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_y_axis_title</span>(<span class="st">"Count"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_x_axis_title</span>(<span class="st">"Simulation Round"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_colors</span>(<span class="at">new_colors =</span> <span class="fu">paletteer_d</span>(<span class="st">"nbapalettes::nets"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_legend_title</span>(<span class="st">"Finches in DC in 1994"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -201,16 +203,23 @@ div.csl-indent {
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_to =</span> <span class="st">"Value"</span>,</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_to =</span> <span class="st">"Metric"</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Metric =</span> <span class="fu">recode</span>(</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    Metric,</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">mg_presence =</span> <span class="st">"MG presence"</span>,</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">hm_arrival =</span> <span class="st">"First arrival of Haemorhous"</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  )) <span class="sc">|&gt;</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tidyplot</span>(<span class="at">x =</span> Value, <span class="at">fill =</span> Round) <span class="sc">|&gt;</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_histogram</span>(<span class="at">bins =</span> <span class="dv">30</span>, <span class="at">alpha =</span> <span class="fl">0.7</span>) <span class="sc">|&gt;</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_y_axis_title</span>(<span class="st">"Count"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_colors</span>(<span class="at">new_colors =</span> <span class="fu">paletteer_d</span>(<span class="st">"PNWColors::Sunset2"</span>, <span class="dv">3</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">split_plot</span>(<span class="at">by =</span> Metric, <span class="at">scales =</span> <span class="st">"free_x"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(Value)) <span class="sc">|&gt;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Metric =</span> <span class="fu">recode</span>(</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    Metric,</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">mg_presence =</span> <span class="st">"MG persistence"</span>,</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">hm_arrival =</span> <span class="st">"Finch arrival"</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  )) <span class="sc">|&gt;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tidyplot</span>(<span class="at">x =</span> Value, <span class="at">fill =</span> Round) <span class="sc">|&gt;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_histogram</span>(<span class="at">bins =</span> <span class="dv">30</span>, <span class="at">alpha =</span> <span class="fl">0.5</span>, <span class="at">position =</span> <span class="st">"identity"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_y_axis_title</span>(<span class="st">"Count"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_colors</span>(<span class="at">new_colors =</span> <span class="fu">paletteer_d</span>(<span class="st">"PNWColors::Sunset2"</span>, <span class="dv">4</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">split_plot</span>(<span class="at">by =</span> Metric, <span class="at">scales =</span> <span class="st">"free_x"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">adjust_y_axis</span>(</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">transform =</span> <span class="fu">transform_pseudo_log</span>(),</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">force_continuous =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">breaks =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">100</span>, <span class="dv">1000</span>),</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">labels =</span> <span class="fu">label_number</span>(<span class="at">big.mark =</span> <span class="st">","</span>, <span class="at">accuracy =</span> <span class="dv">1</span>)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -220,7 +229,7 @@ div.csl-indent {
 </div>
 </div>
 </div>
-<p>Lower values are better for both, so there’s improvement on both metrics as we proceed through rounds 1, 2 and 3. However, first arrival of <em>Haemorhous</em> is still pretty far off from zero, the perfect score. We decided to stop modeling at this stage because the Bayes factors indicated that the posterior distributions had stabliized, and posterior predictive checks showed that the predictive power of the models could improve no further, at least with these validation metrics. The fact that first arrival of <em>Haemorhous</em> remained far from zero indicates that there is something about the assumptions of the model that makes it impossible to accurately recreate the first arrival of house finches to various regions.</p>
+<p>Lower values are better for both, so there’s improvement on both metrics as we proceed through rounds 1, 2 and 3. However, first arrival of <em>Haemorhous</em> is still pretty far off from zero, the perfect score. We decided to stop modeling at this stage because the Bayes factors indicated that the posterior distributions had stabilized, and posterior predictive checks showed that the predictive power of the models could improve no further, at least with these validation metrics. The fact that first arrival of <em>Haemorhous</em> remained far from zero indicates that there is something about the assumptions of the model that makes it impossible to accurately recreate the first arrival of house finches to various regions.</p>
 <p>At this point, what I did was take the top 1% of models from round 3 based on these three validation metrics, and then created a weighted ensemble mean of these simulations. I will refer to this as the validated ensemble model.</p>
 </section>
 <section id="visualizing-the-validated-ensemble-model" class="level1">
@@ -232,21 +241,9 @@ div.csl-indent {
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>abc31 <span class="ot">&lt;-</span> <span class="fu">qread</span>(<span class="fu">here</span>(<span class="st">"Data/Validation/abc_round3a.qs"</span>))</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>selected_samples_3 <span class="ot">&lt;-</span> round3a_priors <span class="sc">|&gt;</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rowid_to_column</span>(<span class="st">"sample"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(abc31<span class="sc">$</span>unadj.values, <span class="at">copy =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pull</span>(sample)</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>ensemble_sa <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Sa"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>ensemble_ra <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Ra"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>ensemble_sj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Sj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>ensemble_rj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"Rj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>ensemble_I1a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I1a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>ensemble_I2a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I2a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>ensemble_I1j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I1j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>ensemble_I2j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="st">"I2j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(total_population_size, region, <span class="at">years =</span> <span class="dv">1940</span><span class="sc">:</span><span class="dv">2016</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>abc31_processed <span class="ot">&lt;-</span> <span class="fu">process_sims</span>(selected_samples_3, abc31<span class="sc">$</span>weights, <span class="fu">here</span>(<span class="st">"Data/Output/Round3a"</span>))</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> abc31_processed<span class="sc">$</span>total_population</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(total_population_size, region, <span class="at">years =</span> <span class="dv">1940</span><span class="sc">:</span><span class="dv">2016</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -264,9 +261,8 @@ div.csl-indent {
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>prevalence <span class="ot">&lt;-</span> total_cases <span class="sc">/</span> total_population_size</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>prevalence <span class="ot">&lt;-</span> abc31_processed<span class="sc">$</span>prevalence</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -286,107 +282,106 @@ div.csl-indent {
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Prep the data</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>arr <span class="ot">&lt;-</span> total_cases[, , <span class="dv">110</span><span class="sc">:</span><span class="dv">154</span>]</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>arr2 <span class="ot">&lt;-</span> total_population_size[, , <span class="dv">110</span><span class="sc">:</span><span class="dv">154</span>]</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>years <span class="ot">&lt;-</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>coords <span class="ot">&lt;-</span> region<span class="sc">$</span>region_raster <span class="sc">|&gt;</span> raster<span class="sc">::</span><span class="fu">coordinates</span>()</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>dt <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">y =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">dim</span>(arr)[<span class="dv">2</span>], <span class="at">x =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">dim</span>(arr)[<span class="dv">1</span>], <span class="at">z =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">dim</span>(arr)[<span class="dv">3</span>]) <span class="sc">|&gt;</span> </span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Cases =</span> arr[<span class="fu">cbind</span>(x, y, z)],</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>         <span class="at">Population_size =</span> arr2[<span class="fu">cbind</span>(x, y, z)])</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Year <span class="ot">&lt;-</span> years[<span class="fu">round</span>(dt<span class="sc">$</span>z <span class="sc">/</span> <span class="dv">2</span>) <span class="sc">+</span> <span class="dv">1</span>]</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Season <span class="ot">&lt;-</span> <span class="fu">if_else</span>(dt<span class="sc">$</span>z <span class="sc">%%</span> <span class="dv">2</span> <span class="sc">==</span> <span class="dv">0</span>, <span class="dv">0</span>, <span class="fl">0.5</span>)</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>x <span class="ot">&lt;-</span> <span class="fu">rep</span>(coords[, <span class="dv">1</span>], <span class="dv">45</span>)</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>y <span class="ot">&lt;-</span> <span class="fu">rep</span>(coords[, <span class="dv">2</span>], <span class="dv">45</span>)</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Time <span class="ot">&lt;-</span> dt<span class="sc">$</span>Year <span class="sc">+</span> dt<span class="sc">$</span>Season</span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>index_case_coords <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">y =</span> <span class="fl">621173.8</span>, <span class="at">x =</span> <span class="dv">1475944</span>)</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Distance_from_index_case <span class="ot">&lt;-</span> <span class="fu">sqrt</span>((dt<span class="sc">$</span>x <span class="sc">-</span> index_case_coords[<span class="st">"x"</span>])<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> (dt<span class="sc">$</span>y <span class="sc">-</span> index_case_coords[<span class="st">"y"</span>])<span class="sc">^</span><span class="dv">2</span>)</span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract environmental predictors</span></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>col_names <span class="ot">&lt;-</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">19</span> <span class="sc">%&gt;%</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as.character</span>() <span class="sc">%&gt;%</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span> <span class="fu">paste0</span>(<span class="st">"bio"</span>, .)) <span class="sc">%&gt;%</span></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">append</span>(<span class="st">"urban"</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">flatten_chr</span>()</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>files2 <span class="ot">&lt;-</span> <span class="fu">list.files</span>(</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>  <span class="st">"~/Documents/Very_Large_Data/predictors/CHELSA"</span>,</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">pattern =</span> <span class="st">"^predictors_.+"</span>,</span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">full.names =</span> T</span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span></span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">keep</span>(str_detect, <span class="at">pattern =</span> <span class="st">"</span><span class="sc">\\</span><span class="st">.grd$"</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>  .[<span class="dv">55</span><span class="sc">:</span><span class="dv">77</span>] <span class="sc">|&gt;</span></span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set_names</span>(years)</span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>extracted <span class="ot">&lt;-</span> dt <span class="sc">|&gt;</span></span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Year) <span class="sc">|&gt;</span></span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_split</span>() <span class="sc">|&gt;</span></span>
-<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span> <span class="fu">select</span>(.x, x, y)) <span class="sc">|&gt;</span></span>
-<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>  <span class="fu">future_map2</span>(</span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    files2,</span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">function</span>(p, f) {</span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>      r <span class="ot">&lt;-</span> <span class="fu">rast</span>(f)</span>
-<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>      terra<span class="sc">::</span><span class="fu">extract</span>(r, p, <span class="at">ID =</span> F)</span>
-<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    },</span>
-<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    <span class="at">.options =</span> <span class="fu">furrr_options</span>(<span class="at">seed =</span> T)</span>
-<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span> <span class="fu">set_names</span>(., col_names)) <span class="sc">%&gt;%</span></span>
-<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list_rbind</span>(<span class="at">names_to =</span> <span class="st">"Year"</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(bio1, bio4, urban) <span class="sc">|&gt;</span> </span>
-<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_cols</span>(dt)</span>
-<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a><span class="co"># Fit model</span></span>
-<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>analysis_input <span class="ot">&lt;-</span> extracted <span class="sc">|&gt;</span> </span>
-<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>    <span class="fu">select</span>(bio1, bio4, urban, Population_size, Cases, Year, Distance_from_index_case, Season) <span class="sc">|&gt;</span></span>
-<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Season =</span> <span class="fu">if_else</span>(Season <span class="sc">%%</span> <span class="fl">0.5</span> <span class="sc">==</span> <span class="dv">0</span>, <span class="st">"Winter"</span>, <span class="st">"Summer"</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Season =</span> <span class="fu">factor</span>(Season, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Winter"</span>, <span class="st">"Summer"</span>))) <span class="sc">|&gt;</span></span>
-<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>    <span class="fu">drop_na</span>()</span>
-<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>urb_split <span class="ot">&lt;-</span> <span class="fu">initial_split</span>(analysis_input, <span class="at">strata =</span> <span class="st">"Cases"</span>)</span>
-<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>urb_train <span class="ot">&lt;-</span> <span class="fu">training</span>(urb_split)</span>
-<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>urb_test <span class="ot">&lt;-</span> <span class="fu">testing</span>(urb_split)</span>
-<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>urb_recipe <span class="ot">&lt;-</span> <span class="fu">recipe</span>(Cases <span class="sc">~</span> ., <span class="at">data =</span> urb_train) <span class="sc">|&gt;</span></span>
-<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>    <span class="fu">step_normalize</span>(<span class="sc">-</span>Season, <span class="sc">-</span><span class="fu">all_outcomes</span>()) <span class="sc">|&gt;</span> </span>
-<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>    <span class="fu">step_dummy</span>(Season)</span>
-<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>tune_spec <span class="ot">&lt;-</span> <span class="fu">boost_tree</span>(</span>
-<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>    <span class="co"># tuned already to save time</span></span>
-<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
-<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>    <span class="fu">set_engine</span>(<span class="st">"xgboost"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>    <span class="fu">set_mode</span>(<span class="st">"regression"</span>)</span>
-<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a><span class="co"># urb_folds &lt;- vfold_cv(urb_train, v = 5, strata = "Cases")</span></span>
-<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a><span class="co"># urb_tune &lt;- workflow() |&gt; </span></span>
-<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a><span class="co">#     add_recipe(urb_recipe) |&gt;</span></span>
-<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a><span class="co">#     add_model(tune_spec) |&gt;</span></span>
-<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a><span class="co">#     tune_grid(</span></span>
-<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a><span class="co">#         resamples = urb_folds,</span></span>
-<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a><span class="co">#         grid = 20,</span></span>
-<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a><span class="co">#         control = control_grid(save_pred = TRUE)</span></span>
-<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a><span class="co">#     )</span></span>
-<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>best_tree <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>  <span class="at">trees =</span> <span class="dv">316</span>,</span>
-<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a>    <span class="at">tree_depth =</span> <span class="dv">4</span>,</span>
-<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>    <span class="at">min_n =</span> <span class="dv">12</span>,</span>
-<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>    <span class="at">loss_reduction =</span> <span class="fl">0.120</span>,</span>
-<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample_size =</span> <span class="fl">0.621</span>,</span>
-<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>    <span class="at">mtry =</span> <span class="dv">8</span>,</span>
-<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>    <span class="at">learn_rate =</span> <span class="fl">0.210</span></span>
-<span id="cb5-84"><a href="#cb5-84" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-85"><a href="#cb5-85" aria-hidden="true" tabindex="-1"></a>final_wf_urb <span class="ot">&lt;-</span> <span class="fu">workflow</span>() <span class="sc">|&gt;</span> </span>
-<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_model</span>(tune_spec) <span class="sc">|&gt;</span></span>
-<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_recipe</span>(urb_recipe) <span class="sc">|&gt;</span> </span>
-<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a>  <span class="fu">finalize_workflow</span>(best_tree)</span>
-<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a>final_fit_urb <span class="ot">&lt;-</span> final_wf_urb <span class="sc">|&gt;</span> <span class="fu">last_fit</span>(urb_split)</span>
-<span id="cb5-90"><a href="#cb5-90" aria-hidden="true" tabindex="-1"></a>final_fit_urb <span class="sc">|&gt;</span> <span class="fu">collect_metrics</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> prevalence <span class="sc">*</span> total_population_size</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>arr <span class="ot">&lt;-</span> total_cases[, , <span class="dv">110</span><span class="sc">:</span><span class="dv">154</span>]</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>arr2 <span class="ot">&lt;-</span> total_population_size[, , <span class="dv">110</span><span class="sc">:</span><span class="dv">154</span>]</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>years <span class="ot">&lt;-</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>coords <span class="ot">&lt;-</span> region<span class="sc">$</span>region_raster <span class="sc">|&gt;</span> raster<span class="sc">::</span><span class="fu">coordinates</span>()</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>dt <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">y =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">dim</span>(arr)[<span class="dv">2</span>], <span class="at">x =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">dim</span>(arr)[<span class="dv">1</span>], <span class="at">z =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">dim</span>(arr)[<span class="dv">3</span>]) <span class="sc">|&gt;</span> </span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Cases =</span> arr[<span class="fu">cbind</span>(x, y, z)],</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>         <span class="at">Population_size =</span> arr2[<span class="fu">cbind</span>(x, y, z)])</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Year <span class="ot">&lt;-</span> years[<span class="fu">round</span>(dt<span class="sc">$</span>z <span class="sc">/</span> <span class="dv">2</span>) <span class="sc">+</span> <span class="dv">1</span>]</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Season <span class="ot">&lt;-</span> <span class="fu">if_else</span>(dt<span class="sc">$</span>z <span class="sc">%%</span> <span class="dv">2</span> <span class="sc">==</span> <span class="dv">0</span>, <span class="dv">0</span>, <span class="fl">0.5</span>)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>x <span class="ot">&lt;-</span> <span class="fu">rep</span>(coords[, <span class="dv">1</span>], <span class="dv">45</span>)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>y <span class="ot">&lt;-</span> <span class="fu">rep</span>(coords[, <span class="dv">2</span>], <span class="dv">45</span>)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Time <span class="ot">&lt;-</span> dt<span class="sc">$</span>Year <span class="sc">+</span> dt<span class="sc">$</span>Season</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>index_case_coords <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">y =</span> <span class="fl">621173.8</span>, <span class="at">x =</span> <span class="dv">1475944</span>)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>dt<span class="sc">$</span>Distance_from_index_case <span class="ot">&lt;-</span> <span class="fu">sqrt</span>((dt<span class="sc">$</span>x <span class="sc">-</span> index_case_coords[<span class="st">"x"</span>])<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> (dt<span class="sc">$</span>y <span class="sc">-</span> index_case_coords[<span class="st">"y"</span>])<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract environmental predictors</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>col_names <span class="ot">&lt;-</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">19</span> <span class="sc">%&gt;%</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as.character</span>() <span class="sc">%&gt;%</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span> <span class="fu">paste0</span>(<span class="st">"bio"</span>, .)) <span class="sc">%&gt;%</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">append</span>(<span class="st">"urban"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">flatten_chr</span>()</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>files2 <span class="ot">&lt;-</span> <span class="fu">list.files</span>(</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>  <span class="st">"~/Documents/Very_Large_Data/predictors/CHELSA"</span>,</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>  <span class="at">pattern =</span> <span class="st">"^predictors_.+"</span>,</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">full.names =</span> T</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">keep</span>(str_detect, <span class="at">pattern =</span> <span class="st">"</span><span class="sc">\\</span><span class="st">.grd$"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  .[<span class="dv">55</span><span class="sc">:</span><span class="dv">77</span>] <span class="sc">|&gt;</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set_names</span>(years)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>extracted <span class="ot">&lt;-</span> dt <span class="sc">|&gt;</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Year) <span class="sc">|&gt;</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_split</span>() <span class="sc">|&gt;</span></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span> <span class="fu">select</span>(.x, x, y)) <span class="sc">|&gt;</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">future_map2</span>(</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    files2,</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">function</span>(p, f) {</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>      r <span class="ot">&lt;-</span> <span class="fu">rast</span>(f)</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>      terra<span class="sc">::</span><span class="fu">extract</span>(r, p, <span class="at">ID =</span> F)</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">.options =</span> <span class="fu">furrr_options</span>(<span class="at">seed =</span> T)</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map</span>(<span class="sc">~</span> <span class="fu">set_names</span>(., col_names)) <span class="sc">%&gt;%</span></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list_rbind</span>(<span class="at">names_to =</span> <span class="st">"Year"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(bio1, bio4, urban) <span class="sc">|&gt;</span> </span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_cols</span>(dt)</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Fit model</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>analysis_input <span class="ot">&lt;-</span> extracted <span class="sc">|&gt;</span> </span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    <span class="fu">select</span>(bio1, bio4, urban, Population_size, Cases, Year, Distance_from_index_case, Season) <span class="sc">|&gt;</span></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Season =</span> <span class="fu">if_else</span>(Season <span class="sc">%%</span> <span class="fl">0.5</span> <span class="sc">==</span> <span class="dv">0</span>, <span class="st">"Winter"</span>, <span class="st">"Summer"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Season =</span> <span class="fu">factor</span>(Season, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Winter"</span>, <span class="st">"Summer"</span>))) <span class="sc">|&gt;</span></span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>    <span class="fu">drop_na</span>()</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>urb_split <span class="ot">&lt;-</span> <span class="fu">initial_split</span>(analysis_input, <span class="at">strata =</span> <span class="st">"Cases"</span>)</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>urb_train <span class="ot">&lt;-</span> <span class="fu">training</span>(urb_split)</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>urb_test <span class="ot">&lt;-</span> <span class="fu">testing</span>(urb_split)</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>urb_recipe <span class="ot">&lt;-</span> <span class="fu">recipe</span>(Cases <span class="sc">~</span> ., <span class="at">data =</span> urb_train) <span class="sc">|&gt;</span></span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>    <span class="fu">step_normalize</span>(<span class="sc">-</span>Season, <span class="sc">-</span><span class="fu">all_outcomes</span>()) <span class="sc">|&gt;</span> </span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>    <span class="fu">step_dummy</span>(Season)</span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>tune_spec <span class="ot">&lt;-</span> <span class="fu">boost_tree</span>(</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>    <span class="co"># tuned already to save time</span></span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>    <span class="fu">set_engine</span>(<span class="st">"xgboost"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>    <span class="fu">set_mode</span>(<span class="st">"regression"</span>)</span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a><span class="co"># urb_folds &lt;- vfold_cv(urb_train, v = 5, strata = "Cases")</span></span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a><span class="co"># urb_tune &lt;- workflow() |&gt; </span></span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a><span class="co">#     add_recipe(urb_recipe) |&gt;</span></span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a><span class="co">#     add_model(tune_spec) |&gt;</span></span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a><span class="co">#     tune_grid(</span></span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a><span class="co">#         resamples = urb_folds,</span></span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a><span class="co">#         grid = 20,</span></span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a><span class="co">#         control = control_grid(save_pred = TRUE)</span></span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a><span class="co">#     )</span></span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>best_tree <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>  <span class="at">trees =</span> <span class="dv">316</span>,</span>
+<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>    <span class="at">tree_depth =</span> <span class="dv">4</span>,</span>
+<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a>    <span class="at">min_n =</span> <span class="dv">12</span>,</span>
+<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>    <span class="at">loss_reduction =</span> <span class="fl">0.120</span>,</span>
+<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample_size =</span> <span class="fl">0.621</span>,</span>
+<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a>    <span class="at">mtry =</span> <span class="dv">8</span>,</span>
+<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>    <span class="at">learn_rate =</span> <span class="fl">0.210</span></span>
+<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-84"><a href="#cb5-84" aria-hidden="true" tabindex="-1"></a>final_wf_urb <span class="ot">&lt;-</span> <span class="fu">workflow</span>() <span class="sc">|&gt;</span> </span>
+<span id="cb5-85"><a href="#cb5-85" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_model</span>(tune_spec) <span class="sc">|&gt;</span></span>
+<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_recipe</span>(urb_recipe) <span class="sc">|&gt;</span> </span>
+<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a>  <span class="fu">finalize_workflow</span>(best_tree)</span>
+<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a>final_fit_urb <span class="ot">&lt;-</span> final_wf_urb <span class="sc">|&gt;</span> <span class="fu">last_fit</span>(urb_split)</span>
+<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a>final_fit_urb <span class="sc">|&gt;</span> <span class="fu">collect_metrics</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 2 × 4
   .metric .estimator .estimate .config        
   &lt;chr&gt;   &lt;chr&gt;          &lt;dbl&gt; &lt;chr&gt;          
-1 rmse    standard     431.    pre0_mod0_post0
-2 rsq     standard       0.868 pre0_mod0_post0</code></pre>
+1 rmse    standard     422.    pre0_mod0_post0
+2 rsq     standard       0.871 pre0_mod0_post0</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Visualize</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="ot">&lt;-</span> <span class="fu">explain_tidymodels</span>(final_fit_urb<span class="sc">$</span>.workflow[[<span class="dv">1</span>]], <span class="at">y =</span> urb_test<span class="sc">$</span>Cases, <span class="at">data =</span> urb_test <span class="sc">|&gt;</span> <span class="fu">select</span>(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size), <span class="at">verbose =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="ot">&lt;-</span> <span class="fu">explain_tidymodels</span>(final_fit_urb<span class="sc">$</span>.workflow[[<span class="dv">1</span>]], <span class="at">y =</span> urb_test<span class="sc">$</span>Cases, <span class="at">data =</span> urb_test <span class="sc">|&gt;</span> <span class="fu">select</span>(bio1, bio4, urban, Year, Distance_from_index_case, Season, Population_size), <span class="at">verbose =</span> <span class="cn">FALSE</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>urb_explainer <span class="sc">|&gt;</span> <span class="fu">variable_importance</span>() <span class="sc">|&gt;</span> <span class="fu">plot</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">

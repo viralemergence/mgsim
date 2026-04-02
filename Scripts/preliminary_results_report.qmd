@@ -22,6 +22,7 @@ library(qs)
 library(here)
 library(paletteer)
 library(furrr)
+library(scales)
 conflicts_prefer(dplyr::filter, dplyr::select)
 knitr::opts_chunk$set(
   message = FALSE,
@@ -86,6 +87,13 @@ round3a_priors <- read_csv(here("Data/Input/sample_data_round3a.csv"), show_col_
     mortality_Sa_summer = 0,
     mortality_Ra_summer = mortality_Sa_summer
   )
+# Selected models
+abc31 <- qread(here("Data/Validation/abc_round3a.qs"))
+selected_samples_3 <- round3a_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc31$unadj.values, copy = TRUE) |>
+  pull(sample)
+selected_metrics <- round3a_metrics[selected_samples_3,]
 ```
 
 # 1. What is this all about?
@@ -112,19 +120,21 @@ Let us have a look at the performance of the final round of simulation modeling 
 validation_metrics <- bind_rows(
   round1_metrics,
   round2_metrics,
-  round3a_metrics
+  round3a_metrics,
+  selected_metrics
 ) |>
   mutate(
-    Round = factor(c(rep("1", 10000), rep("2", 10000), rep("3", 10000)))
+    Round = factor(c(rep("1", 10000), rep("2", 10000), rep("3", 10000), rep("Selected", 32)))
   ) |>
-  filter(dc) |>
   select(-hm_trend, -index)
 validation_metrics |>
-  tidyplot(x = dc, fill = Round) |>
-  add_count_bar() |>
+  filter(Round!="Selected") |>
+  tidyplot(x = Round, fill = dc) |>
+  add_barstack_absolute() |>
   adjust_y_axis_title("Count") |>
-  adjust_x_axis_title("Presence of finches in DC in 1994") |>
-  adjust_colors(new_colors = paletteer_d("PNWColors::Sunset2", 3))
+  adjust_x_axis_title("Simulation Round") |>
+  adjust_colors(new_colors = paletteer_d("nbapalettes::nets")) |>
+  adjust_legend_title("Finches in DC in 1994")
 ```
 
 There were 10,000 simulations in each round of modeling, so performance on this metric did not monotonically improve. This is more or less expected; I could not use this metric for validation by Approximate Bayesian Computation (ABC) because it is binary, so it was used as a pre-filter for ABC, so ABC could not optimize for it.
@@ -138,19 +148,26 @@ validation_metrics |>
     values_to = "Value",
     names_to = "Metric"
   ) |>
+  filter(!is.na(Value)) |>
   mutate(Metric = recode(
     Metric,
-    mg_presence = "MG presence",
-    hm_arrival = "First arrival of Haemorhous"
+    mg_presence = "MG persistence",
+    hm_arrival = "Finch arrival"
   )) |>
   tidyplot(x = Value, fill = Round) |>
-  add_histogram(bins = 30, alpha = 0.7) |>
+  add_histogram(bins = 30, alpha = 0.5, position = "identity") |>
   adjust_y_axis_title("Count") |>
-  adjust_colors(new_colors = paletteer_d("PNWColors::Sunset2", 3)) |> 
-  split_plot(by = Metric, scales = "free_x")
+  adjust_colors(new_colors = paletteer_d("PNWColors::Sunset2", 4)) |> 
+  split_plot(by = Metric, scales = "free_x") |>
+  adjust_y_axis(
+    transform = transform_pseudo_log(),
+    force_continuous = TRUE,
+    breaks = c(0, 10, 100, 1000),
+    labels = label_number(big.mark = ",", accuracy = 1)
+  )
 ```
 
-Lower values are better for both, so there's improvement on both metrics as we proceed through rounds 1, 2 and 3. However, first arrival of *Haemorhous* is still pretty far off from zero, the perfect score. We decided to stop modeling at this stage because the Bayes factors indicated that the posterior distributions had stabliized, and posterior predictive checks showed that the predictive power of the models could improve no further, at least with these validation metrics. The fact that first arrival of *Haemorhous* remained far from zero indicates that there is something about the assumptions of the model that makes it impossible to accurately recreate the first arrival of house finches to various regions.
+Lower values are better for both, so there's improvement on both metrics as we proceed through rounds 1, 2 and 3. However, first arrival of *Haemorhous* is still pretty far off from zero, the perfect score. We decided to stop modeling at this stage because the Bayes factors indicated that the posterior distributions had stabilized, and posterior predictive checks showed that the predictive power of the models could improve no further, at least with these validation metrics. The fact that first arrival of *Haemorhous* remained far from zero indicates that there is something about the assumptions of the model that makes it impossible to accurately recreate the first arrival of house finches to various regions.
 
 At this point, what I did was take the top 1% of models from round 3 based on these three validation metrics, and then created a weighted ensemble mean of these simulations. I will refer to this as the validated ensemble model.
 
@@ -163,11 +180,6 @@ I find that the easiest way to visualize the outbreak dynamics is using animatio
 Let's start with an animation of total population size of house finches.
 
 ```{r total_population_size}
-abc31 <- qread(here("Data/Validation/abc_round3a.qs"))
-selected_samples_3 <- round3a_priors |>
-  rowid_to_column("sample") |>
-  semi_join(abc31$unadj.values, copy = TRUE) |>
-  pull(sample)
 abc31_processed <- process_sims(selected_samples_3, abc31$weights, here("Data/Output/Round3a"))
 total_population_size <- abc31_processed$total_population
 animate_sim(total_population_size, region, years = 1940:2016)
@@ -192,8 +204,7 @@ A question I was really interested in answering with this model was whether urba
 
 ```{r urbanization}
 # Prep the data
-total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
-total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+total_cases <- prevalence * total_population_size
 arr <- total_cases[, , 110:154]
 arr2 <- total_population_size[, , 110:154]
 years <- 1994:2016
@@ -283,7 +294,7 @@ final_fit_urb <- final_wf_urb |> last_fit(urb_split)
 final_fit_urb |> collect_metrics()
 
 # Visualize
-urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Cases, Population_size), verbose = FALSE)
+urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Population_size), verbose = FALSE)
 urb_explainer |> variable_importance() |> plot()
 urb_explainer %>% 
   model_profile(variables = "urban", N = 2000) %>% 
