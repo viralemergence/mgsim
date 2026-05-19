@@ -277,7 +277,7 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
     weights,
     lower = 0,
     upper = 1,
-    any.missing = F,
+    any.missing = FALSE,
     len = length(samples)
   )
   assert_string(compartment, min.chars = 2)
@@ -287,61 +287,76 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
   )
   assert_directory_exists(data_dir, access = "r")
 
+  n_rows <- 106L
+  n_cols <- 161L
+  years <- 1940:2016
+  seasons <- factor(c("winter", "summer"), levels = c("winter", "summer"))
+  n_time <- length(years) * length(seasons) # 154
+
   # Read in data
-  dir_vec <- map_chr(samples, function(n) {
-    file.path(data_dir, paste0("simulation", n))
-  })
-  map_lgl(dir_vec, dir.exists) |>
-    all() |>
-    assert_true()
-  map_lgl(dir_vec, \(d) length(list.files(d)) > 0) |>
-    all() |>
-    assert_true()
-  num_slashes <- str_count(dir_vec[1], "/")
-  year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
+  dir_vec <- map_chr(samples, \(n) file.path(data_dir, paste0("simulation", n)))
+  map_lgl(dir_vec, dir.exists) |> all() |> assert_true()
+  map_lgl(dir_vec, \(d) length(list.files(d)) > 0) |> all() |> assert_true()
+
+  expected_time <- tidyr::expand_grid(
+    Year = years,
+    season = seasons
+  ) |>
+    dplyr::mutate(index = Year - 1939L) |>
+    dplyr::select(index, Year, season)
+
   file_info <- dir_vec |>
     lapply(list.files, full.names = TRUE) |>
-    lapply(
-      function(p) {
-        data.frame(
-          path = p,
-          index = as.numeric(
-            str_split_i(p, "/", num_slashes + 2) |>
-              str_split_i("_", 1)
-          ),
-          season = str_extract(p, "summer|winter")
+    lapply(\(paths) {
+      parsed <- tibble::tibble(path = paths) |>
+        dplyr::mutate(
+          file = basename(path),
+          index = readr::parse_number(stringr::str_extract(file, "^\\d+")),
+          season = stringr::str_extract(file, "winter|summer"),
+          compartment = stringr::str_extract(
+            file,
+            "Sj|Sa|I1j|I1a|Rj|Ra|I2j|I2a"
+          )
         ) |>
-          mutate(
-            season = factor(
-              season,
-              levels = c(
-                "winter",
-                "summer"
-              )
-            )
-          ) |>
-          arrange(index, season) |>
-          left_join(year_lookup, by = join_by(index)) |>
-          filter(str_detect(path, compartment))
+        dplyr::mutate(
+          season = factor(season, levels = c("winter", "summer"))
+        ) |>
+        dplyr::filter(compartment == !!compartment) |>
+        dplyr::select(path, index, season) |>
+        dplyr::distinct(index, season, .keep_all = TRUE)
+
+      expected_time |>
+        dplyr::left_join(parsed, dplyr::join_by(index, season)) |>
+        dplyr::arrange(index, season)
+    })
+
+  # Read .qs files and create weighted ensemble members with fixed dimensions
+  ensemble <- future_map2(file_info, weights, \(info, weight) {
+    sim_array_results <- array(0, dim = c(n_rows, n_cols, n_time))
+
+    for (i in seq_len(n_time)) {
+      path_i <- info$path[i]
+
+      sim_data <- if (is.na(path_i) || !file.exists(path_i)) {
+        matrix(0, nrow = n_rows, ncol = n_cols)
+      } else {
+        read_or_zero(path_i)
       }
-    ) |>
-    map(fill_missing_years, start_year = 1940, end_year = 2016)
-  # Read in .qs files and create a weighted ensemble mean
-  ensemble <- future_map2(file_info, weights, function(info, weight) {
-    # Preallocate a 3D array for sim_array results
-    sim_array_results <- array(0, dim = c(106, 161, nrow(info)))
-    for (i in seq_len(nrow(info))) {
-      # Read the .qs file
-      sim_data <- read_or_zero(info$path[i])
-      # Fill the 3D array with the data
+
+      if (
+        is.null(dim(sim_data)) || !identical(dim(sim_data), c(n_rows, n_cols))
+      ) {
+        sim_data <- matrix(0, nrow = n_rows, ncol = n_cols)
+      }
+
       sim_array_results[,, i] <- sim_data
     }
-    return(sim_array_results * weight)
-    gc()
+
+    sim_array_results * weight
   })
 
   weighted_ensemble <- Reduce(`+`, ensemble) / sum(weights)
-  return(weighted_ensemble)
+  weighted_ensemble
 }
 
 ## Plot priors and posteriors from Approximate Bayesian Computation
