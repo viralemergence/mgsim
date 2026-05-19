@@ -1,5 +1,4 @@
 ---
-it---
 title: "Informative Prior Distributions"
 author: "July Pilowsky"
 format: html

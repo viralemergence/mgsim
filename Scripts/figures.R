@@ -5,7 +5,6 @@ library(tidyverse)
 library(tidyplots)
 library(tidymodels)
 library(DALEXtra)
-library(qs)
 library(here)
 library(paletteer)
 library(furrr)
@@ -14,6 +13,8 @@ library(cowplot)
 library(magick)
 library(rasterVis)
 library(terra)
+library(qs)
+i_am("Scripts/figures.R")
 conflicts_prefer(dplyr::filter, dplyr::select, dplyr::lag)
 # Source other scripts as needed
 source(here("Scripts/validation_metric_functions.R"))
@@ -181,8 +182,180 @@ magick::image_write(
 )
 
 #### Figure 2: Selected Posterior Distributions ####
-# Placeholder. This will be a plot of selected posterior distributions compared
-# to the priors.
+seasonal_mortality_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(
+    str_detect(Parameter, "mortality_Sa|mortality_Ra|mortality_Sj|mortality_Rj")
+  ) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      mortality_Sa_summer = "Summer adult susceptibles",
+      mortality_Ra_summer = "Summer adult recovereds",
+      mortality_Sa_winter = "Winter adult susceptibles",
+      mortality_Ra_winter = "Winter adult recovereds",
+      mortality_Sj_summer = "Summer juvenile susceptibles",
+      mortality_Rj_summer = "Summer juvenile recovereds",
+      mortality_Sj_winter = "Winter juvenile susceptibles",
+      mortality_Rj_winter = "Winter juvenile recovereds"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Seasonal Mortality") |>
+  adjust_y_axis(limits = c(0, NA), title = "Seasonal Mortality")
+
+daily_mortality_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(
+    Parameter,
+    "mortality_I1a|mortality_I2a|mortality_I1j|mortality_I2j"
+  )) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      mortality_I1a_summer = "Summer adult 1st infection",
+      mortality_I1a_winter = "Winter adult 1st infection",
+      mortality_I1j_summer = "Summer juvenile 1st infection",
+      mortality_I1j_winter = "Winter juvenile 1st infection",
+      mortality_I2a_summer = "Summer adult 2nd infection",
+      mortality_I2a_winter = "Winter adult 2nd infection",
+      mortality_I2j_summer = "Summer juvenile 2nd infection",
+      mortality_I2j_winter = "Winter juvenile 2nd infection"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Daily Mortality") |>
+  adjust_y_axis(limits = c(0, NA), title = "Daily Mortality")
+
+recovery_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "recovery")) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      recovery_I1a_summer = "Summer adult 1st infection",
+      recovery_I1a_winter = "Winter adult 1st infection",
+      recovery_I1j_summer = "Summer juvenile 1st infection",
+      recovery_I1j_winter = "Winter juvenile 1st infection",
+      recovery_I2a_summer = "Summer adult 2nd infection",
+      recovery_I2a_winter = "Winter adult 2nd infection",
+      recovery_I2j_summer = "Summer juvenile 2nd infection",
+      recovery_I2j_winter = "Winter juvenile 2nd infection"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Recovery") |>
+  adjust_y_axis(limits = c(0, NA), title = "Daily Recovery Rate")
+
+transmission_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "beta"), Parameter != "beta_I2_modifier") |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      beta_Sa_summer = "Summer adult susceptibles",
+      beta_Ra_summer = "Summer adult recovereds",
+      beta_Sa_winter = "Winter adult susceptibles",
+      beta_Ra_winter = "Winter adult recovereds",
+      beta_Sj_summer = "Summer juvenile susceptibles",
+      beta_Rj_summer = "Summer juvenile recovereds",
+      beta_Sj_winter = "Winter juvenile susceptibles",
+      beta_Rj_winter = "Winter juvenile recovereds"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Transmission") |>
+  adjust_y_axis(
+    limits = c(0, NA),
+    title = "Transmission Probability (given contact)"
+  )
+
+save_trimmed_plot <- function(plot_obj, file_path, width, height) {
+  ggplot2::ggsave(
+    filename = file_path,
+    plot = plot_obj + theme(plot.margin = margin(0, 0, 0, 0)),
+    width = width,
+    height = height,
+    dpi = 300,
+    bg = "white",
+    limitsize = FALSE
+  )
+}
+
+tmp_seasonal <- tempfile(fileext = ".png")
+tmp_daily <- tempfile(fileext = ".png")
+tmp_recovery <- tempfile(fileext = ".png")
+tmp_transmission <- tempfile(fileext = ".png")
+
+save_trimmed_plot(seasonal_mortality_plot, tmp_seasonal, width = 6, height = 4)
+save_trimmed_plot(daily_mortality_plot, tmp_daily, width = 6, height = 4)
+save_trimmed_plot(recovery_plot, tmp_recovery, width = 6, height = 4)
+save_trimmed_plot(transmission_plot, tmp_transmission, width = 6, height = 4)
+
+img_seasonal <- magick::image_read(tmp_seasonal) |> magick::image_trim()
+img_daily <- magick::image_read(tmp_daily) |> magick::image_trim()
+img_recovery <- magick::image_read(tmp_recovery) |> magick::image_trim()
+img_transmission <- magick::image_read(tmp_transmission) |> magick::image_trim()
+
+inter_panel_padding <- 40
+
+spacer_col_top <- magick::image_blank(
+  width = inter_panel_padding,
+  height = max(
+    magick::image_info(img_seasonal)$height,
+    magick::image_info(img_daily)$height
+  ),
+  color = "white"
+)
+
+spacer_col_bottom <- magick::image_blank(
+  width = inter_panel_padding,
+  height = max(
+    magick::image_info(img_recovery)$height,
+    magick::image_info(img_transmission)$height
+  ),
+  color = "white"
+)
+
+row_top <- c(img_seasonal, spacer_col_top, img_daily) |>
+  magick::image_append(stack = FALSE)
+
+row_bottom <- c(img_recovery, spacer_col_bottom, img_transmission) |>
+  magick::image_append(stack = FALSE)
+
+spacer_row <- magick::image_blank(
+  width = max(
+    magick::image_info(row_top)$width,
+    magick::image_info(row_bottom)$width
+  ),
+  height = inter_panel_padding,
+  color = "white"
+)
+
+fig2 <- c(row_top, spacer_row, row_bottom) |>
+  magick::image_append(stack = TRUE)
+
+magick::image_write(
+  fig2,
+  path = here("Visualizations/figure2_posteriors.png"),
+  format = "png"
+)
 
 #### Figure 3: First arrival dates of MG ####
 
@@ -234,12 +407,17 @@ centroids <- map_dfr(seq_len(dim(prevalence)[3]), function(slice) {
   mutate(year = seq(1940, 2016.5, by = 0.5)) |>
   mutate(distance_west_lag1 = lag(x, n = 1) - x)
 
+arrival_vals <- values(first_arrival_raster)
+fill_upper <- quantile(arrival_vals, 0.995, na.rm = TRUE)
+
 fig3 <- gplot(first_arrival_raster) +
   geom_tile(aes(fill = value)) +
   scale_fill_paletteer_c(
     palette = "pals::parula",
     name = "First Arrival Year",
-    na.value = "grey70"
+    na.value = "grey70",
+    limits = c(min(arrival_vals, na.rm = TRUE), fill_upper),
+    oob = scales::squish
   ) +
   coord_equal() +
   theme_void() +
@@ -422,6 +600,314 @@ ggplot2::ggsave(
   dpi = 300
 )
 
+#### Figure 5: Urbanization counterfactual ####
+counterfactual_results <- process_sims(
+  1:32,
+  abc31$weights,
+  here("Data/Output/urbanization_counterfactual")
+)
+prevalence <- counterfactual_results$prevalence
+
+arrival_diff <- region$raster_from_values(
+  t(results$total_population[,, 154])[
+    region$region_indices
+  ] -
+    t(counterfactual_results$total_population[,, 154])[region$region_indices]
+)
+
+fig5 <- gplot(arrival_diff) +
+  geom_tile(aes(fill = value)) +
+  scale_fill_paletteer_c(
+    palette = "scico::lajolla",
+    name = "Difference in total population size\n(Observed - Counterfactual)",
+    na.value = "grey70"
+  ) +
+  coord_equal() +
+  theme_void() +
+  theme(legend.position = "right")
+
+ggplot2::ggsave(
+  filename = here("Visualizations/figure5_urbanization_counterfactual.png"),
+  plot = fig5,
+  width = 8.5,
+  height = 6,
+  dpi = 300
+)
+
 #### Figure S1 ####
-s1 <- plot_abc_posteriors(abc31, round1_priors)
-tidyplots::save_plot(s1, here("Visualizations/Figure_S1_posteriors.pdf"))
+seasonal_mortality_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(
+    str_detect(Parameter, "mortality_Sa|mortality_Ra|mortality_Sj|mortality_Rj")
+  ) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      mortality_Sa_summer = "Summer adult susceptibles",
+      mortality_Ra_summer = "Summer adult recovereds",
+      mortality_Sa_winter = "Winter adult susceptibles",
+      mortality_Ra_winter = "Winter adult recovereds",
+      mortality_Sj_summer = "Summer juvenile susceptibles",
+      mortality_Rj_summer = "Summer juvenile recovereds",
+      mortality_Sj_winter = "Winter juvenile susceptibles",
+      mortality_Rj_winter = "Winter juvenile recovereds"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Seasonal Mortality") |>
+  adjust_y_axis(limits = c(0, NA), title = "Seasonal Mortality")
+
+daily_mortality_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(
+    Parameter,
+    "mortality_I1a|mortality_I2a|mortality_I1j|mortality_I2j"
+  )) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      mortality_I1a_summer = "Summer adult 1st infection",
+      mortality_I1a_winter = "Winter adult 1st infection",
+      mortality_I1j_summer = "Summer juvenile 1st infection",
+      mortality_I1j_winter = "Winter juvenile 1st infection",
+      mortality_I2a_summer = "Summer adult 2nd infection",
+      mortality_I2a_winter = "Winter adult 2nd infection",
+      mortality_I2j_summer = "Summer juvenile 2nd infection",
+      mortality_I2j_winter = "Winter juvenile 2nd infection"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Daily Mortality") |>
+  adjust_y_axis(limits = c(0, NA), title = "Daily Mortality")
+
+recovery_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "recovery")) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      recovery_I1a_summer = "Summer adult 1st infection",
+      recovery_I1a_winter = "Winter adult 1st infection",
+      recovery_I1j_summer = "Summer juvenile 1st infection",
+      recovery_I1j_winter = "Winter juvenile 1st infection",
+      recovery_I2a_summer = "Summer adult 2nd infection",
+      recovery_I2a_winter = "Winter adult 2nd infection",
+      recovery_I2j_summer = "Summer juvenile 2nd infection",
+      recovery_I2j_winter = "Winter juvenile 2nd infection"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Recovery") |>
+  adjust_y_axis(limits = c(0, NA), title = "Daily Recovery Rate")
+
+transmission_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "beta"), Parameter != "beta_I2_modifier") |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      beta_Sa_summer = "Summer adult susceptibles",
+      beta_Ra_summer = "Summer adult recovereds",
+      beta_Sa_winter = "Winter adult susceptibles",
+      beta_Ra_winter = "Winter adult recovereds",
+      beta_Sj_summer = "Summer juvenile susceptibles",
+      beta_Rj_summer = "Summer juvenile recovereds",
+      beta_Sj_winter = "Winter juvenile susceptibles",
+      beta_Rj_winter = "Winter juvenile recovereds"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Transmission") |>
+  adjust_y_axis(
+    limits = c(0, NA),
+    title = "Transmission Probability (given contact)"
+  )
+
+dispersal_distance_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "dispersal_r")) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      dispersal_r_adult = "Adult",
+      dispersal_r_juv = "Juvenile"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Dispersal Distance") |>
+  adjust_y_axis(limits = c(0, NA), title = "Maximum Dispersal Distance (km)")
+
+dispersal_density_depend_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "n_k")) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      dispersal_source_n_k_cutoff = "Outward dispersal density cutoff",
+      dispersal_target_n_k_cutoff = "Inward dispersal density cutoff",
+      dispersal_source_n_k_threshold = "Outward dispersal density threshold",
+      dispersal_target_n_k_threshold = "Inward dispersal density threshold"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Dispersal Density Dependence") |>
+  adjust_y_axis(limits = c(0, NA), title = "Proportion of carrying capacity")
+
+dispersal_proportion_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(str_detect(Parameter, "dispersal_p")) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      dispersal_p_adult = "Adult",
+      dispersal_p_juv = "Juvenile"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Dispersal Proportion") |>
+  adjust_y_axis(
+    limits = c(0, NA),
+    title = "Proportion of individuals dispersing each season"
+  )
+
+other_plot <- abc31$adj.values |>
+  as.data.frame() |>
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value") |>
+  filter(
+    str_detect(
+      Parameter,
+      "abundance_threshold|initial_release|fecundity|infected_t1"
+    )
+  ) |>
+  mutate(
+    Parameter = recode(
+      Parameter,
+      abundance_threshold = "Quasi-extinction threshold",
+      initial_release = "# of finches initially released",
+      fecundity = "Eggs per female per season",
+      infected_t1 = "# of finches initially infected"
+    )
+  ) |>
+  tidyplot(y = Value, x = Parameter, fill = Parameter) |>
+  add_violin(alpha = 0.7, scale = "width") |>
+  remove_x_axis_labels() |>
+  remove_x_axis_ticks() |>
+  add_title("Other Parameters") |>
+  adjust_y_axis(limits = c(0, NA), title = "Number of finches")
+
+tmp_seasonal <- tempfile(fileext = ".png")
+tmp_daily <- tempfile(fileext = ".png")
+tmp_recovery <- tempfile(fileext = ".png")
+tmp_transmission <- tempfile(fileext = ".png")
+tmp_dispersal_distance <- tempfile(fileext = ".png")
+tmp_dispersal_density <- tempfile(fileext = ".png")
+tmp_dispersal_proportion <- tempfile(fileext = ".png")
+tmp_other <- tempfile(fileext = ".png")
+
+save_trimmed_plot(seasonal_mortality_plot, tmp_seasonal, width = 6, height = 4)
+save_trimmed_plot(daily_mortality_plot, tmp_daily, width = 6, height = 4)
+save_trimmed_plot(recovery_plot, tmp_recovery, width = 6, height = 4)
+save_trimmed_plot(transmission_plot, tmp_transmission, width = 6, height = 4)
+save_trimmed_plot(
+  dispersal_distance_plot,
+  tmp_dispersal_distance,
+  width = 6,
+  height = 4
+)
+save_trimmed_plot(
+  dispersal_density_depend_plot,
+  tmp_dispersal_density,
+  width = 6,
+  height = 4
+)
+save_trimmed_plot(
+  dispersal_proportion_plot,
+  tmp_dispersal_proportion,
+  width = 6,
+  height = 4
+)
+save_trimmed_plot(other_plot, tmp_other, width = 6, height = 4)
+
+img_seasonal <- magick::image_read(tmp_seasonal) |> magick::image_trim()
+img_daily <- magick::image_read(tmp_daily) |> magick::image_trim()
+img_recovery <- magick::image_read(tmp_recovery) |> magick::image_trim()
+img_transmission <- magick::image_read(tmp_transmission) |> magick::image_trim()
+img_dispersal_distance <- magick::image_read(tmp_dispersal_distance) |>
+  magick::image_trim()
+img_dispersal_density <- magick::image_read(tmp_dispersal_density) |>
+  magick::image_trim()
+img_dispersal_proportion <- magick::image_read(tmp_dispersal_proportion) |>
+  magick::image_trim()
+img_other <- magick::image_read(tmp_other) |> magick::image_trim()
+
+inter_panel_padding <- 40
+
+bind_row_with_padding <- function(
+  left_img,
+  right_img,
+  padding = inter_panel_padding
+) {
+  spacer_col <- magick::image_blank(
+    width = padding,
+    height = max(
+      magick::image_info(left_img)$height,
+      magick::image_info(right_img)$height
+    ),
+    color = "white"
+  )
+  c(left_img, spacer_col, right_img) |>
+    magick::image_append(stack = FALSE)
+}
+
+row_1 <- bind_row_with_padding(img_seasonal, img_daily)
+row_2 <- bind_row_with_padding(img_recovery, img_transmission)
+row_3 <- bind_row_with_padding(img_dispersal_distance, img_dispersal_density)
+row_4 <- bind_row_with_padding(img_dispersal_proportion, img_other)
+
+spacer_row <- magick::image_blank(
+  width = max(
+    magick::image_info(row_1)$width,
+    magick::image_info(row_2)$width,
+    magick::image_info(row_3)$width,
+    magick::image_info(row_4)$width
+  ),
+  height = inter_panel_padding,
+  color = "white"
+)
+
+fig_s1 <- c(row_1, spacer_row, row_2, spacer_row, row_3, spacer_row, row_4) |>
+  magick::image_append(stack = TRUE)
+
+magick::image_write(
+  fig_s1,
+  path = here("Visualizations/Figure_S1_posteriors.png"),
+  format = "png"
+)
