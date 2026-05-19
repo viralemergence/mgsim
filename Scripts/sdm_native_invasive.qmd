@@ -39,6 +39,8 @@ points <- hofi_sample %>% map(~select(., decimallongitude, decimallatitude)) %>%
   set_names(ts) %>% 
   identity()
 template <- rast(finch_region$region_raster)
+col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
+  append("urban") %>% flatten_chr()
 ```
 
 # Goal
@@ -120,8 +122,6 @@ files2 <- list.files("~/Documents/Very_Large_Data/predictors/CHELSA",
                      pattern = "^predictors_.+",
                      full.names = T) %>% 
   keep(str_detect, pattern = "\\.grd$") %>% set_names(ts)
-col_names <- 1:19 %>% as.character() %>% map(~paste0("bio", .)) %>% 
-  append("urban") %>% flatten_chr()
 plan(multisession)
 native_extract <- future_map2(files2, native_points, function(f, p) {
   r <- rast(f); terra::extract(r, p, ID = F)
@@ -441,12 +441,64 @@ suitability <- map(files2, rast) %>%
                       fun = "weighted_mean",
                       metric_thresh = c("boyce_cont", 0.95))}) %>% 
   map(mask, mask = template) %>% 
-  rast() |> rescale0to1()
+  rast()
+suitability_scaled <- rescale0to1(suitability)
 # Rasterization of the coastline landed Jones Beach in the ocean so it has to be
 # interpolated back in so the house finches can be introduced there
-adjacent(suitability, 6075, 8) |> as.vector() -> indices
-for (l in 1:nlyr(suitability)) {
-  suitability[[l]][6075] <- suitability[[l]][indices][,1] |> mean(na.rm = T)
+adjacent(suitability_scaled, 6075, 8) |> as.vector() -> indices
+for (l in 1:nlyr(suitability_scaled)) {
+  suitability_scaled[[l]][6075] <- suitability_scaled[[l]][indices][,1] |> mean(na.rm = T)
 }
-terra::writeRaster(suitability, here("Data/Input/habitat_suitability_v3.tif"))
+terra::writeRaster(suitability_scaled, here("Data/Input/habitat_suitability_v3.tif"))
+```
+
+Now I want to create an alternate version of habitat suitability for counterfactual simulations, in which I predict habitat suitability assuming that urbanization is frozen at its 1940 level.
+
+```{r predict counterfactual}
+# Counterfactual setup: use 1940 urban layer for all years
+urban1940 <- rast("~/Documents/Very_Large_Data/predictors/CHELSA/predictors_1940.grd")[[20]]
+names(urban1940) <- "urban"
+baseline_min <- suitability |> minmax() |> min()
+baseline_max <- suitability |> minmax() |> max()
+
+build_predictors_frozen_urban <- function(file, layer_names, urban_ref) {
+  r <- rast(file)
+  names(r) <- layer_names
+  
+  # If geometry differs, align 1940 urban layer to this raster before replacement
+  if (!terra::compareGeom(r[[20]], urban_ref, stopOnError = FALSE)) {
+    urban_use <- terra::resample(urban_ref, r[[20]], method = "bilinear")
+  } else {
+    urban_use <- urban_ref
+  }
+  
+  r[[20]] <- urban_use
+  names(r) <- layer_names
+  r
+}
+
+# Full counterfactual stack (all years) with frozen 1940 urbanization
+suitability_cf_urban1940 <- map(files2, ~build_predictors_frozen_urban(.x, col_names, urban1940)) %>%
+  map(~predict_raster(
+    object = full_ensemble,
+    raster = .x,
+    type = "prob",
+    fun = "weighted_mean",
+    metric_thresh = c("boyce_cont", 0.95)
+  )) %>%
+  map(mask, mask = template) %>%
+  rast() |>
+  app(\(x) (x - baseline_min)/(baseline_max - baseline_min))
+
+# Jones Beach interpolation step
+indices <- adjacent(suitability_cf_urban1940, 6075, 8) |> as.vector()
+for (l in seq_len(nlyr(suitability_cf_urban1940))) {
+  suitability_cf_urban1940[[l]][6075] <- mean(suitability_cf_urban1940[[l]][indices][, 1], na.rm = TRUE)
+}
+
+terra::writeRaster(
+  suitability_cf_urban1940,
+  here("Data/Input/habitat_suitability_counterfactual_urban1940.tif"),
+  overwrite = TRUE
+)
 ```
