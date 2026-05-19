@@ -1,0 +1,361 @@
+---
+title: "mgsim: Round 3a Analysis"
+author: "July Pilowsky"
+format: html
+editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
+---
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyplots)
+library(paletteer)
+library(here)
+library(cowplot)
+library(GGally)
+library(abc)
+library(tidyverse)
+library(furrr)
+library(bayestestR)
+library(qs2)
+library(epizootic)
+plan(multicore)
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+source(here("Scripts/animate_sim.R"))
+source(here("Scripts/pp_check.R"))
+set_trust_promises(TRUE)
+region <- qread(here("Data/Input/finch_region.qs"))
+round2_metrics <- read_csv(here("Data/Validation/round2c_validation_metrics.csv"))
+trend_metrics2 <- read_csv(here("Data/Validation/round2c_trend_metrics.csv")) |>
+    pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
+round2_metrics$hm_trend_1970[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1970") |> pull(value)
+round2_metrics$hm_trend_1993[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1993") |> pull(value)
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")) |>
+    mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
+round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
+round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
+round2_priors <- read_csv(here("Data/Input/sample_data_round2b.csv")) |>
+  mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
+         mortality_Ra_summer = mortality_Sa_summer)
+round3a_priors <- read_csv(here("Data/Input/sample_data_round3a.csv")) |>
+  mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
+         mortality_Ra_summer = mortality_Sa_summer)
+round3a_metrics <- read_csv(here("Data/Validation/round3a_validation_metrics.csv"))
+trend_metrics3a <- read_csv(here("Data/Validation/round3a_trend_metrics.csv")) |>
+    pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
+round3a_metrics$hm_trend_1970[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1970") |> pull(value)
+round3a_metrics$hm_trend_1993[round3a_metrics$dc] <- trend_metrics3a |> filter(metric == "penalty1993") |> pull(value)
+region_raster <- finch_region$region_raster
+region_raster[which(!is.na(raster::values(region_raster)))] <- 1
+```
+
+# What is my goal in Round 3a of simulation?
+
+My goal is to improve over Rounds 1 and 2 on the validation metrics, and to determine whether the posteriors have stabilized and I can stop simulating.
+
+# Validation Metric Performance
+
+## Presence in DC
+
+To start with, let's look at presence of finches in DC. In the first round, 4876 simulations out of 10000 simulated the presence of house finches in Washington, DC in 1994, and in Round 2, it was 6992 out of 10000.
+
+```{r presence_dc}
+sum(round3a_metrics$dc)
+```
+
+3,140 simulations have birds present in DC, which is worse than the two previous rounds. Ouch. Let me examine again which parameter settings make simulations pass this filter or not:
+
+```{r dc}
+round3a_priors |>
+  mutate(dc = round3a_metrics$dc) |>
+  select(-mortality_Sa_summer, -mortality_Ra_summer) |>
+  pivot_longer(1:45, names_to = "Prior", values_to = "Value") |>
+  ggplot(aes(x = Value, group = dc, fill = dc)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~Prior, scales = "free") +
+  scale_fill_paletteer_d("PrettyCols::Light", name = "Birds in DC?")
+```
+
+The controls on what passes the DC filter or not are different from Round 1. In Round 1, it had to do entirely with dispersal_target_n_k, maximizing the range of population densities that the finches were willing to migrate to. In this round, that's already been optimized, so instead we're selecting for low quasi-extinction threshold, higher fecundity, intermediate juvenile dispersal distance, and widening dispersal_source_n_k (the range of population densities that will push finches out and toward dispersal.)
+
+## Other Validation Metrics
+
+Moving on I can look at the other validation metrics:
+
+```{r validation_metrics_plot, warning = FALSE}
+validation_metrics <- bind_rows(round1_metrics, round2_metrics, round3a_metrics) |>
+                      mutate(Round = factor(c(rep("1", 10000), rep("2", 10000), rep("3a", 10000)))) |>
+                      filter(dc) |>
+                      select(-hm_trend, -index, -dc)
+quantiles <- validation_metrics[,1:7] |>
+  map_dbl(\(x) quantile(x, prob = c(0.001), na.rm = T))
+labels <- c("Mycoplasma presence", "Finch pres/abs",
+            "Point prevalence", "Mycoplasma arrival", "Finch arrival",
+            "Finch trend from 1970", "Finch trend from 1993")
+plotlist <- pmap(list(names(validation_metrics)[1:7], quantiles, labels), function(x, y, z) {
+    outliers_removed <- validation_metrics[, c(x, "Round")][pull(validation_metrics, x) < quantile(pull(validation_metrics, x), 0.95, na.rm=T), ]
+    ggplot(data = outliers_removed, aes(x = .data[[x]], fill = Round, group = Round)) +
+    geom_histogram(position = "dodge", bins = 30) +
+    geom_vline(xintercept = y, color = "blue") +
+    xlab(z) +
+    scale_fill_paletteer_d("PNWColors::Sunset2")
+})
+plot_grid(plotlist = plotlist)
+```
+
+Performance has improved on the metrics used for ABC (*Mycoplasma* presence and finch first arrival) and also on metrics that were not used for validation (finch presence/absence, finch trend from 1993.)
+
+# Selected models
+
+I will continue with the same two metrics used in the previous rounds, for consistency.
+
+```{r abc_two_metrics, message = F, warning = F}
+abc31 <- abc(param = round3a_priors[round3a_metrics$dc,],
+             sumstat = round3a_metrics |> filter(dc) |> select(c(3,7)),
+              target = rep(0, 2),
+             tol = 0.01,
+             method = "neuralnet")
+qsave(abc31, here("Data/Validation/abc_round3a.qs"))
+head(abc31$ss, 10)
+selected_samples_3 <- round3a_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc31$unadj.values, copy = TRUE) |>
+  pull(sample)
+write_sftp_transfer("/glade/work/pilowskyj/Round3a",
+                      "/Users/julypilowsky/Documents/mgsim/Data/Output/Round3a",
+                      selected_samples_3,
+                      here("Scripts/Globus/abc_round3a.txt"))
+ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
+animate_sim(ensemble_sa, region, remove_outliers = TRUE)
+```
+
+This simulation doesn't look bad, though I definitely need to talk with house finch biologists about the realism of the pattern of finch spread on the landscape.
+
+```{r animate_recovered_adults, warning = F}
+ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
+animate_sim(ensemble_ra, region, years = 1994:2016, burn_in = 111)
+```
+
+The disease dynamics look really cool here, though!
+
+## Posterior Distributions
+
+```{r optimized abc}
+plot_abc_posteriors(abc31, round2_priors)
+```
+
+# Is it time to stop modeling?
+
+We use two checks to see if it's time to stop modeling: Bayes factors and posterior predictive checks.
+
+```{r bayes_factor, warning = F, message = F}
+bayesfactor_parameters(posterior = as.data.frame(abc31$adj.values)[1:45], 
+                       prior = round3a_priors[1:45], verbose = FALSE)
+```
+
+Bayes factors look good! They are all well below 1.
+
+The final confirmation is to do posterior predictive checks. The way I do this is to do a small batch of pilot simulations based on the posteriors of round 3, run validation metrics, and make sure that the validation targets fall neatly within the distribution of observed validation metrics.
+
+```{r posterior_predictive}
+pp_metrics <- read_csv(here("Data_minimal/Validation/posterior_predictive_validation_metrics.csv"), show_col_types = FALSE)
+pp_check(model_metrics = pp_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+pp_check(model_metrics = round3a_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+pp_check(model_metrics = round2_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+pp_check(model_metrics = round1_metrics |> filter(dc) |> select(mg_presence, hm_arrival), 
+        obs_targets = c(0,0))
+```
+
+None of the rounds pass the posterior predictive check, but round 3 does the best at it, and the additional pilot simulations actually do worse than round 3, which is a strong argument for stopping. However, I think it's worthwhile to stop and check why round 3 can't quite meet the target. By which I mean, I want to examine *exactly what* my best validated model gets wrong.
+
+## What does the best validated ensemble model get wrong?
+
+I can answer this question by estimating the validation metrics just for the top models selected by ABC in round 3, and looking at what's correct and what isn't. I will do this for all of the metrics, even though I only used two for validation.
+
+```{r finch_arrival_deep_dive, message = F}
+source(here("Scripts/validated_ensemble_metrics.R"))
+hm_arrival_raster <- region_raster
+hm_arrival_raster[hm_arrival_df |> filter(is.na(arrival_index)) |> pull(region_cell)] <- 2
+raster::plot(hm_arrival_raster, main = "Places where finches sometimes fail to arrive", colNA = "blue")
+hm_arrival2 <- region_raster
+hm_arrival2[hm_arrival_df |> filter(arrival_index > 1, penalty > 33) |> pull(region_cell)] <- 2 
+raster::plot(hm_arrival2, main = "Places where finches sometimes arrive too early", colNA = "blue")
+```
+
+The first plot shows, in green, the locations where in some of the top simulations, we were unable to simulate the finches ever arriving there. The second plot shows, in green, some places where in some of the top simulations, the finches arrive much too early.
+
+```{r mg_arrival_deep_dive}
+mg_arrival_raster <- region_raster
+mg_arrival_raster[mg_arrival_metric |> filter(penalty > 45) |> pull(region_cell)] <- 2
+raster::plot(mg_arrival_raster, main = "Places where Mycoplasma arrives too early", colNA = "blue")
+```
+
+The places where the top simulations have MG arriving too early are concentrated in New England.
+
+```{r point_prevalence_deep_dive}
+point_prevalence_raster <- region_raster
+point_prevalence_raster[point_prevalence_metric |> filter(!is.na(prevalence), penalty > 0.1) |> pull(region_cell)] <- 2
+raster::plot(point_prevalence_raster, main = "Places where simulated prevalence is much too high", colNA = "blue")
+```
+
+There are not too many places where the simulated prevalence is much too high; the simulations do pretty well on this.
+
+```{r hm_presabs_deep_dive}
+hm_presence_raster <- region_raster
+false_negative <- hm_presabs_df |> filter(always_present, penalty > 5) |> pull(region_cell) |> 
+    map(\(i) finch_region$region_indices[i]) |> discard(\(v) length(v) == 0) |>
+    flatten_int()
+hm_presence_raster[false_negative] <- 2
+raster::plot(hm_presence_raster, colNA = "blue", main = "Places where models fail to simulate continuous finch presence")
+hm_absence_raster <- region_raster
+false_positive <- hm_presabs_df |> filter(always_absent, penalty > 5) |> pull(region_cell) |>
+    map_int(\(i) finch_region$region_indices[i])
+hm_absence_raster[false_positive] <- 2
+raster::plot(hm_absence_raster, colNA = "blue", main = "Places where finches are absent but the model simulates presence")
+```
+
+The places with false negatives (failure to simulate continuous finch presence) are in the West, and the places with false positives are in the South. There are more false negatives than false positives.
+
+```{r mg_presence_deep_dive}
+mg_presence_raster <- region_raster
+mg_presence_raster[mg_presence_df |> filter(none_sick) |> pull(region_cell)] <- 2
+raster::plot(mg_presence_raster, colNA = "blue", main = "Places where models fail to simulate continuous presence of Mycoplasma")
+```
+
+Most of the places where the model fails to simulate MG outbreaks are in the West, but it's not many points; the model does well on this.
+
+# Time Series
+
+There are a few aspatial time series I'm interested in looking at from the top validated models. First, I want to see an overall trajectory of house finch population size.
+
+```{r population_size_ts}
+sim_weights <- data.frame(sim = selected_samples_3, weight = abc31$weights)
+ensemble_model <- ensemble_time_series(selected_samples_3, here("Data/Output/Round3a")) |> 
+    left_join(sim_weights, by = c("Simulation" = "sim")) |>
+    mutate(Simulation = factor(Simulation))
+
+# Sum across compartments/life stages per simulation/time
+ensemble_by_sim_time <- ensemble_model |>
+  group_by(Time, Simulation, weight) |>
+  summarize(Abundance = sum(Abundance), .groups = "drop")
+
+# Calculate weighted average by time
+weighted_average <- ensemble_by_sim_time |>
+  group_by(Time) |>
+  summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop")
+
+p <- ensemble_by_sim_time |> 
+    tidyplot(x = Time, y = Abundance, group = Simulation) |>
+    add_sum_line(alpha = 0.4) |>
+    add_annotation_line(x = 1994, xend = 1994, y = 0, yend = 6e08, linetype = "dashed") |>
+    add_annotation_text(x = 1994, y = 6e08, text = "MG start") |>
+    add_title("Ensemble Finch Population Size Time Series")
+
+p + geom_line(data = weighted_average, aes(x = Time, y = Abundance, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```
+
+What's interesting here is that the seasonal variation in population size reduces after the introduction of MG.
+
+```{r prevalence_ts, warning = F}
+weighted_average2 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation, weight) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    group_by(Infected, Time) |>
+    summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    mutate(Prevalence = InfectedTRUE/(InfectedTRUE + InfectedFALSE))
+
+prevalence_df <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    mutate(Prevalence = InfectedTRUE/(InfectedTRUE + InfectedFALSE))
+
+p2 <- prevalence_df |>
+    tidyplot(x = Time, y = Prevalence, group = Simulation) |>
+    add_line(alpha = 0.4) |> 
+    adjust_y_axis(transform = "log10") |>
+    add_title("Ensemble MG Prevalence Time Series (Log Scale)")
+
+p2 + geom_line(data = weighted_average2, aes(x = Time, y = Prevalence, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```
+
+The simulations where everything ends up at 100% prevalence from 2005 onward are somewhat concerning and I'll have to investigate them later. Let's have a look at number of cases of conjunctivitis over time:
+
+```{r case_ts}
+weighted_average3 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation, weight) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    group_by(Infected, Time) |>
+    summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected")
+
+p3 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    tidyplot(x = Time, y = InfectedTRUE, group = Simulation) |>
+    add_line(alpha = 0.4) |>
+    adjust_y_axis_title("MG Cases") |>
+    add_title("Ensemble MG Cases Time Series")
+
+p3 + geom_line(data = weighted_average3, aes(x = Time, y = InfectedTRUE, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```
+
+# Prevalence Animations
+
+Based on the prevalence trajectories I saw in the time series, I would like to create animations of prevalence in a few individual simulations representing different prevalence trajectories through time, to get a sense of what happens in each.
+
+## Weighted Ensemble Average
+
+```{r weighted_average_prevalence}
+ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
+ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
+ensemble_sj <- ensemble_mean(selected_samples_3, abc31$weights, "Sj", here("Data/Output/Round3a"))
+ensemble_rj <- ensemble_mean(selected_samples_3, abc31$weights, "Rj", here("Data/Output/Round3a"))
+ensemble_I1a <- ensemble_mean(selected_samples_3, abc31$weights, "I1a", here("Data/Output/Round3a"))
+ensemble_I2a <- ensemble_mean(selected_samples_3, abc31$weights, "I2a", here("Data/Output/Round3a"))
+ensemble_I1j <- ensemble_mean(selected_samples_3, abc31$weights, "I1j", here("Data/Output/Round3a"))
+ensemble_I2j <- ensemble_mean(selected_samples_3, abc31$weights, "I2j", here("Data/Output/Round3a"))
+prevalence_array <- (ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j)/(ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j)
+animate_sim(prevalence_array, region, years = 1994:2016, burn_in = 111)
+```
+
+Yes, the present-day prevalence is much too high in the weighted ensemble mean. I suspect there is a problem coming from the fact that most of my spatiotemporal prevalence data is from before 2003, so it doesn't capture the fact that prevalence stopped increasing after a certain date. I wonder if I can find more recent prevalence data...
+
+## Simulation 7649
+
+This is a simulation that does *not* hit 100% prevalence, providing an alternative trajectory to look at.
+
+```{r prevalence_anim_7649}
+prevalence_sim(7649, region, here("Data/Output/Round3a"), biclass = TRUE)
+prevalence_sim(7649, region, here("Data/Output/Round3a"))
+```
+
+## Simulation 9673
+
+This simulation also does not hit 100% prevalence; in fact, it eventually gets to zero.
+
+```{r prevalence_anim_9673}
+prevalence_sim(9673, region, here("Data/Output/Round3a"), biclass = TRUE)
+```
+
+Wow, okay, this is one is wild. That's definitely not what happened.

@@ -1,5 +1,4 @@
 library(checkmate)
-library(furrr)
 
 #' Interpolation of Missing Timesteps in a Raster Stack
 #'
@@ -243,8 +242,18 @@ write_sftp_transfer <- function(source_dir, dest_dir, sim_numbers, filename) {
     file.path(dest_dir, paste0("simulation", n))
   })
   dir_exists <- map_lgl(destinations, dir.exists)
+  # Check if directories contain files
+  dir_has_files <- map_lgl(destinations, function(d) {
+    if (dir.exists(d)) {
+      length(list.files(d)) > 0
+    } else {
+      FALSE
+    }
+  })
+  # Combined logical vector
+  dir_exists_has_files <- dir_exists & dir_has_files
 
-  instructions <- map_chr(sim_numbers[!dir_exists], function(n) {
+  instructions <- map_chr(sim_numbers[!dir_exists_has_files], function(n) {
     paste0("get -r ", source_dir, "/simulation", n, " ", dest_dir)
   }) |>
     paste(collapse = "\n")
@@ -285,6 +294,9 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
   map_lgl(dir_vec, dir.exists) |>
     all() |>
     assert_true()
+  map_lgl(dir_vec, \(d) length(list.files(d)) > 0) |>
+    all() |>
+    assert_true()
   num_slashes <- str_count(dir_vec[1], "/")
   year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
   file_info <- dir_vec |>
@@ -314,8 +326,6 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
       }
     ) |>
     map(fill_missing_years, start_year = 1940, end_year = 2016)
-
-  plan(multisession)
   # Read in .qs files and create a weighted ensemble mean
   ensemble <- future_map2(file_info, weights, function(info, weight) {
     # Preallocate a 3D array for sim_array results
@@ -327,6 +337,7 @@ ensemble_mean <- function(samples, weights, compartment, data_dir) {
       sim_array_results[,, i] <- sim_data
     }
     return(sim_array_results * weight)
+    gc()
   })
 
   weighted_ensemble <- Reduce(`+`, ensemble) / sum(weights)
@@ -339,7 +350,7 @@ plot_abc_posteriors <- function(abc, priors) {
   assert_class(abc, "abc")
   assert_choice(abc$method, c("rejection", "loclinear", "neuralnet"))
   assert_data_frame(priors, min.rows = 1, min.cols = 1, col.names = "unique")
-  assert_true(all.equal(names(priors), colnames(abc$adj.values)))
+  assert_set_equal(names(priors), colnames(abc$adj.values))
 
   prior_samples <- priors |>
     mutate(Distribution = "Prior")
@@ -349,10 +360,10 @@ plot_abc_posteriors <- function(abc, priors) {
     "Proportion of Adults Dispersing",
     "Maximum Dispersal Distance (Juv.)",
     "Maximum Dispersal Distance (Ad.)",
-    "Density over this value\n reduces outward dispersal",
-    "Density over this value\n ends outward dispersal",
-    "Density over this value\n reduces inward dispersal",
-    "Density over this value\n ends inward dispersal",
+    "Outward dispersal threshold",
+    "Outward dispersal cutoff",
+    "Inward dispersal threshold",
+    "Inward dispersal cutoff",
     "Quasi-extinction threshold",
     "# Finches released in NY",
     "Maximum Population Density (2151 sq. km.)",
@@ -429,4 +440,134 @@ plot_abc_posteriors <- function(abc, priors) {
     adjust_x_axis_title("Parameter Value") |>
     adjust_title("Prior vs Posterior Distributions") |>
     split_plot(Parameter, ncol = 2, nrow = 2)
+}
+
+# This function unpacks the selected samples into a data frame with time series
+# for each simulation, removing the spatial element. This is useful for
+# plotting time series of overall population size or prevalence.
+ensemble_time_series <- function(samples, data_dir) {
+  years <- 1940:2016
+  # Assertions
+  assert_integerish(
+    samples,
+    lower = 1,
+    upper = 10000,
+    any.missing = FALSE,
+    min.len = 1
+  )
+  assert_directory_exists(data_dir, access = "r")
+
+  # Read in data
+  dir_vec <- map_chr(samples, function(n) {
+    file.path(data_dir, paste0("simulation", n))
+  })
+  map_lgl(dir_vec, dir.exists) |>
+    all() |>
+    assert_true()
+  map_lgl(dir_vec, \(d) length(list.files(d)) > 0) |>
+    all() |>
+    assert_true()
+  num_slashes <- str_count(dir_vec[1], "/")
+  year_lookup <- data.frame(index = 1:77, Year = 1940:2016)
+  file_info <- dir_vec |>
+    lapply(list.files, full.names = TRUE) |>
+    lapply(
+      function(p) {
+        data.frame(
+          path = p,
+          index = as.numeric(
+            str_split_i(p, "/", num_slashes + 2) |>
+              str_split_i("_", 1)
+          ),
+          season = str_extract(p, "summer|winter")
+        ) |>
+          mutate(
+            season = factor(
+              season,
+              levels = c(
+                "winter",
+                "summer"
+              )
+            )
+          ) |>
+          arrange(index, season) |>
+          left_join(year_lookup, by = join_by(index))
+      }
+    ) |>
+    map(fill_missing_years, start_year = 1940, end_year = 2016)
+
+  # Read in .qs files and create a data frame
+  ensemble <- future_map2(file_info, samples, function(info, sim) {
+    dt_list <- list()
+    for (i in seq_len(nrow(info))) {
+      # Detect the compartment and life stage from the file name
+      compartment <- str_extract(info$path[i], "Sj|Sa|I1j|I1a|Rj|Ra|I2j|I2a")
+      life_stage <- if_else(str_detect(compartment, "j"), "Juvenile", "Adult")
+      compartment <- str_remove(compartment, "j|a")
+      # Read the .qs file
+      arr <- read_or_zero(info$path[i])
+      dt <- data.table()
+
+      # Add the corresponding values from the array
+      dt[, Abundance := sum(arr)]
+      dt$Year <- info$Year[i]
+      dt$Season <- info$season[i]
+      dt$Time <- if_else(dt$Season == "winter", dt$Year, dt$Year + 0.5)
+      dt$Simulation <- sim
+      dt$Compartment <- compartment
+      dt$Life_Stage <- life_stage
+
+      dt_list[[i]] <- dt
+    }
+    return(rbindlist(dt_list))
+    gc()
+  }) |>
+    bind_rows()
+}
+
+process_sims <- function(samples, weights, data_dir) {
+  # Assertions
+  assert_integerish(
+    samples,
+    lower = 1,
+    upper = 10000,
+    any.missing = FALSE,
+    min.len = 1
+  )
+  assert_numeric(
+    weights,
+    lower = 0,
+    upper = 1,
+    any.missing = FALSE,
+    len = length(samples)
+  )
+  assert_directory_exists(data_dir, access = "r")
+
+  ensemble_sa <- ensemble_mean(samples, weights, "Sa", data_dir)
+  ensemble_sj <- ensemble_mean(samples, weights, "Sj", data_dir)
+  ensemble_I1a <- ensemble_mean(samples, weights, "I1a", data_dir)
+  ensemble_I1j <- ensemble_mean(samples, weights, "I1j", data_dir)
+  ensemble_Ra <- ensemble_mean(samples, weights, "Ra", data_dir)
+  ensemble_Rj <- ensemble_mean(samples, weights, "Rj", data_dir)
+  ensemble_I2a <- ensemble_mean(samples, weights, "I2a", data_dir)
+  ensemble_I2j <- ensemble_mean(samples, weights, "I2j", data_dir)
+
+  # Sum to get total population size
+  total_population <- ensemble_sa +
+    ensemble_sj +
+    ensemble_I1a +
+    ensemble_I1j +
+    ensemble_Ra +
+    ensemble_Rj +
+    ensemble_I2a +
+    ensemble_I2j
+
+  # Calculate prevalence
+  total_infected <- ensemble_I1a + ensemble_I1j + ensemble_I2a + ensemble_I2j
+  prevalence <- total_infected / total_population
+
+  return(list(
+    total_population = total_population,
+    prevalence = prevalence
+  ))
 }

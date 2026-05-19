@@ -1,0 +1,173 @@
+---
+title: "mgsim: Round 2e Analysis"
+author: "July Pilowsky"
+format: html
+editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
+---
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyplots)
+library(paletteer)
+library(here)
+library(cowplot)
+library(GGally)
+library(abc)
+library(tidyverse)
+library(furrr)
+library(bayestestR)
+library(qs2)
+library(epizootic)
+plan(multicore)
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+source(here("Scripts/animate_sim.R"))
+source(here("Scripts/abc_helpers.R"))
+set_trust_promises(TRUE)
+region <- qread(here("Data/Input/finch_region.qs"))
+round2_metrics <- read_csv(here("Data/Validation/round2e_validation_metrics.csv"))
+trend_metrics2 <- read_csv(here("Data/Validation/round2e_trend_metrics.csv")) |>
+    pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
+round2_metrics$hm_trend_1970[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1970") |> pull(value)
+round2_metrics$hm_trend_1993[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1993") |> pull(value)
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")) |>
+    mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
+round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
+round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
+round2_priors <- read_csv(here("Data/Input/sample_data_round2b.csv")) |>
+  mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
+         mortality_Ra_summer = mortality_Sa_summer)
+```
+
+# What is my goal in Round 2e of simulation?
+
+I am using the same validation metrics I used successfully in Round 2b, but adding spatiotemporal point prevalence, as the results that emerged from using just Mycoplasma presence and finch first arrival had unrealistically high prevalences, which I'm hoping I can improve.
+
+## Presence in DC
+
+To start with, let's look at presence of finches in DC. In the first round, 4876 simulations out of 10000 simulated the presence of house finches in Washington, DC in 1994, and in Round 2b, it was 4247 out of 10000.
+
+```{r presence_dc}
+sum(round2_metrics$dc)
+```
+
+We're at 4,054, which is pretty similar to Round 2b.
+
+## Other Validation Metrics
+
+Moving on I can look at the other validation metrics:
+
+```{r validation_metrics_plot, warning = FALSE}
+validation_metrics <- bind_rows(round1_metrics, round2_metrics) |>
+                      mutate(Round = factor(c(rep("1", 10000), rep("2", 10000)))) |>
+                      filter(dc) |>
+                      select(-hm_trend, -index, -dc)
+quantiles <- validation_metrics[,1:7] |>
+  map_dbl(\(x) quantile(x, prob = c(0.001), na.rm = T))
+labels <- c("Mycoplasma presence", "Finch pres/abs",
+            "Point prevalence", "Mycoplasma arrival", "Finch arrival",
+            "Finch trend from 1970", "Finch trend from 1993")
+colorpal <- paletteer_d("PNWColors::Sunset2")[c(1,3)]
+plotlist <- pmap(list(names(validation_metrics)[1:7], quantiles, labels), function(x, y, z) {
+    outliers_removed <- validation_metrics[, c(x, "Round")][pull(validation_metrics, x) < quantile(pull(validation_metrics, x), 0.95, na.rm=T), ]
+    ggplot(data = outliers_removed, aes(x = .data[[x]], fill = Round, group = Round)) +
+    geom_histogram(position = "dodge", bins = 30) +
+    geom_vline(xintercept = y, color = "blue", linetype = "dotted") +
+    xlab(z) +
+    scale_fill_manual(values = colorpal)
+})
+plot_grid(plotlist = plotlist)
+```
+
+A bit oddly, this round does worse on Mycoplasma presence, and a little worse on spatiotemporal point prevalence. Finch arrival has improved significantly, however.
+
+# Selected models
+
+Let's see if there's any improvement in selected models based on all the metrics. The previous round did not do very well because dispersal was much too aggressive, but perhaps this can be moderated.
+
+```{r abc_everything, message = F, warning = F}
+abc40 <- abc.stu(
+  param = round2_priors[round2_metrics$dc, ],
+  sumstat = round2_metrics |> filter(dc) |> select(3, 5, 7),
+  target = rep(0, 3),
+  tol = 0.01,
+  transf = "log",
+  scaling = "sd",
+  method = "rejection"
+)
+qs_save(abc40, here("Data/Validation/abc_round2e.qs2"))
+head(abc40$ss, 10)
+selected_samples <- round2_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc40$unadj.values, copy = TRUE) |>
+  pull(sample)
+write_sftp_transfer(
+  "/glade/work/pilowskyj/Round2e",
+  "/Users/julypilowsky/Documents/mgsim/Data/Output/Round2e",
+  selected_samples,
+  here("Scripts/Globus/abc_round2e.txt")
+)
+weight <- 1/(abc40$dist[abc40$region])
+sim_weights <- data.frame(sim = selected_samples, weight = weight)
+abc40_processed <- process_sims(
+  selected_samples,
+  weight,
+  here("Data/Output/Round2e")
+)
+ensemble_model <- ensemble_time_series(selected_samples, here("Data/Output/Round2e")) |> 
+    left_join(sim_weights, by = c("Simulation" = "sim")) |>
+    mutate(Simulation = factor(Simulation))
+
+# Sum across compartments/life stages per simulation/time
+ensemble_by_sim_time <- ensemble_model |>
+  group_by(Time, Simulation, weight) |>
+  summarize(Abundance = sum(Abundance), .groups = "drop")
+
+# Calculate weighted average by time
+weighted_average <- ensemble_by_sim_time |>
+  group_by(Time) |>
+  summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop")
+
+p <- ensemble_by_sim_time |> 
+    tidyplot(x = Time, y = Abundance, group = Simulation) |>
+    add_sum_line(alpha = 0.4) |>
+    add_annotation_line(x = 1994, xend = 1994, y = 0, yend = 6e08, linetype = "dashed") |>
+    add_annotation_text(x = 1994, y = 6e08, text = "MG start") |>
+    add_title("Ensemble Finch Population Size Time Series")
+
+p + geom_line(data = weighted_average, aes(x = Time, y = Abundance, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+
+weighted_average2 <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation, weight) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    group_by(Infected, Time) |>
+    summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    mutate(Prevalence = InfectedTRUE/(InfectedTRUE + InfectedFALSE))
+
+prevalence_df <- ensemble_model |>
+    filter(Year > 1993) |>
+    mutate(Infected = str_detect(Compartment, "I")) |>
+    group_by(Infected, Time, Simulation) |>
+    summarize(Abundance = sum(Abundance), .groups = "drop") |>
+    pivot_wider(names_from = Infected, values_from = Abundance, names_prefix = "Infected") |>
+    mutate(Prevalence = InfectedTRUE/(InfectedTRUE + InfectedFALSE))
+
+p2 <- prevalence_df |>
+    tidyplot(x = Time, y = Prevalence, group = Simulation) |>
+    add_line(alpha = 0.4) |> 
+    adjust_y_axis(transform = "log10") |>
+    add_title("Ensemble MG Prevalence Time Series (Log Scale)")
+
+p2 + geom_line(data = weighted_average2, aes(x = Time, y = Prevalence, group = NA), 
+              color = "red", linewidth = 1, alpha = 0.8, inherit.aes = FALSE)
+```
+
+Prevalence is way, way too low in these simulations, and the effect on population size negligible.

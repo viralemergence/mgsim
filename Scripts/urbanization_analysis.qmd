@@ -1,0 +1,252 @@
+---
+title: "mgsim: Urbanization Analysis"
+author: "July Pilowsky"
+format: html
+editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
+---
+
+```{r setup, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(tidymodels)
+library(terra)
+library(here)
+library(furrr)
+library(DALEXtra)
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+abc31 <- qread(here("Data/Validation/abc_round3a.qs"))
+round3a_priors <- read_csv(here("Data/Input/sample_data_round3a.csv"), show_col_types = FALSE) |>
+  mutate(
+    mortality_Sa_summer = 0,
+    mortality_Ra_summer = mortality_Sa_summer
+  )
+selected_samples_3 <- round3a_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc31$unadj.values, copy = TRUE) |>
+  pull(sample)
+finch_region <- "Data/Input/finch_region.qs" |> here() |> qread()
+```
+
+# Goal
+
+The goal of this analysis is to explore predictors of number of cases of *Mycoplasma* in the house finch epizootic simulations I've done. The predictors I will investigate are:
+
+-   Time
+-   Distance from index case
+-   Urbanization
+-   Temperature seasonality
+-   Mean annual temperature
+
+To measure this, I will need to go from 1994 (the start of the outbreak) to 2016 (the end of the outbreak) and assemble data frames of number of cases, then pair these data with calculated distances from the index case and extracts from the raster of spatial predictors. I will then use a regression model to investigate the relationship between the predictors and number of cases.
+
+# Case data
+
+```{r case_data}
+ensemble_I1a <- ensemble_mean(
+  selected_samples_3,
+  abc31$weights,
+  "I1a",
+  here("Data/Output/Round3a")
+)
+ensemble_I2a <- ensemble_mean(
+  selected_samples_3,
+  abc31$weights,
+  "I2a",
+  here("Data/Output/Round3a")
+)
+ensemble_I1j <- ensemble_mean(
+  selected_samples_3,
+  abc31$weights,
+  "I1j",
+  here("Data/Output/Round3a")
+)
+ensemble_I2j <- ensemble_mean(
+  selected_samples_3,
+  abc31$weights,
+  "I2j",
+  here("Data/Output/Round3a")
+)
+ensemble_sa <- ensemble_mean(selected_samples_3, abc31$weights, "Sa", here("Data/Output/Round3a"))
+ensemble_ra <- ensemble_mean(selected_samples_3, abc31$weights, "Ra", here("Data/Output/Round3a"))
+ensemble_sj <- ensemble_mean(selected_samples_3, abc31$weights, "Sj", here("Data/Output/Round3a"))
+ensemble_rj <- ensemble_mean(selected_samples_3, abc31$weights, "Rj", here("Data/Output/Round3a"))
+total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+arr <- total_cases[, , 110:154]
+arr2 <- total_population_size[, , 110:154]
+years <- 1994:2016
+coords <- finch_region$region_raster |> raster::coordinates()
+dt <- expand.grid(y = 1:dim(arr)[2], x = 1:dim(arr)[1], z = 1:dim(arr)[3]) |> 
+  mutate(Cases = arr[cbind(x, y, z)],
+         Population_size = arr2[cbind(x, y, z)])
+dt$Year <- years[round(dt$z / 2) + 1]
+dt$Season <- if_else(dt$z %% 2 == 0, 0, 0.5)
+dt$x <- rep(coords[, 1], 45)
+dt$y <- rep(coords[, 2], 45)
+dt$Time <- dt$Year + dt$Season
+summary(dt)
+ggplot(dt, aes(x = Cases)) + geom_density()
+```
+
+Time is already taken care of. Distance from index case is also easy to calculate, since I have the coordinates of each cell in a projected coordinate system. I can calculate the distance from the index case for each cell and add that as a predictor.
+
+```{r distance_from_index_case}
+index_case_coords <- c(y = 621173.8, x = 1475944)
+dt$Distance_from_index_case <- sqrt((dt$x - index_case_coords["x"])^2 + (dt$y - index_case_coords["y"])^2)
+```
+
+# Environmental predictors
+
+To get the environmental predictors, I will need to extract values from the rasters of urbanization, temperature seasonality, and mean annual temperature for each cell in the region.
+
+```{r extract_predictors}
+col_names <- 1:19 %>%
+  as.character() %>%
+  map(~ paste0("bio", .)) %>%
+  append("urban") %>%
+  flatten_chr()
+files2 <- list.files(
+  "~/Documents/Very_Large_Data/predictors/CHELSA",
+  pattern = "^predictors_.+",
+  full.names = T
+) %>%
+  keep(str_detect, pattern = "\\.grd$") %>%
+  .[55:77] |>
+  set_names(years)
+extracted <- dt |>
+  group_by(Year) |>
+  group_split() |>
+  map(~ select(.x, x, y)) |>
+  future_map2(
+    files2,
+    function(p, f) {
+      r <- rast(f)
+      terra::extract(r, p, ID = F)
+    },
+    .options = furrr_options(seed = T)
+  ) %>%
+  map(~ set_names(., col_names)) %>%
+  list_rbind(names_to = "Year") |> 
+  select(bio1, bio4, urban) |> 
+  bind_cols(dt)
+```
+
+# Regression model
+
+Now I will implement a machine learning algorithm to investigate the relationship between the predictors and number of MG cases.
+
+```{r machine_learning}
+analysis_input <- extracted |> 
+    select(bio1, bio4, urban, Cases, Year, Distance_from_index_case, Season) |>
+    mutate(Season = if_else(Season %% 0.5 == 0, "Winter", "Summer")) |>
+    mutate(Season = factor(Season, levels = c("Winter", "Summer"))) |>
+    drop_na()
+urb_split <- initial_split(analysis_input, strata = "Cases")
+urb_train <- training(urb_split)
+urb_test <- testing(urb_split)
+urb_recipe <- recipe(Cases ~ ., data = urb_train) |>
+    step_normalize(-Season, -all_outcomes()) |> 
+    step_dummy(Season)
+tune_spec <- boost_tree(
+    # tuned already to save time
+) |>
+    set_engine("xgboost") |>
+    set_mode("regression")
+# urb_folds <- vfold_cv(urb_train, v = 5, strata = "Cases")
+# urb_tune <- workflow() |> 
+#     add_recipe(urb_recipe) |>
+#     add_model(tune_spec) |>
+#     tune_grid(
+#         resamples = urb_folds,
+#         grid = 20,
+#         control = control_grid(save_pred = TRUE)
+#     )
+best_tree <- list(
+  trees = 316,
+    tree_depth = 4,
+    min_n = 12,
+    loss_reduction = 0.120,
+    sample_size = 0.621,
+    mtry = 8,
+    learn_rate = 0.210
+)
+final_wf_urb <- workflow() |> 
+  add_model(tune_spec) |>
+  add_recipe(urb_recipe) |> 
+  finalize_workflow(best_tree)
+final_fit_urb <- final_wf_urb |> last_fit(urb_split, metrics = metric_set(mae, rsq))
+final_fit_urb |> collect_metrics()
+```
+
+The MAE is large, though we are dealing with some very large numbers in the number of cases (up to \~8,000).
+
+```{r explainer}
+urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season))
+urb_explainer |> variable_importance() |> plot()
+urb_explainer %>% 
+  model_profile(variables = "urban", N = 2000) %>% 
+  plot() + ggtitle("Partial dependence profile for urbanization")
+```
+
+This has the same threshold effect that urbanization has on habitat suitability for house finches. Since cases depend just as much on population size as they do on spread of the disease, this is to be expected, and it perhaps calls for another analysis that controls for population size to see what happens.
+
+## Controlling for population size
+
+```{r prevalence_model}
+analysis_input <- extracted |> 
+    select(bio1, bio4, urban, Population_size, Cases, Year, Distance_from_index_case, Season) |>
+    mutate(Season = if_else(Season %% 0.5 == 0, "Winter", "Summer")) |>
+    mutate(Season = factor(Season, levels = c("Winter", "Summer"))) |>
+    drop_na()
+urb_split <- initial_split(analysis_input, strata = "Cases")
+urb_train <- training(urb_split)
+urb_test <- testing(urb_split)
+urb_recipe <- recipe(Cases ~ ., data = urb_train) |>
+    step_normalize(-Season, -all_outcomes()) |> 
+    step_dummy(Season)
+tune_spec <- boost_tree(
+    # tuned already to save time
+) |>
+    set_engine("xgboost") |>
+    set_mode("regression")
+# urb_folds <- vfold_cv(urb_train, v = 5, strata = "Cases")
+# urb_tune <- workflow() |> 
+#     add_recipe(urb_recipe) |>
+#     add_model(tune_spec) |>
+#     tune_grid(
+#         resamples = urb_folds,
+#         grid = 20,
+#         control = control_grid(save_pred = TRUE)
+#     )
+best_tree <- list(
+  trees = 316,
+    tree_depth = 4,
+    min_n = 12,
+    loss_reduction = 0.120,
+    sample_size = 0.621,
+    mtry = 8,
+    learn_rate = 0.210
+)
+final_wf_urb <- workflow() |> 
+  add_model(tune_spec) |>
+  add_recipe(urb_recipe) |> 
+  finalize_workflow(best_tree)
+final_fit_urb <- final_wf_urb |> last_fit(urb_split, metrics = metric_set(mae, rsq))
+final_fit_urb |> collect_metrics()
+```
+
+The R-squared is much higher in this analysis that includes population size as a predictor, and lower MAE as well.
+
+```{r explainer2}
+urb_explainer <- explain_tidymodels(final_fit_urb$.workflow[[1]], y = urb_test$Cases, data = urb_test |> select(bio1, bio4, urban, Year, Distance_from_index_case, Season, Population_size))
+urb_explainer |> variable_importance() |> plot()
+urb_explainer %>% 
+  model_profile(variables = "urban", N = 2000) %>% 
+  plot() + ggtitle("Partial dependence profile for urbanization")
+```
+
+Intriguingly, urbanization is still a meaningful predictor even when we control for population size, which means that the effect of urbanization goes beyond simply increasing the finch population size. Mechanistically given how the model works, this has to be about the density-dependent dispersal, in which dispersal depends on the saturation of carrying capacity (N/K) in a locale.

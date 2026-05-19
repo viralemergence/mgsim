@@ -173,6 +173,7 @@ However, simply using the year of first sighting is not good enough. Observation
 ```{r estimate first arrival}
 sightings <- hfds |> mutate(region_cell = rasterized) |> 
   filter(Sick_Birds > 0, region_cell %in% region$region_indices) |> 
+  filter(Sick_Birds > 0, region_cell %in% region$region_indices) |> 
   group_by(region_cell) |> 
   group_split() |> 
   discard(\(df) nrow(df) < 10)
@@ -190,8 +191,8 @@ write_csv(mg_arrival, here("Data/Validation/mycoplasma_first_arrival.csv"))
 basemap +
   geom_point(data = mg_arrival |> group_by(region_cell) |>
                summarize(first_arrival = first(first_arrival),
-                         LONGITUDE = first(longitude),
-                         LATITUDE = first(latitude)),
+                         LONGITUDE = first(LONGITUDE),
+                         LATITUDE = first(LATITUDE)),
              aes(x = LONGITUDE, y = LATITUDE, col = first_arrival),
              size = 2) +
   scale_color_viridis_c()
@@ -203,8 +204,10 @@ I don't really trust absence too much based on the House Finch Disease Survey be
 
 ```{r mg presence}
 pres_hfds <- hfds |> mutate(region_cell = rasterized) |> 
+  filter(Sick_Birds > 0, region_cell %in% region$region_indices, Year < 2017) |> 
   filter(Sick_Birds > 0, region_cell %in% region$region_indices) |> 
   group_by(region_cell, Year) |> 
+  summarize(total_sick = sum(Sick_Birds)) |> 
   summarize(total_sick = sum(Sick_Birds)) |> 
   mutate(years_present = n()) |> 
   filter(years_present > 10) |> 
@@ -475,8 +478,6 @@ hm_arrival <- sightings |>
   bind_rows()
 write_csv(hm_arrival, here("Data/Validation/haemorhous_first_arrival.csv"))
 ```
-
-TO BE COMPLETED LATER
 
 ## Abundance Trends
 

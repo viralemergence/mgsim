@@ -18,6 +18,8 @@ library(GGally)
 library(abc)
 library(tidyverse)
 library(qs2)
+library(furrr)
+plan(multisession)
 source(here("Scripts/validation_metric_functions.R"))
 source(here("Scripts/convenience_functions.R"))
 source(here("Scripts/animate_sim.R"))
@@ -29,6 +31,9 @@ round1_metrics <- read_csv(here("Data_minimal/Validation/round1_validation_metri
 round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
 round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
 round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+round1_metrics_dc <- round1_metrics |> 
+  filter(dc) |> 
+  select(-index, -dc, -hm_trend)
 ```
 
 # 1. What is the motivation and methodology of this research?
@@ -79,9 +84,6 @@ About half of the simulations (4876) succeeded on this metric. The main determin
 Now, let's look at the performance on the other seven validation metrics. What I'm looking for here are metrics that are *good filters*: not all the simulations succeed, but not all of them fail horribly, either. This helps us choose which simulations are the best.
 
 ```{r performance histogram, message = F}
-round1_metrics_dc <- round1_metrics |> 
-  filter(dc) |> 
-  select(-index, -dc, -hm_trend)
 quantiles <- round1_metrics_dc |> 
   map_dbl(\(x) quantile(x, prob = c(0.01), na.rm = T))
 labels <- c("Mycoplasma presence", "Finch pres/abs", 
@@ -148,15 +150,25 @@ write_sftp_transfer("/glade/work/pilowskyj/Round1_matrix",
                       "/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix", 
                       selected_samples, 
                       here("Scripts/Globus/abc1.txt"))
+
 ensemble_sa <- ensemble_mean(selected_samples, abc49$weights, "Sa", here("Data/Output/Round1_matrix"))
-animate_sim(ensemble_sa, region)
+ensemble_ra <- ensemble_mean(selected_samples, abc49$weights, "Ra", here("Data/Output/Round1_matrix"))
+ensemble_sj <- ensemble_mean(selected_samples, abc49$weights, "Sj", here("Data/Output/Round1_matrix"))
+ensemble_rj <- ensemble_mean(selected_samples, abc49$weights, "Rj", here("Data/Output/Round1_matrix"))
+ensemble_I1a <- ensemble_mean(selected_samples, abc49$weights, "I1a", here("Data/Output/Round1_matrix"))
+ensemble_I2a <- ensemble_mean(selected_samples, abc49$weights, "I2a", here("Data/Output/Round1_matrix"))
+ensemble_I1j <- ensemble_mean(selected_samples, abc49$weights, "I1j", here("Data/Output/Round1_matrix"))
+ensemble_I2j <- ensemble_mean(selected_samples, abc49$weights, "I2j", here("Data/Output/Round1_matrix"))
+total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+animate_sim(total_population_size, region, years = 1940:2016)
 ```
 
 This is an animation of susceptible adults during the study period. Now let's have a look at recovered adults to get a sense of the outbreak:
 
 ```{r recovered animation}
-ensemble_ra <- ensemble_mean(selected_samples, abc49$weights, "Ra", here("Data/Output/Round1_matrix"))
-animate_sim(ensemble_ra, region)
+total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+prevalence <- total_cases / total_population_size
+animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
 ```
 
 The "flickering" you observe in this animation is due to seasonality. The number of house finches drops every winter due to higher mortality, so the colors change pretty intensely season to season.
@@ -189,13 +201,64 @@ write_sftp_transfer("/glade/work/pilowskyj/Round1_matrix",
                 "/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix", 
                       selected_samples, 
                       filename=here("Scripts/Globus/abc2.txt"))
+
 ensemble_sa <- ensemble_mean(selected_samples, abc49$weights, "Sa", here("Data/Output/Round1_matrix"))
-animate_sim(ensemble_sa, region)
+ensemble_ra <- ensemble_mean(selected_samples, abc49$weights, "Ra", here("Data/Output/Round1_matrix"))
+ensemble_sj <- ensemble_mean(selected_samples, abc49$weights, "Sj", here("Data/Output/Round1_matrix"))
+ensemble_rj <- ensemble_mean(selected_samples, abc49$weights, "Rj", here("Data/Output/Round1_matrix"))
+ensemble_I1a <- ensemble_mean(selected_samples, abc49$weights, "I1a", here("Data/Output/Round1_matrix"))
+ensemble_I2a <- ensemble_mean(selected_samples, abc49$weights, "I2a", here("Data/Output/Round1_matrix"))
+ensemble_I1j <- ensemble_mean(selected_samples, abc49$weights, "I1j", here("Data/Output/Round1_matrix"))
+ensemble_I2j <- ensemble_mean(selected_samples, abc49$weights, "I2j", here("Data/Output/Round1_matrix"))
+total_population_size <- ensemble_sa + ensemble_ra + ensemble_sj + ensemble_rj + ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+animate_sim(total_population_size, region, years = 1940:2016)
+
+sim_weights <- data.frame(sim = selected_samples, weight = abc49$weights)
+ensemble_model <- ensemble_time_series(
+  selected_samples,
+  here("Data/Output/Round1_matrix")
+) |>
+  left_join(sim_weights, by = c("Simulation" = "sim")) |>
+  mutate(Simulation = factor(Simulation))
+
+# Sum across compartments/life stages per simulation/time
+ensemble_by_sim_time <- ensemble_model |>
+  group_by(Time, Simulation, weight) |>
+  summarize(Abundance = sum(Abundance), .groups = "drop")
+
+# Calculate weighted average by time
+weighted_average <- ensemble_by_sim_time |>
+  group_by(Time) |>
+  summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop")
+
+p <- ensemble_by_sim_time |>
+  tidyplot(x = Time, y = Abundance, group = Simulation) |>
+  add_sum_line(alpha = 0.4) |>
+  add_annotation_line(
+    x = 1994,
+    xend = 1994,
+    y = 0,
+    yend = 6e08,
+    linetype = "dashed"
+  ) |>
+  add_annotation_text(x = 1994, y = 6e08, text = "MG start") |>
+  add_title("Ensemble Finch Population Size Time Series")
+
+p +
+  geom_line(
+    data = weighted_average,
+    aes(x = Time, y = Abundance, group = NA),
+    color = "red",
+    linewidth = 1,
+    alpha = 0.8,
+    inherit.aes = FALSE
+  )
 ```
 
 ```{r recovered optimized}
-ensemble_ra <- ensemble_mean(selected_samples, abc49$weights, "Ra", here("Data/Output/Round1_matrix"))
-animate_sim(ensemble_ra, region)
+total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+prevalence <- total_cases / total_population_size
+animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
 ```
 
 This ensemble seems to have slower dispersal than the others, with the house finch range expanding more slowly, and the disease spreading more slowly as well.
@@ -211,36 +274,133 @@ This validation dataset selects for rather low transmission rates all things con
 I read a bunch of papers about the curse of dimensionality and overfitting with excessive summary statistics, and they suggested that the neural net method of ABC optimization may be able to compensate for these issues. So I'm trying all seven here.
 
 ```{r everything, warning=F, message=F}
-abc49 <- abc(param = round1_priors[round1_metrics$dc,], 
-             sumstat = round1_metrics_dc,
-              target = rep(0, 7), 
-             tol = 0.01, 
-             method = "neuralnet")
+abc49 <- abc.stu(
+  param = round1_priors[round1_metrics$dc, ],
+  sumstat = round1_metrics_dc,
+  target = rep(0, 7),
+  tol = 0.01,
+  scaling = "sd",
+  method = "neuralnet",
+  hcorr = TRUE
+)
+qs_save(abc49, here("Data/Validation/abc_round1_5params.qs2"))
 head(abc49$ss, 10)
-selected_samples <- round1_priors %>% 
-  rowid_to_column("sample") |> 
-  semi_join(abc49$unadj.values, copy = TRUE) %>% 
+selected_samples <- round1_priors %>%
+  rowid_to_column("sample") |>
+  semi_join(abc49$unadj.values, copy = TRUE) %>%
   pull(sample)
-write_sftp_transfer("/glade/work/pilowskyj/Round1_matrix", 
-                      "/Users/caryinstitute/Documents/mgsim/Data/Output/Round1_matrix", 
-                      selected_samples, 
-                      here("Scripts/Globus/abc3.txt"))
-ensemble_sa <- ensemble_mean(selected_samples, abc49$weights, "Sa", here("Data/Output/Round1_matrix"))
-animate_sim(ensemble_sa, region)
+write_sftp_transfer(
+  "/glade/work/pilowskyj/Round1_matrix",
+  "/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix",
+  selected_samples,
+  here("Scripts/Globus/abc3.txt")
+)
+everything_processed <- process_sims(
+  selected_samples,
+  abc49$weights,
+  here("Data/Output/Round1_matrix")
+)
+total_population_size <- everything_processed[[1]]
+animate_sim(total_population_size, region, years = 1940:2016)
 ```
 
-This run looks similar to others but with lower abundance and higher seasonality. But let's look at recovered adults to get a sense of the outbreak:
+This run looks similar in total population size trends to others but with lower abundance and higher seasonality. But let's look at prevalence to get a sense of the outbreak:
 
 ```{r recovered everything}
-ensemble_ra <- ensemble_mean(selected_samples[-24], abc49$weights[-24], "Ra", here("Data/Output/Round1_matrix"))
-animate_sim(ensemble_ra, region)
+total_cases <- ensemble_I1a + ensemble_I2a + ensemble_I1j + ensemble_I2j
+prevalence <- total_cases / total_population_size
+animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
 ```
 
-The infection spreads more slowly in this simulation, and it isn't as evenly distributed across the landscape. It replicates the pattern of more intense infection in the east, which is great. It also hits the West at about the times that are reported from the literature.
+The spread of the disease also seems to be much too fast in this one.
 
 ```{r everything posteriors}
 plot_abc_posteriors(abc49, round1_priors)
 ```
+
+## 3.e. Point prevalence, finch arrival, and Mycoplasma prevalence
+
+I come back with the benefit of hindsight from many rounds of modeling and have come to the conclusion that spatiotemporal point prevalence would help keep a lid on prevalence going so high in the Mycoplasma presence/finch arrival simulations (3c, above.)
+
+```{r 4parameters}
+abc49 <- abc.stu(
+  param = round1_priors[round1_metrics$dc, ],
+  sumstat = round1_metrics_dc[, c(1, 3, 5)],
+  target = rep(0, 3),
+  tol = 0.01,
+  scaling = "sd",
+  method = "neuralnet"
+)
+qs_save(abc49, here("Data/Validation/abc_round1_3params.qs2"))
+head(abc49$ss, 10)
+selected_samples <- round1_priors %>%
+  rowid_to_column("sample") |>
+  semi_join(abc49$unadj.values, copy = TRUE) %>%
+  pull(sample)
+write_sftp_transfer(
+  "/glade/work/pilowskyj/Round1_matrix",
+  "/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix",
+  selected_samples,
+  here("Scripts/Globus/abc4.txt")
+)
+param4_processed <- process_sims(
+  selected_samples,
+  abc49$weights,
+  here("Data/Output/Round1_matrix")
+)
+total_population_size <- param4_processed[[1]]
+animate_sim(total_population_size, region, years = 1940:2016)
+
+sim_weights <- data.frame(sim = selected_samples, weight = abc49$weights)
+ensemble_model <- ensemble_time_series(
+  selected_samples,
+  here("Data/Output/Round1_matrix")
+) |>
+  left_join(sim_weights, by = c("Simulation" = "sim")) |>
+  mutate(Simulation = factor(Simulation))
+
+# Sum across compartments/life stages per simulation/time
+ensemble_by_sim_time <- ensemble_model |>
+  group_by(Time, Simulation, weight) |>
+  summarize(Abundance = sum(Abundance), .groups = "drop")
+
+# Calculate weighted average by time
+weighted_average <- ensemble_by_sim_time |>
+  group_by(Time) |>
+  summarize(Abundance = weighted.mean(Abundance, weight), .groups = "drop")
+
+p <- ensemble_by_sim_time |>
+  tidyplot(x = Time, y = Abundance, group = Simulation) |>
+  add_sum_line(alpha = 0.4) |>
+  add_annotation_line(
+    x = 1994,
+    xend = 1994,
+    y = 0,
+    yend = 6e08,
+    linetype = "dashed"
+  ) |>
+  add_annotation_text(x = 1994, y = 6e08, text = "MG start") |>
+  add_title("Ensemble Finch Population Size Time Series")
+
+p +
+  geom_line(
+    data = weighted_average,
+    aes(x = Time, y = Abundance, group = NA),
+    color = "red",
+    linewidth = 1,
+    alpha = 0.8,
+    inherit.aes = FALSE
+  )
+```
+
+The population size trends look questionable, as the population size actually increases after MG is introduced, though at least the in-filling of finch populations from 1940 looks pretty good. Let's check out prevalence.
+
+```{r 4parameters_prevalence}
+prevalence <- param4_processed[[2]]
+animate_sim(prevalence, region, years = 1994:2016, burn_in = 111)
+```
+
+The spread of the disease looks good, though the prevalence might be a little TOO low. There's room for improvement, though.
 
 # 4. Conclusions
 

@@ -1,1 +1,1 @@
-
+get -r /glade/work/pilowskyj/Round1_matrix/simulation7679 /Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix

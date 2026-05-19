@@ -1,0 +1,111 @@
+---
+title: "mgsim: Round 3b Analysis"
+author: "July Pilowsky"
+format: html
+editor: visual
+toc: true
+code-fold: true
+lightbox: true
+theme: materia
+---
+
+```{r setup, message = FALSE, echo = FALSE}
+library(tidyplots)
+library(paletteer)
+library(here)
+library(cowplot)
+library(GGally)
+library(abc)
+library(tidyverse)
+library(furrr)
+plan(sequential)
+source(here("Scripts/validation_metric_functions.R"))
+source(here("Scripts/convenience_functions.R"))
+source(here("Scripts/animate_sim.R"))
+set_trust_promises(TRUE)
+region <- qread(here("Data/Input/finch_region.qs"))
+round2_metrics <- read_csv(here("Data/Validation/round2c_validation_metrics.csv"))
+trend_metrics2 <- read_csv(here("Data/Validation/round2c_trend_metrics.csv")) |>
+    pivot_longer(everything(), names_to = c("metric", "sim"), names_sep = "\\.\\.\\.")
+round2_metrics$hm_trend_1970[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1970") |> pull(value)
+round2_metrics$hm_trend_1993[round2_metrics$dc] <- trend_metrics2 |> filter(metric == "penalty1993") |> pull(value)
+round1_priors <- read_csv(here("Data/Input/sample_data_round1.csv"))
+round1_metrics <- read_csv(here("Data/Validation/round1_validation_metrics.csv")) |>
+    mutate(hm_trend_1970 = rep(NA_real_), hm_trend_1993 = rep(NA_real_))
+round1_metrics$hm_trend_1970[round1_metrics$dc] <- round1_metrics$hm_trend[seq(1, 9752, 2)]
+round1_metrics$hm_trend_1993[round1_metrics$dc] <- round1_metrics$hm_trend[seq(2, 9752, 2)]
+round2_priors <- read_csv(here("Data/Input/sample_data_round2b.csv")) |>
+  mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
+         mortality_Ra_summer = mortality_Sa_summer)
+round3b_priors <- read_csv(here("Data/Input/sample_data_round3b.csv")) |>
+  mutate(mortality_Sa_summer = round1_priors$mortality_Sa_summer,
+         mortality_Ra_summer = mortality_Sa_summer)
+round3b_metrics <- read_csv(here("Data/Validation/round3b_validation_metrics.csv"))
+```
+
+# What is my goal in Round 3b of simulation?
+
+In round 3a I was disappointed by the performance in terms of the improvement over rounds 1 and 2, so I'm doing a new round of simulations with priors estimated differently to see if I can do any better.
+
+# Validation Metric Performance
+
+## Presence in DC
+
+To start with, let's look at presence of finches in DC. In the first round, 4876 simulations out of 10000 simulated the presence of house finches in Washington, DC in 1994, and in Round 2, it was 6992 out of 10000. In Round 3a, it was 3,140, which was a lot worse.
+
+```{r presence_dc}
+sum(round3b_metrics$dc)
+```
+
+Oh okay, this round is much worse. Oops!
+
+I'm going to continue to investigate anyway, just in case the simulations that pass this filter look better than the ones from round 3a.
+
+## Other Validation Metrics
+
+Moving on I can look at the other validation metrics:
+
+```{r validation_metrics_plot, warning = FALSE}
+validation_metrics <- bind_rows(round1_metrics, round2_metrics, round3b_metrics) |>
+                      mutate(Round = factor(c(rep("1", 10000), rep("2", 10000), rep("3b", 10000)))) |>
+                      filter(dc) |>
+                      select(-hm_trend, -index, -dc, -hm_trend_1970, -hm_trend_1993)
+labels <- c("Mycoplasma presence", "Finch pres/abs",
+            "Point prevalence", "Mycoplasma arrival", "Finch arrival")
+plotlist <- pmap(list(names(validation_metrics)[1:5], labels), function(x, z) {
+    p_df <- validation_metrics[, c(x, "Round")]
+    ggplot(data = p_df, aes(x = .data[[x]], fill = Round, group = Round)) +
+    geom_histogram(position = "dodge") +
+    xlab(z) +
+    scale_fill_paletteer_d("PNWColors::Sunset2")
+})
+plot_grid(plotlist = plotlist)
+```
+
+The round overall performs well, except on Mycoplasma presence, where it does significantly worse than previous rounds.
+
+# Selected models
+
+I will continue with the same two metrics used in the previous rounds, for consistency:
+
+```{r abc_two_metrics}
+abc18 <- abc(param = round3b_priors[round3b_metrics$dc,],
+             sumstat = round3b_metrics |> filter(dc) |> select(c(3,7)),
+              target = rep(0, 2),
+             tol = 0.02,
+             method = "neuralnet")
+qsave(abc18, here("Data/Validation/abc_round3b.qs"))
+head(abc18$ss, 10)
+selected_samples_3 <- round3b_priors |>
+  rowid_to_column("sample") |>
+  semi_join(abc18$unadj.values, copy = TRUE) |>
+  pull(sample)
+write_sftp_transfer("/glade/work/pilowskyj/Round3b",
+                      "/Users/julypilowsky/Documents/mgsim/Data/Output/Round3b",
+                      selected_samples_3,
+                      here("Scripts/Globus/abc_round3b.txt"))
+ensemble_sa <- ensemble_mean(selected_samples_3, abc18$weights, "Sa", here("Data/Output/Round3b"))
+animate_sim(ensemble_sa, region, remove_outliers = TRUE)
+```
+
+Just awful honestly, the invasion in the East totally fizzles out.

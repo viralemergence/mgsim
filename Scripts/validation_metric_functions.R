@@ -222,16 +222,31 @@ hm_arrival_function <- function(observed, low, high) {
 ##### Penalty function for Mycoplasma arrival dates #####
 # Penalty function
 mg_arrival_function <- function(observed, low, high) {
-  if (is.na(observed)) {
+  if (is.na(low) && is.na(high)) {
+    if (is.na(observed)) {
+      return(0)
+    } else {
+      penalty <- 78 - observed
+    }
+  } else if (!is.na(low)) {
+    if (is.na(observed)) {
+      return(0)
+    } else if (observed < low) {
+      penalty <- low - observed
+    } else {
+      return(0)
+    }
+  } else {
+    if (is.na(observed)) {
     return(54)
   }
-
   if (observed < low) {
     penalty <- low - observed
   } else if (observed > high) {
     penalty <- observed - high
   } else {
     penalty <- 0
+  }
   }
 
   return(penalty)

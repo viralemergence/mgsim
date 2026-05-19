@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="July Pilowsky">
+
+<title>mgsim: Round 1 Analysis</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="round1_analysis_files/libs/clipboard/clipboard.min.js"></script>
+<script src="round1_analysis_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="round1_analysis_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="round1_analysis_files/libs/quarto-html/popper.min.js"></script>
+<script src="round1_analysis_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="round1_analysis_files/libs/quarto-html/anchor.min.js"></script>
+<link href="round1_analysis_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="round1_analysis_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="round1_analysis_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="round1_analysis_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="round1_analysis_files/libs/bootstrap/bootstrap-bb4ae3cbdb7666cafb6ef5e9f69aabfc.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="round1_analysis_files/libs/quarto-contrib/glightbox/glightbox.min.js"></script>
+<link href="round1_analysis_files/libs/quarto-contrib/glightbox/glightbox.min.css" rel="stylesheet">
+<link href="round1_analysis_files/libs/quarto-contrib/glightbox/lightbox.css" rel="stylesheet">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#what-is-the-motivation-and-methodology-of-this-research" id="toc-what-is-the-motivation-and-methodology-of-this-research" class="nav-link active" data-scroll-target="#what-is-the-motivation-and-methodology-of-this-research">1. What is the motivation and methodology of this research?</a>
+  <ul class="collapse">
+  <li><a href="#a.-motivation" id="toc-a.-motivation" class="nav-link" data-scroll-target="#a.-motivation">1.a. Motivation</a></li>
+  <li><a href="#b.-methods" id="toc-b.-methods" class="nav-link" data-scroll-target="#b.-methods">1.b. Methods</a></li>
+  </ul></li>
+  <li><a href="#how-well-did-the-simulations-perform" id="toc-how-well-did-the-simulations-perform" class="nav-link" data-scroll-target="#how-well-did-the-simulations-perform">2. How well did the simulations perform?</a>
+  <ul class="collapse">
+  <li><a href="#a.-presence-in-washington-d.c." id="toc-a.-presence-in-washington-d.c." class="nav-link" data-scroll-target="#a.-presence-in-washington-d.c.">2.a. Presence in Washington, D.C.</a></li>
+  <li><a href="#b.-other-validation-metrics" id="toc-b.-other-validation-metrics" class="nav-link" data-scroll-target="#b.-other-validation-metrics">2.b. Other Validation Metrics</a></li>
+  </ul></li>
+  <li><a href="#which-simulations-scored-the-best-on-validation-metrics" id="toc-which-simulations-scored-the-best-on-validation-metrics" class="nav-link" data-scroll-target="#which-simulations-scored-the-best-on-validation-metrics">3. Which simulations scored the best on validation metrics?</a>
+  <ul class="collapse">
+  <li><a href="#a.-correlation" id="toc-a.-correlation" class="nav-link" data-scroll-target="#a.-correlation">3.a. Correlation</a></li>
+  <li><a href="#b.-point-prevalence-finch-population-size-trends" id="toc-b.-point-prevalence-finch-population-size-trends" class="nav-link" data-scroll-target="#b.-point-prevalence-finch-population-size-trends">3.b. Point prevalence &amp; finch population size trends</a></li>
+  <li><a href="#c.-mycoplasma-presence-finch-arrival" id="toc-c.-mycoplasma-presence-finch-arrival" class="nav-link" data-scroll-target="#c.-mycoplasma-presence-finch-arrival">3.c. Mycoplasma presence &amp; finch arrival</a></li>
+  <li><a href="#d.-everything" id="toc-d.-everything" class="nav-link" data-scroll-target="#d.-everything">3.d. Everything!</a></li>
+  <li><a href="#e.-point-prevalence-finch-arrival-and-both-finch-trends" id="toc-e.-point-prevalence-finch-arrival-and-both-finch-trends" class="nav-link" data-scroll-target="#e.-point-prevalence-finch-arrival-and-both-finch-trends">3.e. Point prevalence, finch arrival, and both finch trends</a></li>
+  </ul></li>
+  <li><a href="#conclusions" id="toc-conclusions" class="nav-link" data-scroll-target="#conclusions">4. Conclusions</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">mgsim: Round 1 Analysis</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>July Pilowsky </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyplots)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(paletteer)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(cowplot)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(GGally)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(abc)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(qs2)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(furrr)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">plan</span>(multisession)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"Scripts/validation_metric_functions.R"</span>))</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"Scripts/convenience_functions.R"</span>))</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"Scripts/animate_sim.R"</span>))</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"Scripts/abc_helpers.R"</span>))</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">set_trust_promises</span>(<span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] FALSE</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>region <span class="ot">&lt;-</span> <span class="fu">qread</span>(<span class="fu">here</span>(<span class="st">"Data/Input/finch_region.qs"</span>))</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>round1_metrics <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"Data_minimal/Validation/round1_validation_metrics.csv"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">hm_trend_1970 =</span> <span class="fu">rep</span>(<span class="cn">NA_real_</span>), <span class="at">hm_trend_1993 =</span> <span class="fu">rep</span>(<span class="cn">NA_real_</span>))</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>round1_metrics<span class="sc">$</span>hm_trend_1970[round1_metrics<span class="sc">$</span>dc] <span class="ot">&lt;-</span> round1_metrics<span class="sc">$</span>hm_trend[<span class="fu">seq</span>(<span class="dv">1</span>, <span class="dv">9752</span>, <span class="dv">2</span>)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in round1_metrics$hm_trend_1970[round1_metrics$dc] &lt;-
+round1_metrics$hm_trend[seq(1, : number of items to replace is not a multiple
+of replacement length</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>round1_metrics<span class="sc">$</span>hm_trend_1993[round1_metrics<span class="sc">$</span>dc] <span class="ot">&lt;-</span> round1_metrics<span class="sc">$</span>hm_trend[<span class="fu">seq</span>(<span class="dv">2</span>, <span class="dv">9752</span>, <span class="dv">2</span>)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in round1_metrics$hm_trend_1993[round1_metrics$dc] &lt;-
+round1_metrics$hm_trend[seq(2, : number of items to replace is not a multiple
+of replacement length</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>round1_priors <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"Data/Input/sample_data_round1.csv"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<section id="what-is-the-motivation-and-methodology-of-this-research" class="level1">
+<h1>1. What is the motivation and methodology of this research?</h1>
+<section id="a.-motivation" class="level2">
+<h2 class="anchored" data-anchor-id="a.-motivation">1.a. Motivation</h2>
+<p>The motivation here is to show the utility and promise of my R package, <code>epizootic</code>, for building process-explicit models of disease outbreaks in wildlife. I’m using the <em>Mycoplasma</em> outbreak in house finches as a case study to show what we can learn from using <code>epizootic</code> to reconstruct the outbreak and narrow the prior distributions for aspects of the outbreak that are difficult to observe.</p>
+</section>
+<section id="b.-methods" class="level2">
+<h2 class="anchored" data-anchor-id="b.-methods">1.b. Methods</h2>
+<p>I simulated the house finch system from 1940 to 2016 (which was as late as my climate and land use data went.) I started in 1940 with the release of house finches in New York because of the scientific consensus that the invasion biology of the house finch is essential to understanding the outbreak. The disease is introduced to the system in Washington D.C. in early 1994, just how it happened in real life.</p>
+<p>The simulations include the demography of the house finch, dispersal (both demography and dispersal include density dependence), the epidemiological dynamics of the disease, and seasonality. The prior distributions for these were drawn from the extensive literature on this system. The simulations also include changes in climate and land use, including the house finch’s preferences in climate and land use types, as determined by a species distribution model. The simulations have a daily step but data are only recorded on a seasonal basis.</p>
+<p>I ran 10,000 simulations based on stratified sampling of the prior distributions. I collected a variety of data to validate the simulations, all non-overlapping with the data used to parameterize the simulations. In this document, I use these validation metrics to select top-performing simulations and make scientific inferences based on ensembles of top-performing models.</p>
+</section>
+</section>
+<section id="how-well-did-the-simulations-perform" class="level1">
+<h1>2. How well did the simulations perform?</h1>
+<p>Our validation metrics are as follows:</p>
+<ol type="1">
+<li><strong>Are there finches in Washington DC in 1994?</strong> This is crucial because this is the time and place where the <em>Mycoplasma gallisepticum</em> outbreak first occurred. If there are no finches there, there can’t be an outbreak. All the subsequent metrics are conditioned on whether the simulation meets this criterion. All simulations that fail are excluded.</li>
+<li><strong><em>Mycoplasma</em></strong> <strong>presence.</strong> There are locations where Project FeederWatch spotted infected finches every year for years on end. This score measures whether the simulations can replicate that persistence. A lower score indicates a better ability to replicate persistence.</li>
+<li><strong><em>Haemorhous</em></strong> <strong>presence/absence.</strong> From many years of Breeding Bird Survey and Christmas Bird Count data, we know of places in North America where the house finch is <em>always</em> observed and <em>never</em> observed. A lower score means the simulation can accurately replicate the sites where house finches are always or never present.</li>
+<li><strong><em>Haemorhous</em></strong> <strong>population trends.</strong> For bird conservation regions throughout North America, Audubon has records of population trends in <em>Haemorhous</em> population size. I used two metrics: population trend since 1970, and population trend since 1993. A lower score means that the population trends in the simulation are more accurate.</li>
+<li><strong>Point prevalence</strong>. I have data from studies done on <em>Mycoplasma</em> all over North America with prevalence of the disease that they found at a specific point in space and time, with uncertainty around these estimates. I assigned a penalty for the simulated prevalence falling outside this estimated range of prevalence.</li>
+<li><strong>First arrival of <em>Mycoplasma</em></strong>. I estimated the first arrival of the <em>Mycoplasma</em> outbreak to different parts of the Northeast based on Project FeederWatch sightings, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range.</li>
+<li><strong>First arrival of <em>Haemorhous</em>.</strong> I estimated the first arrival of the house finch in parts of its invasive range based on sightings from the Breeding Bird Survey, with uncertainty due to incomplete observation. I assigned a penalty for the simulated date of first arrival falling outside the estimated range.</li>
+</ol>
+<section id="a.-presence-in-washington-d.c." class="level2">
+<h2 class="anchored" data-anchor-id="a.-presence-in-washington-d.c.">2.a. Presence in Washington, D.C.</h2>
+<p>First of all, let’s look at the performance on the “presence of finches in DC” metric, since everything else depends on that.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>round1_priors <span class="sc">|&gt;</span> </span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">dc =</span> round1_metrics<span class="sc">$</span>dc) <span class="sc">|&gt;</span> </span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>mortality_Sa_summer, <span class="sc">-</span>mortality_Ra_summer) <span class="sc">|&gt;</span> </span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">45</span>, <span class="at">names_to =</span> <span class="st">"Prior"</span>, <span class="at">values_to =</span> <span class="st">"Value"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> Value, <span class="at">group =</span> dc, <span class="at">fill =</span> dc)) <span class="sc">+</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="at">alpha =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>Prior, <span class="at">scales =</span> <span class="st">"free"</span>) <span class="sc">+</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_paletteer_d</span>(<span class="st">"PrettyCols::Light"</span>, <span class="at">name =</span> <span class="st">"Birds in DC?"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/dc-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="round1_analysis_files/figure-html/dc-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>About half of the simulations (4876) succeeded on this metric. The main determinants of whether the simulations succeeded on this metric had to do with density-dependent controls on dispersal. The simulations with birds in DC maximized the range of population densities at which dispersal would occur.</p>
+</section>
+<section id="b.-other-validation-metrics" class="level2">
+<h2 class="anchored" data-anchor-id="b.-other-validation-metrics">2.b. Other Validation Metrics</h2>
+<p>Now, let’s look at the performance on the other seven validation metrics. What I’m looking for here are metrics that are <em>good filters</em>: not all the simulations succeed, but not all of them fail horribly, either. This helps us choose which simulations are the best.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>round1_metrics_dc <span class="ot">&lt;-</span> round1_metrics <span class="sc">|&gt;</span> </span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(dc) <span class="sc">|&gt;</span> </span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>index, <span class="sc">-</span>dc, <span class="sc">-</span>hm_trend)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>quantiles <span class="ot">&lt;-</span> round1_metrics_dc <span class="sc">|&gt;</span> </span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_dbl</span>(\(x) <span class="fu">quantile</span>(x, <span class="at">prob =</span> <span class="fu">c</span>(<span class="fl">0.01</span>), <span class="at">na.rm =</span> T))</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>labels <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Mycoplasma presence"</span>, <span class="st">"Finch pres/abs"</span>, </span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Point prevalence"</span>, <span class="st">"Mycoplasma arrival"</span>, <span class="st">"Finch arrival"</span>,</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Finch trend from 1970"</span>, <span class="st">"Finch trend from 1993"</span>)</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>plotlist <span class="ot">&lt;-</span> <span class="fu">pmap</span>(<span class="fu">list</span>(round1_metrics_dc, quantiles, labels), <span class="cf">function</span>(x, y, z) {</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="at">data =</span> <span class="cn">NULL</span>, <span class="fu">aes</span>(<span class="at">x =</span> x)) <span class="sc">+</span> </span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_histogram</span>() <span class="sc">+</span> </span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> y, <span class="at">color =</span> <span class="st">"blue"</span>) <span class="sc">+</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">xlab</span>(z)</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_grid</span>(<span class="at">plotlist =</span> plotlist)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/performance%20histogram-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="round1_analysis_files/figure-html/performance%20histogram-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Here I’ve added a blue line representing the top 1% of scores. This is tricky, because some of these metrics are poor filters: almost all simulations do well on them. Though perhaps they look better once extreme outliers are removed:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>plotlist2 <span class="ot">&lt;-</span> <span class="fu">pmap</span>(<span class="fu">list</span>(round1_metrics_dc <span class="sc">|&gt;</span> </span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>                         <span class="fu">filter</span>(<span class="fu">if_all</span>(<span class="fu">everything</span>(), \(x) x <span class="sc">&lt;</span> <span class="fu">quantile</span>(x, <span class="fl">0.99</span>, <span class="at">na.rm=</span>T))), quantiles, labels), <span class="cf">function</span>(x, y, z) {</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="at">data =</span> <span class="cn">NULL</span>, <span class="fu">aes</span>(<span class="at">x =</span> x)) <span class="sc">+</span> </span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_histogram</span>() <span class="sc">+</span> </span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> y, <span class="at">color =</span> <span class="st">"blue"</span>) <span class="sc">+</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">xlab</span>(z)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_grid</span>(<span class="at">plotlist =</span> plotlist2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/remove%20outliers-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-3"><img src="round1_analysis_files/figure-html/remove%20outliers-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Mycoplasma presence remains a poor filter, as does presence and absence of house finches. Another issue is that the performance on finch presence/absence, Mycoplasma arrival, and finch arrival is very poor. I think the best thing I can do at this point is to try ABC on different combinations of validation metrics, choose top models, and check if:</p>
+<ol type="1">
+<li>the same top models are chosen by different validation metrics.</li>
+<li>whether the ensemble of the top models chosen produces a result that I know to be accurate based on the natural history of the house finch and the conjunctivitis outbreak.</li>
+</ol>
+</section>
+</section>
+<section id="which-simulations-scored-the-best-on-validation-metrics" class="level1">
+<h1>3. Which simulations scored the best on validation metrics?</h1>
+<p>You can’t reasonably use seven validation metrics at once. Generally, three is considered the ideal number. Choosing a good combination of three validation metrics can be very challenging.</p>
+<section id="a.-correlation" class="level2">
+<h2 class="anchored" data-anchor-id="a.-correlation">3.a. Correlation</h2>
+<p>It is important to know which validation metrics are correlated, because you want three that are uncorrelated to one another for maximum effectiveness in choosing models that perform well at multiple functions.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggpairs</span>(round1_metrics_dc <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="fu">if_all</span>(<span class="fu">everything</span>(), \(x) x <span class="sc">&lt;</span> <span class="fu">quantile</span>(x, <span class="fl">0.99</span>, <span class="at">na.rm=</span>T))))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/correlation-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-4"><img src="round1_analysis_files/figure-html/correlation-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Point prevalence appears to be negatively correlated with Mycoplasma presence, positively correlated with finch presence/absence, positively correlated with population trend from 1993 on, and positively correlated with arrival of Mycoplasma. I will say I would strongly prefer point prevalence over Mycoplasma presence or finch presence/absence because it’s a better filter. Finch presence/absence is also highly correlated with population trend from 1993 on, and population trend from 1993 is a better filter also.</p>
+</section>
+<section id="b.-point-prevalence-finch-population-size-trends" class="level2">
+<h2 class="anchored" data-anchor-id="b.-point-prevalence-finch-population-size-trends">3.b. Point prevalence &amp; finch population size trends</h2>
+<p>I want to try out the combination of point prevalence and the two population size trend metrics. I’m interested in these because they’re all good filters and performance is pretty good on all three. First, I run Approximate Bayesian Computation:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>abc49 <span class="ot">&lt;-</span> <span class="fu">abc</span>(<span class="at">param =</span> round1_priors[round1_metrics<span class="sc">$</span>dc,], </span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>             <span class="at">sumstat =</span> round1_metrics_dc[, <span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">6</span>, <span class="dv">7</span>)],</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">target =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">3</span>), </span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>             <span class="at">tol =</span> <span class="fl">0.01</span>, </span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">"neuralnet"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>12345678910
+12345678910</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">qsave</span>(abc49, <span class="fu">here</span>(<span class="st">"Data/Validation/abc_round1.qs"</span>))</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(abc49<span class="sc">$</span>ss, <span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>      point_prevalence hm_trend_1970 hm_trend_1993
+ [1,]        0.9962786      49.10299      183.4401
+ [2,]        0.9962786      49.12848      181.5109
+ [3,]        0.9962786      49.27775      173.8156
+ [4,]        0.9962786      49.13690      183.3736
+ [5,]        0.9962786      49.27232      180.6762
+ [6,]        1.2462786      50.58357      167.6346
+ [7,]        1.2462786      49.07981      177.3592
+ [8,]        0.9962786      49.12190      181.8009
+ [9,]        0.9962786      49.18778      176.6854
+[10,]        0.9962786      49.15071      182.1103</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>selected_samples <span class="ot">&lt;-</span> round1_priors <span class="sc">%&gt;%</span> </span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rowid_to_column</span>(<span class="st">"sample"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(abc49<span class="sc">$</span>unadj.values, <span class="at">copy =</span> <span class="cn">TRUE</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pull</span>(sample)</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="fu">write_sftp_transfer</span>(<span class="st">"/glade/work/pilowskyj/Round1_matrix"</span>, </span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix"</span>, </span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>                      selected_samples, </span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>                      <span class="fu">here</span>(<span class="st">"Scripts/Globus/abc1.txt"</span>))</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>ensemble_sa <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sa"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>ensemble_ra <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Ra"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>ensemble_sj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>ensemble_rj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Rj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>ensemble_I1a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>ensemble_I2a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>ensemble_I1j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>ensemble_I2j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(total_population_size, region, <span class="at">years =</span> <span class="dv">1940</span><span class="sc">:</span><span class="dv">2016</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/point%20prevalence%20hm%20trend%20abc-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-5"><img src="round1_analysis_files/figure-html/point%20prevalence%20hm%20trend%20abc-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>This is an animation of susceptible adults during the study period. Now let’s have a look at recovered adults to get a sense of the outbreak:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>prevalence <span class="ot">&lt;-</span> total_cases <span class="sc">/</span> total_population_size</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/recovered%20animation-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-6"><img src="round1_analysis_files/figure-html/recovered%20animation-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The “flickering” you observe in this animation is due to seasonality. The number of house finches drops every winter due to higher mortality, so the colors change pretty intensely season to season.</p>
+<p>Let’s examine the posterior distributions that result from this round of ABC.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_abc_posteriors</span>(abc49, round1_priors)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ split_plot: split into 45 plots across 12 pages</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[[1]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-7"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[2]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-8"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-2.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[3]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-3.png" class="lightbox" data-gallery="quarto-lightbox-gallery-9"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-3.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[4]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-4.png" class="lightbox" data-gallery="quarto-lightbox-gallery-10"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-4.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[5]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-5.png" class="lightbox" data-gallery="quarto-lightbox-gallery-11"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-5.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[6]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-6.png" class="lightbox" data-gallery="quarto-lightbox-gallery-12"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-6.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[7]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-7.png" class="lightbox" data-gallery="quarto-lightbox-gallery-13"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-7.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[8]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-8.png" class="lightbox" data-gallery="quarto-lightbox-gallery-14"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-8.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[9]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-9.png" class="lightbox" data-gallery="quarto-lightbox-gallery-15"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-9.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[10]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-10.png" class="lightbox" data-gallery="quarto-lightbox-gallery-16"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-10.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[11]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-11.png" class="lightbox" data-gallery="quarto-lightbox-gallery-17"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-11.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[12]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-12.png" class="lightbox" data-gallery="quarto-lightbox-gallery-18"><img src="round1_analysis_files/figure-html/3%20factor%20abc%20posteriors-12.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Low disease-induced mortality is very strongly selected for. This may be a real phenomenon, as symptomatic birds are more likely to be detected, and they’re likely more vulnerable to mortality than asymptomatic cases.</p>
+</section>
+<section id="c.-mycoplasma-presence-finch-arrival" class="level2">
+<h2 class="anchored" data-anchor-id="c.-mycoplasma-presence-finch-arrival">3.c. Mycoplasma presence &amp; finch arrival</h2>
+<p>I used a function called <code>abctools::selectsumm</code> that essentially uses cross-validation to find which statistics can most refine the posterior distributions. This method selected Mycoplasma presence and first arrival of house finches as the best combination of variables.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>abc49 <span class="ot">&lt;-</span> <span class="fu">abc</span>(<span class="at">param =</span> round1_priors[round1_metrics<span class="sc">$</span>dc,], </span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>             <span class="at">sumstat =</span> round1_metrics_dc[<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">5</span>)],</span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">target =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">2</span>), </span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>             <span class="at">tol =</span> <span class="fl">0.01</span>, </span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">"neuralnet"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>12345678910
+12345678910</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(abc49<span class="sc">$</span>ss, <span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>      mg_presence hm_arrival
+ [1,]          33      27255
+ [2,]          33      26715
+ [3,]          33      26953
+ [4,]          33      24692
+ [5,]          33      26641
+ [6,]          33      27561
+ [7,]          33      26849
+ [8,]          33      27010
+ [9,]           3      28160
+[10,]           3      28652</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">qs_save</span>(abc49, <span class="fu">here</span>(<span class="st">"Data/Validation/abc_round1_2variable.qs2"</span>))</span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>selected_samples <span class="ot">&lt;-</span> round1_priors <span class="sc">%&gt;%</span> </span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rowid_to_column</span>(<span class="st">"sample"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(abc49<span class="sc">$</span>unadj.values, <span class="at">copy =</span> <span class="cn">TRUE</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pull</span>(sample)</span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a><span class="fu">write_sftp_transfer</span>(<span class="st">"/glade/work/pilowskyj/Round1_matrix"</span>, </span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>                <span class="st">"/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix"</span>, </span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a>                      selected_samples, </span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a>                      <span class="at">filename=</span><span class="fu">here</span>(<span class="st">"Scripts/Globus/abc2.txt"</span>))</span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>ensemble_sa <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sa"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>ensemble_ra <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Ra"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a>ensemble_sj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a>ensemble_rj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Rj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-15"><a href="#cb37-15" aria-hidden="true" tabindex="-1"></a>ensemble_I1a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-16"><a href="#cb37-16" aria-hidden="true" tabindex="-1"></a>ensemble_I2a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a>ensemble_I1j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-18"><a href="#cb37-18" aria-hidden="true" tabindex="-1"></a>ensemble_I2j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb37-19"><a href="#cb37-19" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb37-20"><a href="#cb37-20" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(total_population_size, region, <span class="at">years =</span> <span class="dv">1940</span><span class="sc">:</span><span class="dv">2016</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/mg%20presence%20and%20hm%20arrival-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-19"><img src="round1_analysis_files/figure-html/mg%20presence%20and%20hm%20arrival-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>prevalence <span class="ot">&lt;-</span> total_cases <span class="sc">/</span> total_population_size</span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/recovered%20optimized-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-20"><img src="round1_analysis_files/figure-html/recovered%20optimized-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>This ensemble seems to have slower dispersal than the others, with the house finch range expanding more slowly, and the disease spreading more slowly as well.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_abc_posteriors</span>(abc49, round1_priors)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ split_plot: split into 45 plots across 12 pages</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[[1]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-21"><img src="round1_analysis_files/figure-html/optimized%20abc-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[2]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-22"><img src="round1_analysis_files/figure-html/optimized%20abc-2.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[3]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-3.png" class="lightbox" data-gallery="quarto-lightbox-gallery-23"><img src="round1_analysis_files/figure-html/optimized%20abc-3.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[4]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-4.png" class="lightbox" data-gallery="quarto-lightbox-gallery-24"><img src="round1_analysis_files/figure-html/optimized%20abc-4.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[5]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-5.png" class="lightbox" data-gallery="quarto-lightbox-gallery-25"><img src="round1_analysis_files/figure-html/optimized%20abc-5.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[6]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-6.png" class="lightbox" data-gallery="quarto-lightbox-gallery-26"><img src="round1_analysis_files/figure-html/optimized%20abc-6.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[7]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-7.png" class="lightbox" data-gallery="quarto-lightbox-gallery-27"><img src="round1_analysis_files/figure-html/optimized%20abc-7.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[8]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-8.png" class="lightbox" data-gallery="quarto-lightbox-gallery-28"><img src="round1_analysis_files/figure-html/optimized%20abc-8.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[9]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-9.png" class="lightbox" data-gallery="quarto-lightbox-gallery-29"><img src="round1_analysis_files/figure-html/optimized%20abc-9.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[10]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-10.png" class="lightbox" data-gallery="quarto-lightbox-gallery-30"><img src="round1_analysis_files/figure-html/optimized%20abc-10.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[11]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-11.png" class="lightbox" data-gallery="quarto-lightbox-gallery-31"><img src="round1_analysis_files/figure-html/optimized%20abc-11.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[12]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/optimized%20abc-12.png" class="lightbox" data-gallery="quarto-lightbox-gallery-32"><img src="round1_analysis_files/figure-html/optimized%20abc-12.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>This validation dataset selects for rather low transmission rates all things considered.</p>
+</section>
+<section id="d.-everything" class="level2">
+<h2 class="anchored" data-anchor-id="d.-everything">3.d. Everything!</h2>
+<p>I read a bunch of papers about the curse of dimensionality and overfitting with excessive summary statistics, and they suggested that the neural net method of ABC optimization may be able to compensate for these issues. So I’m trying all seven here.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb54"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>abc49 <span class="ot">&lt;-</span> <span class="fu">abc</span>(<span class="at">param =</span> round1_priors[round1_metrics<span class="sc">$</span>dc,], </span>
+<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>             <span class="at">sumstat =</span> round1_metrics_dc,</span>
+<span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">target =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">7</span>), </span>
+<span id="cb54-4"><a href="#cb54-4" aria-hidden="true" tabindex="-1"></a>             <span class="at">tol =</span> <span class="fl">0.01</span>, </span>
+<span id="cb54-5"><a href="#cb54-5" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">"neuralnet"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>12345678910
+12345678910</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb56"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(abc49<span class="sc">$</span>ss, <span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>      mg_presence hm_presabs point_prevalence mg_arrival hm_arrival
+ [1,]           2       2997         2.646297       5131      30930
+ [2,]           2       3013         1.502044       4793      30003
+ [3,]           7       3022         1.675591       4905      31021
+ [4,]           3       2998         1.416690       4854      31133
+ [5,]           3       3049         2.098506       4632      31197
+ [6,]           3       2997         2.623132       4861      28160
+ [7,]           8       2997         2.045344       5058      31102
+ [8,]          16       2997         1.214188       5074      31192
+ [9,]           3       2997         2.039519       4769      30895
+[10,]          10       2997         1.193360       4748      31213
+      hm_trend_1970 hm_trend_1993
+ [1,]      79.64963      174.5768
+ [2,]      79.61800      223.6906
+ [3,]      76.87590      213.3664
+ [4,]      71.83274      223.4325
+ [5,]      81.81654      216.8374
+ [6,]      65.63331      221.4385
+ [7,]      52.15980      193.9473
+ [8,]      50.62347      193.5241
+ [9,]      48.46236      193.9341
+[10,]      57.35784      196.7086</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb58"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>selected_samples <span class="ot">&lt;-</span> round1_priors <span class="sc">%&gt;%</span> </span>
+<span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rowid_to_column</span>(<span class="st">"sample"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb58-3"><a href="#cb58-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(abc49<span class="sc">$</span>unadj.values, <span class="at">copy =</span> <span class="cn">TRUE</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb58-4"><a href="#cb58-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pull</span>(sample)</span>
+<span id="cb58-5"><a href="#cb58-5" aria-hidden="true" tabindex="-1"></a><span class="fu">write_sftp_transfer</span>(<span class="st">"/glade/work/pilowskyj/Round1_matrix"</span>, </span>
+<span id="cb58-6"><a href="#cb58-6" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix"</span>, </span>
+<span id="cb58-7"><a href="#cb58-7" aria-hidden="true" tabindex="-1"></a>                      selected_samples, </span>
+<span id="cb58-8"><a href="#cb58-8" aria-hidden="true" tabindex="-1"></a>                      <span class="fu">here</span>(<span class="st">"Scripts/Globus/abc3.txt"</span>))</span>
+<span id="cb58-9"><a href="#cb58-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb58-10"><a href="#cb58-10" aria-hidden="true" tabindex="-1"></a>ensemble_sa <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sa"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-11"><a href="#cb58-11" aria-hidden="true" tabindex="-1"></a>ensemble_ra <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Ra"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-12"><a href="#cb58-12" aria-hidden="true" tabindex="-1"></a>ensemble_sj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-13"><a href="#cb58-13" aria-hidden="true" tabindex="-1"></a>ensemble_rj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Rj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-14"><a href="#cb58-14" aria-hidden="true" tabindex="-1"></a>ensemble_I1a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-15"><a href="#cb58-15" aria-hidden="true" tabindex="-1"></a>ensemble_I2a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-16"><a href="#cb58-16" aria-hidden="true" tabindex="-1"></a>ensemble_I1j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-17"><a href="#cb58-17" aria-hidden="true" tabindex="-1"></a>ensemble_I2j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb58-18"><a href="#cb58-18" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb58-19"><a href="#cb58-19" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(total_population_size, region, <span class="at">years =</span> <span class="dv">1940</span><span class="sc">:</span><span class="dv">2016</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-33"><img src="round1_analysis_files/figure-html/everything-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>This run looks similar in total population size trends to others but with lower abundance and higher seasonality. But let’s look at prevalence to get a sense of the outbreak:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>prevalence <span class="ot">&lt;-</span> total_cases <span class="sc">/</span> total_population_size</span>
+<span id="cb59-3"><a href="#cb59-3" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/recovered%20everything-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-34"><img src="round1_analysis_files/figure-html/recovered%20everything-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The spread of the disease also seems to be much too fast in this one.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb61"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_abc_posteriors</span>(abc49, round1_priors)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ split_plot: split into 45 plots across 12 pages</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[[1]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-35"><img src="round1_analysis_files/figure-html/everything%20posteriors-1.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[2]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-36"><img src="round1_analysis_files/figure-html/everything%20posteriors-2.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[3]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-3.png" class="lightbox" data-gallery="quarto-lightbox-gallery-37"><img src="round1_analysis_files/figure-html/everything%20posteriors-3.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[4]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-4.png" class="lightbox" data-gallery="quarto-lightbox-gallery-38"><img src="round1_analysis_files/figure-html/everything%20posteriors-4.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[5]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-5.png" class="lightbox" data-gallery="quarto-lightbox-gallery-39"><img src="round1_analysis_files/figure-html/everything%20posteriors-5.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[6]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-6.png" class="lightbox" data-gallery="quarto-lightbox-gallery-40"><img src="round1_analysis_files/figure-html/everything%20posteriors-6.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[7]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-7.png" class="lightbox" data-gallery="quarto-lightbox-gallery-41"><img src="round1_analysis_files/figure-html/everything%20posteriors-7.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[8]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-8.png" class="lightbox" data-gallery="quarto-lightbox-gallery-42"><img src="round1_analysis_files/figure-html/everything%20posteriors-8.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[9]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-9.png" class="lightbox" data-gallery="quarto-lightbox-gallery-43"><img src="round1_analysis_files/figure-html/everything%20posteriors-9.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[10]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-10.png" class="lightbox" data-gallery="quarto-lightbox-gallery-44"><img src="round1_analysis_files/figure-html/everything%20posteriors-10.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[11]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-11.png" class="lightbox" data-gallery="quarto-lightbox-gallery-45"><img src="round1_analysis_files/figure-html/everything%20posteriors-11.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+[[12]]</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/everything%20posteriors-12.png" class="lightbox" data-gallery="quarto-lightbox-gallery-46"><img src="round1_analysis_files/figure-html/everything%20posteriors-12.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="e.-point-prevalence-finch-arrival-and-both-finch-trends" class="level2">
+<h2 class="anchored" data-anchor-id="e.-point-prevalence-finch-arrival-and-both-finch-trends">3.e. Point prevalence, finch arrival, and both finch trends</h2>
+<p>I come back with the benefit of hindsight from many rounds of modeling and have come to the conclusion that spatiotemporal point prevalence, finch first arrival, finch trend from 1970, and finch trend from 1993 are the most difficult aspects for the simulations to get right, and therefore are the most important to optimize on, so I’m going to try this combo of validation metrics out.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb75"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb75-1"><a href="#cb75-1" aria-hidden="true" tabindex="-1"></a>abc49 <span class="ot">&lt;-</span> <span class="fu">abc</span>(<span class="at">param =</span> round1_priors[round1_metrics<span class="sc">$</span>dc,], </span>
+<span id="cb75-2"><a href="#cb75-2" aria-hidden="true" tabindex="-1"></a>             <span class="at">sumstat =</span> round1_metrics_dc[, <span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">5</span><span class="sc">:</span><span class="dv">7</span>)],</span>
+<span id="cb75-3"><a href="#cb75-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">target =</span> <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">4</span>), </span>
+<span id="cb75-4"><a href="#cb75-4" aria-hidden="true" tabindex="-1"></a>             <span class="at">tol =</span> <span class="fl">0.01</span>, </span>
+<span id="cb75-5"><a href="#cb75-5" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">"neuralnet"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: All parameters are "none" transformed.</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>12345678910
+12345678910</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb78"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb78-1"><a href="#cb78-1" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(abc49<span class="sc">$</span>ss, <span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>      point_prevalence hm_arrival hm_trend_1970 hm_trend_1993
+ [1,]        0.9962786      29493      49.10299      183.4401
+ [2,]        0.9962786      29130      49.12848      181.5109
+ [3,]        0.9962786      26715      49.27775      173.8156
+ [4,]        0.9962786      28987      49.13690      183.3736
+ [5,]        0.9962786      26953      49.27232      180.6762
+ [6,]        1.2462786      24692      50.58357      167.6346
+ [7,]        1.2462786      26641      49.07981      177.3592
+ [8,]        0.9962786      27561      49.12190      181.8009
+ [9,]        0.9962786      26849      49.18778      176.6854
+[10,]        0.9962786      27585      49.15071      182.1103</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb80"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb80-1"><a href="#cb80-1" aria-hidden="true" tabindex="-1"></a>selected_samples <span class="ot">&lt;-</span> round1_priors <span class="sc">%&gt;%</span> </span>
+<span id="cb80-2"><a href="#cb80-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rowid_to_column</span>(<span class="st">"sample"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb80-3"><a href="#cb80-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(abc49<span class="sc">$</span>unadj.values, <span class="at">copy =</span> <span class="cn">TRUE</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb80-4"><a href="#cb80-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pull</span>(sample)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Joining with `by = join_by(dispersal_p_juv, dispersal_p_adult, dispersal_r_juv,
+dispersal_r_adult, dispersal_source_n_k_cutoff, dispersal_source_n_k_threshold,
+dispersal_target_n_k_cutoff, dispersal_target_n_k_threshold,
+abundance_threshold, initial_release, density_max, fecundity, infected_t1,
+beta_Sa_winter, beta_Sa_summer, beta_I2_modifier, mortality_Sj_winter,
+mortality_Sa_winter, mortality_Sj_summer, mortality_I1j_summer,
+mortality_I1j_winter, mortality_I1a_summer, mortality_I1a_winter,
+mortality_I2_modifier, mortality_Sa_summer, mortality_I2j_summer,
+mortality_I2j_winter, mortality_I2a_winter, mortality_I2a_summer,
+mortality_Rj_summer, mortality_Ra_summer, mortality_Rj_winter,
+mortality_Ra_winter, beta_Sj_winter, beta_Sj_summer, beta_Ra_winter,
+beta_Rj_winter, beta_Ra_summer, beta_Rj_summer, recovery_I1j_summer,
+recovery_I1a_summer, recovery_I2j_summer, recovery_I2a_summer,
+recovery_I1j_winter, recovery_I1a_winter, recovery_I2j_winter,
+recovery_I2a_winter)`</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb82"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb82-1"><a href="#cb82-1" aria-hidden="true" tabindex="-1"></a><span class="fu">write_sftp_transfer</span>(<span class="st">"/glade/work/pilowskyj/Round1_matrix"</span>, </span>
+<span id="cb82-2"><a href="#cb82-2" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"/Users/julypilowsky/Documents/mgsim/Data/Output/Round1_matrix"</span>, </span>
+<span id="cb82-3"><a href="#cb82-3" aria-hidden="true" tabindex="-1"></a>                      selected_samples, </span>
+<span id="cb82-4"><a href="#cb82-4" aria-hidden="true" tabindex="-1"></a>                      <span class="fu">here</span>(<span class="st">"Scripts/Globus/abc4.txt"</span>))</span>
+<span id="cb82-5"><a href="#cb82-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb82-6"><a href="#cb82-6" aria-hidden="true" tabindex="-1"></a>ensemble_sa <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sa"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-7"><a href="#cb82-7" aria-hidden="true" tabindex="-1"></a>ensemble_ra <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Ra"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-8"><a href="#cb82-8" aria-hidden="true" tabindex="-1"></a>ensemble_sj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Sj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-9"><a href="#cb82-9" aria-hidden="true" tabindex="-1"></a>ensemble_rj <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"Rj"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-10"><a href="#cb82-10" aria-hidden="true" tabindex="-1"></a>ensemble_I1a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-11"><a href="#cb82-11" aria-hidden="true" tabindex="-1"></a>ensemble_I2a <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2a"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-12"><a href="#cb82-12" aria-hidden="true" tabindex="-1"></a>ensemble_I1j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I1j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-13"><a href="#cb82-13" aria-hidden="true" tabindex="-1"></a>ensemble_I2j <span class="ot">&lt;-</span> <span class="fu">ensemble_mean</span>(selected_samples, abc49<span class="sc">$</span>weights, <span class="st">"I2j"</span>, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>))</span>
+<span id="cb82-14"><a href="#cb82-14" aria-hidden="true" tabindex="-1"></a>total_population_size <span class="ot">&lt;-</span> ensemble_sa <span class="sc">+</span> ensemble_ra <span class="sc">+</span> ensemble_sj <span class="sc">+</span> ensemble_rj <span class="sc">+</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb82-15"><a href="#cb82-15" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(total_population_size, region, <span class="at">years =</span> <span class="dv">1940</span><span class="sc">:</span><span class="dv">2016</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/4parameters-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-47"><img src="round1_analysis_files/figure-html/4parameters-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb84"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb84-1"><a href="#cb84-1" aria-hidden="true" tabindex="-1"></a>sim_weights <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">sim =</span> selected_samples, <span class="at">weight =</span> abc49<span class="sc">$</span>weights)</span>
+<span id="cb84-2"><a href="#cb84-2" aria-hidden="true" tabindex="-1"></a>ensemble_model <span class="ot">&lt;-</span> <span class="fu">ensemble_time_series</span>(selected_samples, <span class="fu">here</span>(<span class="st">"Data/Output/Round1_matrix"</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb84-3"><a href="#cb84-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">left_join</span>(sim_weights, <span class="at">by =</span> <span class="fu">c</span>(<span class="st">"Simulation"</span> <span class="ot">=</span> <span class="st">"sim"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb84-4"><a href="#cb84-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">Simulation =</span> <span class="fu">factor</span>(Simulation))</span>
+<span id="cb84-5"><a href="#cb84-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb84-6"><a href="#cb84-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Sum across compartments/life stages per simulation/time</span></span>
+<span id="cb84-7"><a href="#cb84-7" aria-hidden="true" tabindex="-1"></a>ensemble_by_sim_time <span class="ot">&lt;-</span> ensemble_model <span class="sc">|&gt;</span></span>
+<span id="cb84-8"><a href="#cb84-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Time, Simulation, weight) <span class="sc">|&gt;</span></span>
+<span id="cb84-9"><a href="#cb84-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">Abundance =</span> <span class="fu">sum</span>(Abundance), <span class="at">.groups =</span> <span class="st">"drop"</span>)</span>
+<span id="cb84-10"><a href="#cb84-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb84-11"><a href="#cb84-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate weighted average by time</span></span>
+<span id="cb84-12"><a href="#cb84-12" aria-hidden="true" tabindex="-1"></a>weighted_average <span class="ot">&lt;-</span> ensemble_by_sim_time <span class="sc">|&gt;</span></span>
+<span id="cb84-13"><a href="#cb84-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Time) <span class="sc">|&gt;</span></span>
+<span id="cb84-14"><a href="#cb84-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">Abundance =</span> <span class="fu">weighted.mean</span>(Abundance, weight), <span class="at">.groups =</span> <span class="st">"drop"</span>)</span>
+<span id="cb84-15"><a href="#cb84-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb84-16"><a href="#cb84-16" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> ensemble_by_sim_time <span class="sc">|&gt;</span> </span>
+<span id="cb84-17"><a href="#cb84-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">tidyplot</span>(<span class="at">x =</span> Time, <span class="at">y =</span> Abundance, <span class="at">group =</span> Simulation) <span class="sc">|&gt;</span></span>
+<span id="cb84-18"><a href="#cb84-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_sum_line</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">|&gt;</span></span>
+<span id="cb84-19"><a href="#cb84-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_annotation_line</span>(<span class="at">x =</span> <span class="dv">1994</span>, <span class="at">xend =</span> <span class="dv">1994</span>, <span class="at">y =</span> <span class="dv">0</span>, <span class="at">yend =</span> <span class="fl">6e08</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb84-20"><a href="#cb84-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_annotation_text</span>(<span class="at">x =</span> <span class="dv">1994</span>, <span class="at">y =</span> <span class="fl">6e08</span>, <span class="at">text =</span> <span class="st">"MG start"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb84-21"><a href="#cb84-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_title</span>(<span class="st">"Ensemble Finch Population Size Time Series"</span>)</span>
+<span id="cb84-22"><a href="#cb84-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb84-23"><a href="#cb84-23" aria-hidden="true" tabindex="-1"></a>p <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="at">data =</span> weighted_average, <span class="fu">aes</span>(<span class="at">x =</span> Time, <span class="at">y =</span> Abundance, <span class="at">group =</span> <span class="cn">NA</span>), </span>
+<span id="cb84-24"><a href="#cb84-24" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="dv">1</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>, <span class="at">inherit.aes =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/4parameters-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-48"><img src="round1_analysis_files/figure-html/4parameters-2.png" class="img-fluid figure-img" width="672"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The population size trends look a little bit questionable, though at least the in-filling of finch populations from 1940 looks pretty good. Let’s check out prevalence.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb85"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb85-1"><a href="#cb85-1" aria-hidden="true" tabindex="-1"></a>total_cases <span class="ot">&lt;-</span> ensemble_I1a <span class="sc">+</span> ensemble_I2a <span class="sc">+</span> ensemble_I1j <span class="sc">+</span> ensemble_I2j</span>
+<span id="cb85-2"><a href="#cb85-2" aria-hidden="true" tabindex="-1"></a>prevalence <span class="ot">&lt;-</span> total_cases <span class="sc">/</span> total_population_size</span>
+<span id="cb85-3"><a href="#cb85-3" aria-hidden="true" tabindex="-1"></a><span class="fu">animate_sim</span>(prevalence, region, <span class="at">years =</span> <span class="dv">1994</span><span class="sc">:</span><span class="dv">2016</span>, <span class="at">burn_in =</span> <span class="dv">111</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: attribute variables are assumed to be spatially constant throughout
+all geometries</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="round1_analysis_files/figure-html/4parameters_prevalence-1.gif" class="lightbox" data-gallery="quarto-lightbox-gallery-49"><img src="round1_analysis_files/figure-html/4parameters_prevalence-1.gif" class="img-fluid figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The spread of the disease looks way too quick in this animation, it’s no good.</p>
+</section>
+</section>
+<section id="conclusions" class="level1">
+<h1>4. Conclusions</h1>
+<p>What I find very exciting in these results is that they are able to give us insight into aspects of the <em>Mycoplasma</em> outbreak that are unobservable / unknowable by any other method. For one, they give us dynamic maps of the expansion of the house finch’s range, and of the geographic expansion of house finch conjunctivitis, that are unaffected by observer bias (birdwatchers’ observations cluster heavily in certain parts of the country). For another, the posterior distributions provide estimates of quantities like the number of house finches that were initially released in New York, and the number of house finches that were initially infected with <em>Mycoplasma</em> in early 1994.</p>
+<p>I’m trying to work out which of these sets of validation metrics do the best job reconstructing the range expansion of the house finch and the spread of <em>Mycoplasma</em> in the house finch. Thus far, I think the best performance is in the set I selected based on my own judgment as a scientist, in section 3b above, but I’m open to other opinions. Almost certainly I will want to perform a second round of simulations using the posterior distributions from this round as priors.</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<script>var lightboxQuarto = GLightbox({"closeEffect":"zoom","descPosition":"bottom","loop":false,"openEffect":"zoom","selector":".lightbox"});
+(function() {
+  let previousOnload = window.onload;
+  window.onload = () => {
+    if (previousOnload) {
+      previousOnload();
+    }
+    lightboxQuarto.on('slide_before_load', (data) => {
+      const { slideIndex, slideNode, slideConfig, player, trigger } = data;
+      const href = trigger.getAttribute('href');
+      if (href !== null) {
+        const imgEl = window.document.querySelector(`a[href="${href}"] img`);
+        if (imgEl !== null) {
+          const srcAttr = imgEl.getAttribute("src");
+          if (srcAttr && srcAttr.startsWith("data:")) {
+            slideConfig.href = srcAttr;
+          }
+        }
+      } 
+    });
+  
+    lightboxQuarto.on('slide_after_load', (data) => {
+      const { slideIndex, slideNode, slideConfig, player, trigger } = data;
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(slideNode);
+      }
+    });
+  
+  };
+  
+})();
+          </script>
+
+
+
+
+</body></html>
