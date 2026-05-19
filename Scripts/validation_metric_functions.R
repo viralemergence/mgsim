@@ -2,7 +2,7 @@ library(dplyr)
 library(tidyr)
 library(broom)
 library(purrr)
-library(qs)
+library(qs2)
 library(Rcpp)
 #### Validation metrics functions ####
 
@@ -90,7 +90,7 @@ read_or_zero <- function(path) {
     # Check if path is NA (missing year)
     return(zero_array)
   } else {
-    return(qread(path)) # Otherwise, read the file
+    return(qs_read(path)) # Otherwise, read the file
   }
 }
 
@@ -238,15 +238,15 @@ mg_arrival_function <- function(observed, low, high) {
     }
   } else {
     if (is.na(observed)) {
-    return(54)
-  }
-  if (observed < low) {
-    penalty <- low - observed
-  } else if (observed > high) {
-    penalty <- observed - high
-  } else {
-    penalty <- 0
-  }
+      return(54)
+    }
+    if (observed < low) {
+      penalty <- low - observed
+    } else if (observed > high) {
+      penalty <- observed - high
+    } else {
+      penalty <- 0
+    }
   }
 
   return(penalty)

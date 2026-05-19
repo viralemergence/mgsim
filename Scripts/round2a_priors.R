@@ -2,14 +2,14 @@ library(data.table)
 library(here)
 library(abc)
 library(triangle)
-library(qs)
+library(qs2)
 library(mc2d)
 library(fitdistrplus)
 
 options(scipen = 999)
 
 demo_params <- fread(here("Data/Input/sample_data_round1.csv"))
-abc_first_pass <- qread(here("Data/Validation/abc_round1_3variable.qs"))
+abc_first_pass <- qs_read(here("Data/Validation/abc_round1_3variable.qs2"))
 round1_metrics <- fread(here("Data/Validation/round1_validation_metrics.csv"))
 
 demo_params_selected <- demo_params[round1_metrics$dc, ][, `:=`(
@@ -339,8 +339,8 @@ param_dists <- lapply(
     par(mfrow = c(1, 1))
     # gofstat(orig_dists, fitnames = names(orig_dists))
     return(
-      list(Output = orig_dists) #,
-      #GOF = gofstat(orig_dists, fitnames = names(orig_dists))
+      list(Output = orig_dists) # ,
+      # GOF = gofstat(orig_dists, fitnames = names(orig_dists))
     )
   }
 )

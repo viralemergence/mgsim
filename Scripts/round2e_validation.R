@@ -49,14 +49,16 @@ data_list <- map(file_paths, \(fp) {
     mutate(season = factor(season, levels = c("winter", "summer"))) |>
     arrange(number, season)
 })
-simulation_id <- results_dir[dc] |> str_sub(68) |> as.integer()
+simulation_id <- results_dir[dc] |>
+  str_sub(68) |>
+  as.integer()
 
 process_single_number <- function(df, number) {
   df %>%
     filter(number == !!number) %>%
     group_split(infected) %>%
     map(\(subset_df) pull(subset_df, path)) %>%
-    map(\(l) map(l, qread)) |>
+    map(\(l) map(l, qs_read)) |>
     map(\(l) map(l, \(m) m[mg_trends$region_cell])) |>
     map(\(df) Reduce(`+`, df)) |>
     setNames(c("healthy", "sick")) |>
@@ -103,39 +105,38 @@ mg_presence_metric <- foreach(
   df = infected_list[!no_infection],
   .combine = c,
   .packages = c("dplyr", "purrr", "qs", "here")
-) %dopar%
-  {
-    # Fill missing years and group by Year
-    df_filled <- fill_missing_years(df, 1994, 2016) |> group_split(Year)
+) %dopar% {
+  # Fill missing years and group by Year
+  df_filled <- fill_missing_years(df, 1994, 2016) |> group_split(Year)
 
-    # Pre-allocate a 3D array for the simulation (106x161xyears)
-    sim_array <- array(0, dim = c(106, 161, length(df_filled)))
+  # Pre-allocate a 3D array for the simulation (106x161xyears)
+  sim_array <- array(0, dim = c(106, 161, length(df_filled)))
 
-    # Efficiently sum matrices into the 3D array, one slice per year
-    for (i in seq_along(df_filled)) {
-      year_df <- df_filled[[i]]
+  # Efficiently sum matrices into the 3D array, one slice per year
+  for (i in seq_along(df_filled)) {
+    year_df <- df_filled[[i]]
 
-      # Load and sum the matrices for all files in this year
-      combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
+    # Load and sum the matrices for all files in this year
+    combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
 
-      # Assign the combined matrix to the appropriate slice
-      sim_array[,, i] <- combined_files
-    }
-
-    # Calculate the metric for this simulation
-    metric <- pres_hfds |>
-      rowwise() |>
-      mutate(
-        rowcol = list(convert_flat_to_2d(region_cell, 106)),
-        sick = sum(sim_array[rowcol[[1]], rowcol[[2]], min_index:max_index]),
-        none_sick = sick == 0
-      ) |>
-      pull(none_sick) |>
-      sum()
-
-    gc()
-    return(metric)
+    # Assign the combined matrix to the appropriate slice
+    sim_array[, , i] <- combined_files
   }
+
+  # Calculate the metric for this simulation
+  metric <- pres_hfds |>
+    rowwise() |>
+    mutate(
+      rowcol = list(convert_flat_to_2d(region_cell, 106)),
+      sick = sum(sim_array[rowcol[[1]], rowcol[[2]], min_index:max_index]),
+      none_sick = sick == 0
+    ) |>
+    pull(none_sick) |>
+    sum()
+
+  gc()
+  return(metric)
+}
 
 # Assign metrics to the penalty vector
 mg_presence_penalty[!no_infection] <- mg_presence_metric
@@ -164,50 +165,51 @@ presence_list <- results_dir[dc] |>
 presabs_metric <- foreach(
   plist = presence_list,
   .combine = c,
-  .packages = c("dplyr", "purrr", "qs")
-) %dopar%
-  {
-    # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
-    plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
+  .packages = c("dplyr", "purrr", "qs2")
+) %dopar% {
+  # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
+  plist_filled <- plist |>
+    fill_missing_years(1940, 2016) |>
+    group_split(Year)
 
-    # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
-    sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
+  # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
+  sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
 
-    # Adding together the matrices for all age classes and disease compartments for each year
-    for (i in seq_along(plist_filled)) {
-      df <- plist_filled[[i]]
+  # Adding together the matrices for all age classes and disease compartments for each year
+  for (i in seq_along(plist_filled)) {
+    df <- plist_filled[[i]]
 
-      combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
+    combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
 
-      sim_array[,, i] <- combined_files
-    }
-
-    # Simulations are penalized for each year they have presences in places/times where there should be absence, and vice versa
-    penalty <- presabs |>
-      mutate(
-        rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
-        occupancy = pmap_dbl(
-          list(rowcol, min_index, max_index),
-          function(rc, min_i, max_i) {
-            sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
-          }
-        ),
-        penalty = pmap_dbl(
-          list(always_present, occupancy, min_index, max_index),
-          function(always_present_val, occ, min_i, max_i) {
-            if (always_present_val) {
-              length(min_i:max_i) - occ
-            } else {
-              occ
-            }
-          }
-        )
-      ) |>
-      pull(penalty) |>
-      sum()
-
-    return(penalty)
+    sim_array[, , i] <- combined_files
   }
+
+  # Simulations are penalized for each year they have presences in places/times where there should be absence, and vice versa
+  penalty <- presabs |>
+    mutate(
+      rowcol = map(region_cell, ~ convert_flat_to_2d(.x, 106)),
+      occupancy = pmap_dbl(
+        list(rowcol, min_index, max_index),
+        function(rc, min_i, max_i) {
+          sum(sim_array[rc[1], rc[2], min_i:max_i] > 0)
+        }
+      ),
+      penalty = pmap_dbl(
+        list(always_present, occupancy, min_index, max_index),
+        function(always_present_val, occ, min_i, max_i) {
+          if (always_present_val) {
+            length(min_i:max_i) - occ
+          } else {
+            occ
+          }
+        }
+      )
+    ) |>
+    pull(penalty) |>
+    sum()
+
+  return(penalty)
+}
 
 # Read in trend data
 trend1993 <- read_csv(here(
@@ -217,8 +219,8 @@ trend1970 <- read_csv(here(
   "mgsim/Data_minimal/Validation/abundance_trend_1970on.csv"
 ))
 # and conservation regions
-bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs") |>
-  qread()
+bcr <- here("mgsim/Data_minimal/Validation/bird_conservation_regions.qs2") |
+  qs_read()
 
 # Gather relevant data
 abundance_list <- results_dir[dc] |>
@@ -238,11 +240,13 @@ abundance_list <- results_dir[dc] |>
 trend_metric <- foreach(
   alist = abundance_list,
   .combine = c,
-  .packages = c("dplyr", "purrr", "qs", "tidyr", "broom", "Rcpp")
+  .packages = c("dplyr", "purrr", "qs2", "tidyr", "broom", "Rcpp")
 ) %dopar%
   {
     # Preprocess data and fill missing years
-    alist_filled <- alist |> fill_missing_years(1970, 2016) |> group_split(Year)
+    alist_filled <- alist |>
+      fill_missing_years(1970, 2016) |>
+      group_split(Year)
 
     # Preallocate a 3D array for sim_array results
     sim_array_results <- array(0, dim = c(106, 161, length(alist_filled)))
@@ -257,7 +261,7 @@ trend_metric <- foreach(
       combined_files <- Reduce(`+`, files)
 
       # Fill the array
-      sim_array_results[,, i] <- combined_files
+      sim_array_results[, , i] <- combined_files
     }
 
     # Flatten sim_array_results for use in C++
@@ -309,47 +313,46 @@ point_prevalence_metric <- foreach(
   plist = prevalence_list,
   .combine = c,
   .packages = c("dplyr", "purrr")
-) %dopar%
-  {
-    if (nrow(plist) == 0) {
-      penalty <- 0.25
-    } else {
-      # Preprocess data and fill missing years
-      plist_filled <- plist |>
-        fill_missing_years(start_year = 1995, end_year = 2014) |>
-        group_split(Year, season)
+) %dopar% {
+  if (nrow(plist) == 0) {
+    penalty <- 0.25
+  } else {
+    # Preprocess data and fill missing years
+    plist_filled <- plist |>
+      fill_missing_years(start_year = 1995, end_year = 2014) |>
+      group_split(Year, season)
 
-      # Preallocate a 3D array for sim_array results
-      sim_array_results <- array(0, dim = c(106, 161, length(plist_filled)))
+    # Preallocate a 3D array for sim_array results
+    sim_array_results <- array(0, dim = c(106, 161, length(plist_filled)))
 
-      # Process each year chunk to manage memory and avoid redundant computations
-      for (i in seq_along(plist_filled)) {
-        df <- plist_filled[[i]]
+    # Process each year chunk to manage memory and avoid redundant computations
+    for (i in seq_along(plist_filled)) {
+      df <- plist_filled[[i]]
 
-        # Read files only once per chunk
-        paths <- df$path
-        infected <- lapply(paths[1:4], read_or_zero) |> Reduce(f = `+`, x = _)
-        total <- lapply(paths, read_or_zero) |> Reduce(f = `+`, x = _)
-        prev <- infected / total
+      # Read files only once per chunk
+      paths <- df$path
+      infected <- lapply(paths[1:4], read_or_zero) |> Reduce(f = `+`, x = _)
+      total <- lapply(paths, read_or_zero) |> Reduce(f = `+`, x = _)
+      prev <- infected / total
 
-        # Fill the preallocated array
-        sim_array_results[,, i] <- prev
-      }
-
-      # Calculate the metric for this presence_list
-      penalty <- prevalence |>
-        mutate(
-          rowcol = list(convert_flat_to_2d(region_cell, 106)),
-          prevalence = sim_array_results[rowcol[1], rowcol[2], index],
-          penalty = prevalence_penalty(prevalence, Lower, Upper, Zero)
-        ) |>
-        pull(penalty) |>
-        sum()
+      # Fill the preallocated array
+      sim_array_results[, , i] <- prev
     }
 
-    gc()
-    return(penalty)
+    # Calculate the metric for this presence_list
+    penalty <- prevalence |>
+      mutate(
+        rowcol = list(convert_flat_to_2d(region_cell, 106)),
+        prevalence = sim_array_results[rowcol[1], rowcol[2], index],
+        penalty = prevalence_penalty(prevalence, Lower, Upper, Zero)
+      ) |>
+      pull(penalty) |>
+      sum()
   }
+
+  gc()
+  return(penalty)
+}
 
 # Load first arrival data
 mg_arrival <- here(
@@ -377,51 +380,50 @@ mg_arrival_penalty[no_infection] <- 54
 mg_arrival_metric <- foreach(
   df = infected_list[!no_infection],
   .combine = c,
-  .packages = c("dplyr", "purrr", "qs")
-) %dopar%
-  {
-    # Fill missing years and group by Year
-    df_filled <- fill_missing_years(df, 1994, 2016) |> group_split(Year)
+  .packages = c("dplyr", "purrr", "qs2")
+) %dopar% {
+  # Fill missing years and group by Year
+  df_filled <- fill_missing_years(df, 1994, 2016) |> group_split(Year)
 
-    # Pre-allocate a 3D array for the simulation (106x161xyears)
-    sim_array <- array(0, dim = c(106, 161, length(df_filled)))
+  # Pre-allocate a 3D array for the simulation (106x161xyears)
+  sim_array <- array(0, dim = c(106, 161, length(df_filled)))
 
-    # Efficiently sum matrices into the 3D array, one slice per year
-    for (i in seq_along(df_filled)) {
-      year_df <- df_filled[[i]]
+  # Efficiently sum matrices into the 3D array, one slice per year
+  for (i in seq_along(df_filled)) {
+    year_df <- df_filled[[i]]
 
-      # Sum the matrices for all files in this year
-      combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
+    # Sum the matrices for all files in this year
+    combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
 
-      # Assign the summed matrix to the appropriate slice
-      sim_array[,, i] <- combined_files
-    }
-
-    arrival_index <- map(
-      mg_arrival$region_cell,
-      ~ convert_flat_to_2d(.x, 106)
-    ) |>
-      map_int(function(rc) {
-        presences <- which(sim_array[rc[1], rc[2], ] > 0)
-        if (length(presences) == 0) {
-          NA_integer_
-        } else {
-          min(presences, na.rm = TRUE)
-        }
-      })
-
-    penalty <- mg_arrival |>
-      mutate(arrival_index = arrival_index) |>
-      rowwise() |>
-      mutate(
-        penalty = mg_arrival_function(arrival_index, index_low, index_high)
-      ) |>
-      pull(penalty) |>
-      sum()
-
-    gc()
-    return(penalty)
+    # Assign the summed matrix to the appropriate slice
+    sim_array[, , i] <- combined_files
   }
+
+  arrival_index <- map(
+    mg_arrival$region_cell,
+    ~ convert_flat_to_2d(.x, 106)
+  ) |>
+    map_int(function(rc) {
+      presences <- which(sim_array[rc[1], rc[2], ] > 0)
+      if (length(presences) == 0) {
+        NA_integer_
+      } else {
+        min(presences, na.rm = TRUE)
+      }
+    })
+
+  penalty <- mg_arrival |>
+    mutate(arrival_index = arrival_index) |>
+    rowwise() |>
+    mutate(
+      penalty = mg_arrival_function(arrival_index, index_low, index_high)
+    ) |>
+    pull(penalty) |>
+    sum()
+
+  gc()
+  return(penalty)
+}
 
 # Assign metrics to the penalty vector
 mg_arrival_penalty[!no_infection] <- mg_arrival_metric
@@ -461,53 +463,52 @@ hm_arrival <- here(
 hm_arrival_metric <- foreach(
   df = presence_list,
   .combine = c,
-  .packages = c("dplyr", "purrr", "qs")
-) %dopar%
-  {
-    # Fill missing years and group by Year
-    df_filled <- fill_missing_years(df, 1940, 2016) |> group_split(Year)
+  .packages = c("dplyr", "purrr", "qs2")
+) %dopar% {
+  # Fill missing years and group by Year
+  df_filled <- fill_missing_years(df, 1940, 2016) |> group_split(Year)
 
-    # Pre-allocate a 3D array for the simulation (106x161xyears)
-    sim_array <- array(0, dim = c(106, 161, length(df_filled)))
+  # Pre-allocate a 3D array for the simulation (106x161xyears)
+  sim_array <- array(0, dim = c(106, 161, length(df_filled)))
 
-    # Efficiently sum matrices into the 3D array, one slice per year
-    for (i in seq_along(df_filled)) {
-      year_df <- df_filled[[i]]
+  # Efficiently sum matrices into the 3D array, one slice per year
+  for (i in seq_along(df_filled)) {
+    year_df <- df_filled[[i]]
 
-      # Sum the matrices for all files in this year
-      combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
+    # Sum the matrices for all files in this year
+    combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
 
-      # Assign the summed matrix to the appropriate slice
-      sim_array[,, i] <- combined_files
-    }
-
-    # Compute the arrival index for each region
-    arrival_index <- map(
-      hm_arrival$region_cell,
-      ~ convert_flat_to_2d(.x, 106)
-    ) |>
-      map_int(function(rc) {
-        presences <- which(sim_array[rc[1], rc[2], ] > 0)
-        if (length(presences) == 0) {
-          NA_integer_
-        } else {
-          min(presences, na.rm = TRUE)
-        }
-      })
-
-    # Calculate penalties based on the arrival index
-    penalty <- hm_arrival |>
-      mutate(arrival_index = arrival_index) |>
-      rowwise() |>
-      mutate(
-        penalty = hm_arrival_function(arrival_index, index_low, index_high)
-      ) |>
-      pull(penalty) |>
-      sum()
-
-    gc()
-    return(penalty)
+    # Assign the summed matrix to the appropriate slice
+    sim_array[, , i] <- combined_files
   }
+
+  # Compute the arrival index for each region
+  arrival_index <- map(
+    hm_arrival$region_cell,
+    ~ convert_flat_to_2d(.x, 106)
+  ) |>
+    map_int(function(rc) {
+      presences <- which(sim_array[rc[1], rc[2], ] > 0)
+      if (length(presences) == 0) {
+        NA_integer_
+      } else {
+        min(presences, na.rm = TRUE)
+      }
+    })
+
+  # Calculate penalties based on the arrival index
+  penalty <- hm_arrival |>
+    mutate(arrival_index = arrival_index) |>
+    rowwise() |>
+    mutate(
+      penalty = hm_arrival_function(arrival_index, index_low, index_high)
+    ) |>
+    pull(penalty) |>
+    sum()
+
+  gc()
+  return(penalty)
+}
 stopCluster(cl)
 
 # Combine all metrics into a data frame

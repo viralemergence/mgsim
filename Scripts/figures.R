@@ -13,7 +13,7 @@ library(cowplot)
 library(magick)
 library(rasterVis)
 library(terra)
-library(qs)
+library(qs2)
 i_am("Scripts/figures.R")
 conflicts_prefer(dplyr::filter, dplyr::select, dplyr::lag)
 # Source other scripts as needed
@@ -21,7 +21,7 @@ source(here("Scripts/validation_metric_functions.R"))
 source(here("Scripts/convenience_functions.R"))
 source(here("Scripts/animate_sim.R"))
 # Geospatial data
-region <- qread(here("Data/Input/finch_region.qs"))
+region <- qs_read(here("Data/Input/finch_region.qs2"))
 # Validation metrics
 round2_metrics <- read_csv(here(
   "Data/Validation/round2c_validation_metrics.csv"
@@ -80,7 +80,7 @@ round3a_priors <- read_csv(
     mortality_Ra_summer = mortality_Sa_summer
   )
 # Selected models
-abc31 <- qread(here("Data/Validation/abc_round3a.qs"))
+abc31 <- qs_read(here("Data/Validation/abc_round3a.qs2"))
 selected_samples_3 <- round3a_priors |>
   rowid_to_column("sample") |>
   semi_join(abc31$unadj.values, copy = TRUE) |>
@@ -382,16 +382,16 @@ first_arrival_raster <- region$raster_from_values(t(first_arrival)[
 ])
 # Calculate the weighted centroid of the prevalence distribution for each time slice
 weightedCentre <- function(x, y, z) {
-  require(matrixStats) #; require(Hmisc)
+  require(matrixStats) # ; require(Hmisc)
   if (anyNA(c(x, y, z))) {
     stop("There are missing values present in x, y, or z")
   }
   if (length(z) != length(x)) {
     stop("Number of weights supplied not equal to number of coordinates")
   }
-  x_y = cbind(x, y)
-  w = z
-  mean = matrixStats::colWeightedMeans(x_y, w = w, na.rm = FALSE)
+  x_y <- cbind(x, y)
+  w <- z
+  mean <- matrixStats::colWeightedMeans(x_y, w = w, na.rm = FALSE)
   wght_cent <- matrix(mean, ncol = 2) |> as.data.frame()
   colnames(wght_cent) <- c("x", "y")
   return(wght_cent)
@@ -400,7 +400,7 @@ weightedCentre <- function(x, y, z) {
 centroids <- map_dfr(seq_len(dim(prevalence)[3]), function(slice) {
   x <- region$coordinates$x
   y <- region$coordinates$y
-  z <- as.vector(t(prevalence[,, slice])[region$region_indices])
+  z <- as.vector(t(prevalence[, , slice])[region$region_indices])
   z[is.na(z)] <- 0 # Replace NA values with 0 for weighting
   weightedCentre(x, y, z)
 }) |>
@@ -447,8 +447,8 @@ abc31_processed <- process_sims(
 )
 total_population_size <- abc31_processed$total_population
 total_cases <- prevalence * total_population_size
-arr <- total_cases[,, 110:154]
-arr2 <- total_population_size[,, 110:154]
+arr <- total_cases[, , 110:154]
+arr2 <- total_population_size[, , 110:154]
 years <- 1994:2016
 coords <- region$region_raster |> raster::coordinates()
 dt <- expand.grid(y = 1:dim(arr)[2], x = 1:dim(arr)[1], z = 1:dim(arr)[3]) |>
@@ -609,10 +609,10 @@ counterfactual_results <- process_sims(
 prevalence <- counterfactual_results$prevalence
 
 arrival_diff <- region$raster_from_values(
-  t(results$total_population[,, 154])[
+  t(results$total_population[, , 154])[
     region$region_indices
   ] -
-    t(counterfactual_results$total_population[,, 154])[region$region_indices]
+    t(counterfactual_results$total_population[, , 154])[region$region_indices]
 )
 
 fig5 <- gplot(arrival_diff) +

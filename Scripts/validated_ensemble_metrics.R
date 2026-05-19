@@ -34,13 +34,15 @@ data_list <- map(file_paths, \(fp) {
     mutate(season = factor(season, levels = c("winter", "summer"))) |>
     arrange(number, season)
 })
-simulation_id <- results_dir |> str_sub(67) |> as.integer()
+simulation_id <- results_dir |>
+  str_sub(67) |>
+  as.integer()
 process_single_number <- function(df, number) {
   df %>%
     filter(number == !!number) %>%
     group_split(infected) %>%
     map(\(subset_df) pull(subset_df, path)) %>%
-    map(\(l) map(l, qread)) |>
+    map(\(l) map(l, qs_read)) |>
     map(\(l) map(l, \(m) m[mg_trends$region_cell])) |>
     map(\(df) Reduce(`+`, df)) |>
     setNames(c("healthy", "sick")) |>
@@ -87,7 +89,7 @@ mg_presence_df <- future_map_dfr(
       combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
 
       # Assign the combined matrix to the appropriate slice
-      sim_array[,, i] <- combined_files
+      sim_array[, , i] <- combined_files
     }
 
     # Calculate the metric for this simulation
@@ -126,7 +128,9 @@ hm_presabs_df <- future_map_dfr(
   presence_list,
   \(plist) {
     # Filling in years where the simulation did not write because the population was zero with paths to an array of all zeroes
-    plist_filled <- plist |> fill_missing_years(1940, 2016) |> group_split(Year)
+    plist_filled <- plist |>
+      fill_missing_years(1940, 2016) |>
+      group_split(Year)
 
     # This 3D array represents a yearly simulation from 1940 to 2016, with time as the z axis
     sim_array <- array(0, dim = c(106, 161, length(plist_filled)))
@@ -137,7 +141,7 @@ hm_presabs_df <- future_map_dfr(
 
       combined_files <- Reduce(`+`, lapply(df$path, read_or_zero))
 
-      sim_array[,, i] <- combined_files
+      sim_array[, , i] <- combined_files
     }
 
     penalty <- presabs |>
@@ -173,8 +177,8 @@ trend1970 <- read_csv(here(
   "Data_minimal/Validation/abundance_trend_1970on.csv"
 ))
 # and conservation regions
-bcr <- here("Data_minimal/Validation/bird_conservation_regions.qs") |>
-  qread()
+bcr <- here("Data_minimal/Validation/bird_conservation_regions.qs2") |
+  qs_read()
 
 # Gather relevant data
 abundance_list <- results_dir |>
@@ -194,7 +198,9 @@ trend_df <- future_map_dfr(
   abundance_list,
   \(alist) {
     # Preprocess data and fill missing years
-    alist_filled <- alist |> fill_missing_years(1970, 2016) |> group_split(Year)
+    alist_filled <- alist |>
+      fill_missing_years(1970, 2016) |>
+      group_split(Year)
 
     # Preallocate a 3D array for sim_array results
     sim_array_results <- array(0, dim = c(106, 161, length(alist_filled)))
@@ -209,7 +215,7 @@ trend_df <- future_map_dfr(
       combined_files <- Reduce(`+`, files)
 
       # Fill the array
-      sim_array_results[,, i] <- combined_files
+      sim_array_results[, , i] <- combined_files
     }
 
     # Flatten sim_array_results for use in C++
@@ -372,7 +378,7 @@ point_prevalence_metric <- future_map_dfr(
       prev <- infected / total
 
       # Fill the preallocated array
-      sim_array_results[,, i] <- prev
+      sim_array_results[, , i] <- prev
     }
 
     # Calculate the metric for this presence_list
@@ -423,7 +429,7 @@ mg_arrival_metric <- future_map_dfr(
       combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
 
       # Assign the summed matrix to the appropriate slice
-      sim_array[,, i] <- combined_files
+      sim_array[, , i] <- combined_files
     }
 
     arrival_index <- map(
@@ -499,7 +505,7 @@ hm_arrival_df <- future_map_dfr(
       combined_files <- Reduce(`+`, lapply(year_df$path, read_or_zero))
 
       # Assign the summed matrix to the appropriate slice
-      sim_array[,, i] <- combined_files
+      sim_array[, , i] <- combined_files
     }
 
     # Compute the arrival index for each region

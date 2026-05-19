@@ -5,7 +5,7 @@ library(readr)
 library(metaRange)
 library(epizootic)
 library(poems)
-library(qs)
+library(qs2)
 library(terra)
 library(here)
 library(doParallel)
@@ -13,10 +13,12 @@ i_am("mgsim/Scripts/urbanization_counterfactual.R")
 data_dir <- here("mgsim/Data/Input")
 results_dir <- here("mgsim/Data/Output/urbanization_counterfactual")
 set_trust_promises(TRUE)
-abc31 <- qread(here("mgsim/Data/Validation/abc_round3a.qs"))
+abc31 <- qs_read(here("mgsim/Data/Validation/abc_round3a.qs2"))
 random_seed <- 108
 n_sims <- 32
-region <- data_dir |> file.path("finch_region.qs") |> qread()
+region <- data_dir |
+  file.path("finch_region.qs2") |
+  qs_read()
 
 #### Create sample data frame ####
 sample_data <- abc31$adj.values |> as.data.frame()
@@ -60,7 +62,7 @@ abundance_gen$add_function_template(
     hs_matrix <- params$hs_raster |>
       raster::mask(params$mask_raster, updatevalue = 0) |>
       as.array() |>
-      _[,, 1] |>
+      _[, , 1] |>
       base::`*`(params$density_max) |>
       round()
     hs_matrix[38, 118] <- params$initial_release
@@ -85,7 +87,7 @@ b_lookup$d_max[905] <- 1501
 # distance_matrix <- dispersal_gen$calculate_distance_matrix()
 # dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
 # these are pre-calculated because they're computationally intensive
-distance_data <- qread(file.path(data_dir, "dispersal_distance_data.qs"))
+distance_data <- qs_read(file.path(data_dir, "dispersal_distance_data.qs2"))
 
 adult_dispersal_gen <- DispersalGenerator$new(
   region = region,

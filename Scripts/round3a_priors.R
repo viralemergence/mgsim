@@ -2,14 +2,14 @@ library(data.table)
 library(here)
 library(abc)
 library(triangle)
-library(qs)
+library(qs2)
 library(mc2d)
 library(fitdistrplus)
 
 options(scipen = 999)
 
 demo_params <- fread(here("Data/Input/sample_data_round2b.csv"))
-abc_first_pass <- qread(here("Data/Validation/abc_round2c_2.qs"))
+abc_first_pass <- qs_read(here("Data/Validation/abc_round2c_2.qs2"))
 round2_metrics <- fread(here("Data/Validation/round2c_validation_metrics.csv"))
 
 demo_params_selected <- demo_params[round2_metrics$dc, ][, `:=`(

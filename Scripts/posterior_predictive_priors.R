@@ -1,9 +1,9 @@
 library(tidyverse)
-library(qs)
+library(qs2)
 library(ks)
 
 demo_params <- read_csv(here("Data/Input/sample_data_round3a.csv"))
-abc_first_pass <- qread(here("Data/Validation/abc_round3a.qs"))
+abc_first_pass <- qs_read(here("Data/Validation/abc_round3a.qs2"))
 round2_metrics <- read_csv(here(
   "Data/Validation/round3a_validation_metrics.csv"
 ))

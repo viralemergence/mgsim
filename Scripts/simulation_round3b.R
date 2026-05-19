@@ -5,7 +5,7 @@ library(readr)
 library(metaRange)
 library(epizootic)
 library(poems)
-library(qs)
+library(qs2)
 library(terra)
 library(here)
 library(doParallel)
@@ -26,7 +26,9 @@ set_trust_promises(TRUE)
 random_seed <- 90
 n_sims <- 10000 # production
 # n_sims <- 10 # testing
-region <- data_dir |> file.path("finch_region.qs") |> qread()
+region <- data_dir |
+  file.path("finch_region.qs2") |
+  qs_read()
 
 #### Create sample data frame ####
 sample_data <- read_csv(file.path(data_dir, "sample_data_round3b.csv")) |>
@@ -74,7 +76,7 @@ abundance_gen$add_function_template(
     hs_matrix <- params$hs_raster |>
       raster::mask(params$mask_raster, updatevalue = 0) |>
       as.array() |>
-      _[,, 1] |>
+      _[, , 1] |>
       base::`*`(params$density_max) |>
       round()
     hs_matrix[38, 118] <- params$initial_release
@@ -99,7 +101,7 @@ b_lookup$d_max[905] <- 1501
 # distance_matrix <- dispersal_gen$calculate_distance_matrix()
 # dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
 # these are pre-calculated because they're computationally intensive
-distance_data <- qread(file.path(data_dir, "dispersal_distance_data.qs"))
+distance_data <- qs_read(file.path(data_dir, "dispersal_distance_data.qs2"))
 
 adult_dispersal_gen <- DispersalGenerator$new(
   region = region,

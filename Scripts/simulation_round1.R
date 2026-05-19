@@ -5,7 +5,7 @@ library(readr)
 library(metaRange)
 library(epizootic)
 library(poems)
-library(qs)
+library(qs2)
 library(terra)
 library(here)
 library(doParallel)
@@ -13,32 +13,50 @@ i_am("mgsim/Scripts/simulation_round1.R")
 data_dir <- here("mgsim/Data_minimal/Input")
 results_dir <- "/glade/work/pilowskyj/Round1.2"
 incomplete_sims <- read.delim("/glade/work/pilowskyj/Round1.1/incomplete_simulations.txt", sep = "\n") |>
-	_[-c(1002:1003),]
+  _[-c(1002:1003), ]
 set_trust_promises(TRUE)
 random_seed <- 90
 n_sims <- 10000
-region <- data_dir |> file.path("finch_region.qs") |> qread()
+region <- data_dir |
+  file.path("finch_region.qs2") |
+  qs_read()
 
 #### Create sample data frame ####
 lhs_generator <- LatinHypercubeSampler$new()
 
 # Dispersal parameters
-lhs_generator$set_beta_parameter("dispersal_p_juv", alpha = 9.834837,
-                                 beta = 2.019125)
-lhs_generator$set_beta_parameter("dispersal_p_adult", alpha = 1.5685,
-                                 beta = 2.365266)
-lhs_generator$set_truncnorm_parameter("dispersal_r_juv", lower = 0, upper = 1500,
-                                      mean = 725.9071, sd = sqrt(204006.6))
-lhs_generator$set_normal_parameter("dispersal_r_adult", mean = 679.4172,
-                                   sd = sqrt(18594.59))
-lhs_generator$set_uniform_parameter("dispersal_source_n_k_cutoff", lower = 0,
-                                    upper = 1)
-lhs_generator$set_uniform_parameter("dispersal_source_n_k_threshold", lower = 0,
-                                    upper = 1)
-lhs_generator$set_uniform_parameter("dispersal_target_n_k_cutoff", lower = 0,
-                                    upper = 1)
-lhs_generator$set_uniform_parameter("dispersal_target_n_k_threshold", lower = 0,
-                                    upper = 1)
+lhs_generator$set_beta_parameter("dispersal_p_juv",
+  alpha = 9.834837,
+  beta = 2.019125
+)
+lhs_generator$set_beta_parameter("dispersal_p_adult",
+  alpha = 1.5685,
+  beta = 2.365266
+)
+lhs_generator$set_truncnorm_parameter("dispersal_r_juv",
+  lower = 0, upper = 1500,
+  mean = 725.9071, sd = sqrt(204006.6)
+)
+lhs_generator$set_normal_parameter("dispersal_r_adult",
+  mean = 679.4172,
+  sd = sqrt(18594.59)
+)
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_cutoff",
+  lower = 0,
+  upper = 1
+)
+lhs_generator$set_uniform_parameter("dispersal_source_n_k_threshold",
+  lower = 0,
+  upper = 1
+)
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_cutoff",
+  lower = 0,
+  upper = 1
+)
+lhs_generator$set_uniform_parameter("dispersal_target_n_k_threshold",
+  lower = 0,
+  upper = 1
+)
 
 # Population growth parameters
 lhs_generator$set_uniform_parameter("abundance_threshold", lower = 0, upper = 25, decimals = 0)
@@ -52,61 +70,89 @@ lhs_generator$set_uniform_parameter("infected_t1", lower = 1, upper = 20, decima
 # Transmission parameters
 lhs_generator$set_uniform_parameter("beta_Sa_winter", lower = 0, upper = 0.07588)
 lhs_generator$set_uniform_parameter("beta_Sa_summer", lower = 0, upper = 0.007784)
-lhs_generator$set_triangular_parameter("Sj_multiplier", lower = 0, upper = 8.5,
-                                       mode = 3)
-lhs_generator$set_beta_parameter("beta_I2_modifier", alpha = 1.547023,
-                                 beta = 0.4239236)
+lhs_generator$set_triangular_parameter("Sj_multiplier",
+  lower = 0, upper = 8.5,
+  mode = 3
+)
+lhs_generator$set_beta_parameter("beta_I2_modifier",
+  alpha = 1.547023,
+  beta = 0.4239236
+)
 
 # Mortality parameters
-lhs_generator$set_beta_parameter("mortality_Sj_winter", alpha = 3.962104,
-                                 beta = 2.228683)
-lhs_generator$set_beta_parameter("mortality_Sa_winter", alpha = 21.89136,
-                                 beta = 19.59278)
-lhs_generator$set_beta_parameter("mortality_Sj_summer", alpha = 14.51403,
-                                 beta = 21.53632)
-lhs_generator$set_beta_parameter("mortality_I1j_summer", alpha = 2.756404,
-                                 beta = 62.47181)
-lhs_generator$set_beta_parameter("mortality_I1j_winter", alpha = 2.756404,
-                                 beta = 62.47181)
-lhs_generator$set_beta_parameter("mortality_I1a_summer", alpha = 1.771183,
-                                 beta = 27.19457)
-lhs_generator$set_beta_parameter("mortality_I1a_winter", alpha = 1.678424,
-                                 beta = 41.15975)
-lhs_generator$set_beta_parameter("mortality_I2_modifier", alpha = 1.033367,
-                                 beta = 3.505319)
+lhs_generator$set_beta_parameter("mortality_Sj_winter",
+  alpha = 3.962104,
+  beta = 2.228683
+)
+lhs_generator$set_beta_parameter("mortality_Sa_winter",
+  alpha = 21.89136,
+  beta = 19.59278
+)
+lhs_generator$set_beta_parameter("mortality_Sj_summer",
+  alpha = 14.51403,
+  beta = 21.53632
+)
+lhs_generator$set_beta_parameter("mortality_I1j_summer",
+  alpha = 2.756404,
+  beta = 62.47181
+)
+lhs_generator$set_beta_parameter("mortality_I1j_winter",
+  alpha = 2.756404,
+  beta = 62.47181
+)
+lhs_generator$set_beta_parameter("mortality_I1a_summer",
+  alpha = 1.771183,
+  beta = 27.19457
+)
+lhs_generator$set_beta_parameter("mortality_I1a_winter",
+  alpha = 1.678424,
+  beta = 41.15975
+)
+lhs_generator$set_beta_parameter("mortality_I2_modifier",
+  alpha = 1.033367,
+  beta = 3.505319
+)
 
 # Recovery parameters
-lhs_generator$set_beta_parameter("recovery_I1", alpha = 9.347533,
-                                 beta = 620.1732)
-lhs_generator$set_beta_parameter("recovery_I2", alpha = 1.181112,
-                                 beta = 29.18489)
+lhs_generator$set_beta_parameter("recovery_I1",
+  alpha = 9.347533,
+  beta = 620.1732
+)
+lhs_generator$set_beta_parameter("recovery_I2",
+  alpha = 1.181112,
+  beta = 29.18489
+)
 
-sample_data <- lhs_generator$generate_samples(number = n_sims,
-                                              random_seed = random_seed) |>
-  mutate(mortality_Sa_summer = 0,
-        mortality_I2j_summer = mortality_I2_modifier * mortality_I1j_summer,
-        mortality_I2j_winter = mortality_I2_modifier * mortality_I1j_winter,
-        mortality_I2a_winter = mortality_I2_modifier * mortality_I1a_winter,
-        mortality_I2a_summer = mortality_I2_modifier * mortality_I1a_summer,
-        mortality_Rj_summer = mortality_Sj_summer,
-        mortality_Ra_summer = mortality_Sa_summer,
-        mortality_Rj_winter = mortality_Sj_winter,
-        mortality_Ra_winter = mortality_Sa_winter,
-        beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
-        beta_Sj_summer = beta_Sa_summer * Sj_multiplier,
-        beta_Ra_winter = beta_Sa_winter * beta_I2_modifier,
-        beta_Rj_winter = beta_Sj_winter * beta_I2_modifier,
-        beta_Ra_summer = beta_Sa_summer * beta_I2_modifier,
-        beta_Rj_summer = beta_Sj_summer * beta_I2_modifier,
-        recovery_I1j_summer = recovery_I1,
-        recovery_I1a_summer = recovery_I1,
-        recovery_I2j_summer = recovery_I2,
-        recovery_I2a_summer = recovery_I2,
-        recovery_I1j_winter = recovery_I1,
-        recovery_I1a_winter = recovery_I1,
-        recovery_I2j_winter = recovery_I2,
-        recovery_I2a_winter = recovery_I2) |>
-    select(-c("Sj_multiplier", "recovery_I1", "recovery_I2"))
+sample_data <- lhs_generator$generate_samples(
+  number = n_sims,
+  random_seed = random_seed
+) |>
+  mutate(
+    mortality_Sa_summer = 0,
+    mortality_I2j_summer = mortality_I2_modifier * mortality_I1j_summer,
+    mortality_I2j_winter = mortality_I2_modifier * mortality_I1j_winter,
+    mortality_I2a_winter = mortality_I2_modifier * mortality_I1a_winter,
+    mortality_I2a_summer = mortality_I2_modifier * mortality_I1a_summer,
+    mortality_Rj_summer = mortality_Sj_summer,
+    mortality_Ra_summer = mortality_Sa_summer,
+    mortality_Rj_winter = mortality_Sj_winter,
+    mortality_Ra_winter = mortality_Sa_winter,
+    beta_Sj_winter = beta_Sa_winter * Sj_multiplier,
+    beta_Sj_summer = beta_Sa_summer * Sj_multiplier,
+    beta_Ra_winter = beta_Sa_winter * beta_I2_modifier,
+    beta_Rj_winter = beta_Sj_winter * beta_I2_modifier,
+    beta_Ra_summer = beta_Sa_summer * beta_I2_modifier,
+    beta_Rj_summer = beta_Sj_summer * beta_I2_modifier,
+    recovery_I1j_summer = recovery_I1,
+    recovery_I1a_summer = recovery_I1,
+    recovery_I2j_summer = recovery_I2,
+    recovery_I2a_summer = recovery_I2,
+    recovery_I1j_winter = recovery_I1,
+    recovery_I1a_winter = recovery_I1,
+    recovery_I2j_winter = recovery_I2,
+    recovery_I2a_winter = recovery_I2
+  ) |>
+  select(-c("Sj_multiplier", "recovery_I1", "recovery_I2"))
 
 write_csv(sample_data, file.path(data_dir, "sample_data_round1.csv"))
 
@@ -147,11 +193,11 @@ abundance_gen$add_function_template(
   param = "Sa_abundance",
   function_def = function(params) {
     hs_matrix <- params$hs_raster |>
-                 raster::mask(params$mask_raster, updatevalue = 0) |>
-                 as.array() |>
-                 _[,,1] |>
-                 base::`*`(params$density_max) |>
-                 round()
+      raster::mask(params$mask_raster, updatevalue = 0) |>
+      as.array() |>
+      _[, , 1] |>
+      base::`*`(params$density_max) |>
+      round()
     hs_matrix[38, 118] <- params$initial_release
     return(hs_matrix)
   },
@@ -159,21 +205,23 @@ abundance_gen$add_function_template(
 )
 
 system.time({
-  test_capacity <- abundance_gen$generate(input_values = list(density_max = 186000,
-                                                             initial_release = 50))
+  test_capacity <- abundance_gen$generate(input_values = list(
+    density_max = 186000,
+    initial_release = 50
+  ))
 })
 
 #### Create dispersal generators ####
 b_lookup <- data.frame(d_max = -Inf, b = 0:904)
 for (i in 2:904) {
-  b_lookup$d_max[i] <- which.max(exp(-1*(1:1501)/b_lookup$b[i]) <= 0.19)
+  b_lookup$d_max[i] <- which.max(exp(-1 * (1:1501) / b_lookup$b[i]) <= 0.19)
 }
 b_lookup$d_max[905] <- 1501
 
 # distance_matrix <- dispersal_gen$calculate_distance_matrix()
 # dispersal_gen$calculate_distance_data(distance_matrix = distance_matrix)
 # these are pre-calculated because they're computationally intensive
-distance_data <- qread(file.path(data_dir, "dispersal_distance_data.qs"))
+distance_data <- qs_read(file.path(data_dir, "dispersal_distance_data.qs2"))
 
 adult_dispersal_gen <- DispersalGenerator$new(
   region = region,
@@ -181,11 +229,15 @@ adult_dispersal_gen <- DispersalGenerator$new(
   distance_scale = 1000, # km
   dispersal_function_data = b_lookup,
   decimals = 3,
-  inputs = c("dispersal_p_adult",
-             "dispersal_r_adult"),
-  attribute_aliases = list(dispersal_r_adult = "dispersal_max_distance",
-                           dispersal_p_adult = "dispersal_proportion",
-                           dispersal_adult = "dispersal_data")
+  inputs = c(
+    "dispersal_p_adult",
+    "dispersal_r_adult"
+  ),
+  attribute_aliases = list(
+    dispersal_r_adult = "dispersal_max_distance",
+    dispersal_p_adult = "dispersal_proportion",
+    dispersal_adult = "dispersal_data"
+  )
 )
 adult_dispersal_gen$distance_data <- distance_data
 
@@ -195,12 +247,16 @@ juvenile_dispersal_gen <- DispersalGenerator$new(
   distance_scale = 1000, # km
   dispersal_function_data = b_lookup,
   decimals = 3,
-  inputs = c("dispersal_p_juv",
-             "dispersal_r_juv"),
-  attribute_aliases = list(dispersal_r_juv = "dispersal_max_distance",
-                 dispersal_p_juv = "dispersal_proportion",
-                 dispersal_source_n_k_cutoff = "dispersal_source_n_k$cutoff",
-                 dispersal_juv = "dispersal_data")
+  inputs = c(
+    "dispersal_p_juv",
+    "dispersal_r_juv"
+  ),
+  attribute_aliases = list(
+    dispersal_r_juv = "dispersal_max_distance",
+    dispersal_p_juv = "dispersal_proportion",
+    dispersal_source_n_k_cutoff = "dispersal_source_n_k$cutoff",
+    dispersal_juv = "dispersal_data"
+  )
 )
 juvenile_dispersal_gen$distance_data <- distance_data
 
@@ -215,9 +271,14 @@ head(adult_dispersal_data[[1]])
 
 #### Create simulation object ####
 # Creates the environment
-landscape <- c(file.path(data_dir, "breeding_season_length.tif"),
-  file.path(data_dir, "habitat_suitability_v3.tif")) |> map(rast) |>
-  map(\(x) x[[1:77]]) |> map_at(1, round) |> sds()
+landscape <- c(
+  file.path(data_dir, "breeding_season_length.tif"),
+  file.path(data_dir, "habitat_suitability_v3.tif")
+) |>
+  map(rast) |>
+  map(\(x) x[[1:77]]) |>
+  map_at(1, round) |>
+  sds()
 names(landscape) <- c("breeding_season_length", "habitat_suitability")
 # Create the object
 sim <- create_simulation(
@@ -286,8 +347,10 @@ sim$add_process(
     if (self$get_current_time_step() > 54) {
       save_species(
         x = self$house_finch,
-        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
-                  "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
+        traits = c(
+          "Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
+          "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"
+        ),
         prefix = paste0(self$get_current_time_step(), "_winter_"),
         path = self$globals$results_dir,
         overwrite = TRUE,
@@ -309,12 +372,13 @@ sim$add_process(
 sim$add_process(
   process_name = "save_abundance_summer",
   process_fun = function() {
-
     if (self$get_current_time_step() > 54) {
       save_species(
         x = self$house_finch,
-        traits = c("Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
-                  "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"),
+        traits = c(
+          "Sj_abundance", "Sa_abundance", "I1j_abundance", "I1a_abundance",
+          "Rj_abundance", "Ra_abundance", "I2j_abundance", "I2a_abundance"
+        ),
         prefix = paste0(self$get_current_time_step(), "_", "summer_"),
         path = self$globals$results_dir,
         overwrite = TRUE,
@@ -345,29 +409,39 @@ sim$add_process(
       time_steps = 77,
       populations = 6355,
       demographic_stochasticity = TRUE,
-      dispersal = list(self$traits$dispersal1,
-                       self$traits$dispersal2),
+      dispersal = list(
+        self$traits$dispersal1,
+        self$traits$dispersal2
+      ),
       dispersal_type = "stages",
-      dispersal_source_n_k = list(cutoff = self$traits$dispersal_source_n_k_cutoff,
-                                  threshold = self$traits$dispersal_source_n_k_threshold),
+      dispersal_source_n_k = list(
+        cutoff = self$traits$dispersal_source_n_k_cutoff,
+        threshold = self$traits$dispersal_source_n_k_threshold
+      ),
       dispersal_target_k = NULL,
       dispersal_target_n = NULL,
-      dispersal_target_n_k = list(cutoff = self$traits$dispersal_target_n_k_cutoff,
-                                  threshold = self$traits$dispersal_target_n_k_threshold),
+      dispersal_target_n_k = list(
+        cutoff = self$traits$dispersal_target_n_k_cutoff,
+        threshold = self$traits$dispersal_target_n_k_threshold
+      ),
       stages = 2,
       compartments = 4,
       simulator = SimulatorReference$new()
     )
 
-    segment_abundance <- matrix(c(self$traits$Sj_abundance[self$traits$index_matrix],
-                                  self$traits$Sa_abundance[self$traits$index_matrix],
-                                  self$traits$I1j_abundance[self$traits$index_matrix],
-                                  self$traits$I1a_abundance[self$traits$index_matrix],
-                                  self$traits$Rj_abundance[self$traits$index_matrix],
-                                  self$traits$Ra_abundance[self$traits$index_matrix],
-                                  self$traits$I2j_abundance[self$traits$index_matrix],
-                                  self$traits$I2a_abundance[self$traits$index_matrix]),
-                                nrow = 8, byrow = TRUE)
+    segment_abundance <- matrix(
+      c(
+        self$traits$Sj_abundance[self$traits$index_matrix],
+        self$traits$Sa_abundance[self$traits$index_matrix],
+        self$traits$I1j_abundance[self$traits$index_matrix],
+        self$traits$I1a_abundance[self$traits$index_matrix],
+        self$traits$Rj_abundance[self$traits$index_matrix],
+        self$traits$Ra_abundance[self$traits$index_matrix],
+        self$traits$I2j_abundance[self$traits$index_matrix],
+        self$traits$I2a_abundance[self$traits$index_matrix]
+      ),
+      nrow = 8, byrow = TRUE
+    )
 
     carrying_capacity <- round(self$traits$density_max * self$sim$environment$current$habitat_suitability)[self$traits$index_matrix]
 
@@ -524,10 +598,12 @@ registerDoParallel(cl)
 #### Simulate ####
 sim_manager <- metaRangeParallel$new(
   simulation_template = sim,
-  generators = list(juvenile_dispersal_gen,
-                    adult_dispersal_gen,
-                    abundance_gen),
-  sample_data = sample_data[incomplete_sims,],
+  generators = list(
+    juvenile_dispersal_gen,
+    adult_dispersal_gen,
+    abundance_gen
+  ),
+  sample_data = sample_data[incomplete_sims, ],
   register_parallel = TRUE,
   parallel_threads = numCores,
   results_dir = results_dir,
